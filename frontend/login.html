@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0">
+
+    <title>Support AI Login</title>
+
+    <link
+        rel="stylesheet"
+        href="css/style.css">
+
+    <link
+        rel="stylesheet"
+        href="css/auth.css">
+
+    <link
+        rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚌</text></svg>">
+
+</head>
+
+<body>
+
+<div id="lang-selector-container" style="position: fixed; top: 16px; right: 20px; z-index: 1000;"></div>
+
+<div class="auth-container">
+
+    <div class="auth-card">
+
+        <div class="logo">
+
+            🚌
+
+        </div>
+
+        <h1 data-i18n="app_title">
+
+            Support AI
+
+        </h1>
+
+        <p data-i18n="login_subtitle">
+
+            Sign in to continue
+
+        </p>
+
+        <form id="login-form">
+
+            <div class="input-group">
+
+                <i class="fa-solid fa-envelope"></i>
+
+                <input
+                    id="email"
+                    type="email"
+                    placeholder="Email"
+                    data-i18n-placeholder="email_placeholder"
+                    required>
+
+            </div>
+
+            <div class="input-group">
+
+                <i class="fa-solid fa-lock"></i>
+
+                <input
+                    id="password"
+                    type="password"
+                    placeholder="Password"
+                    data-i18n-placeholder="password_placeholder"
+                    required>
+
+                <i
+                    id="toggle-password"
+                    class="fa-solid fa-eye"></i>
+
+            </div>
+
+            <button
+                type="submit"
+                class="login-btn"
+                data-i18n="login_btn">
+
+                Login
+
+            </button>
+
+        </form>
+
+        <p class="bottom-text">
+
+            <span data-i18n="no_account">Don't have an account?</span>
+
+            <a href="register.html" data-i18n="register_link">
+
+                Register
+
+            </a>
+
+        </p>
+
+    </div>
+
+</div>
+
+<script
+    type="module"
+    src="js/login.js"></script>
+
+</body>
+
+</html>

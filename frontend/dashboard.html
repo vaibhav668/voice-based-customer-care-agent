@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Support AI - Command Dashboard</title>
+
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚌</text></svg>">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/dashboard.css">
+
+<style>
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+:root {
+    --bg-main: #070c18;
+    --card-bg: rgba(19, 31, 53, 0.65);
+    --card-hover: rgba(28, 44, 75, 0.85);
+    --border-color: rgba(255, 255, 255, 0.12);
+    --border-hover: rgba(53, 216, 182, 0.5);
+    --teal: #35d8b6;
+    --blue: #3b82f6;
+    --purple: #a855f7;
+    --pink: #ec4899;
+    --amber: #f59e0b;
+    --text-primary: #f8fafc;
+    --text-secondary: #94a3b8;
+}
+
+body {
+    min-height: 100vh;
+    background: radial-gradient(circle at 50% 0%, #1e293b 0%, var(--bg-main) 70%);
+    color: var(--text-primary);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    overflow-x: hidden;
+    padding: 30px 20px;
+}
+
+/* Ambient Glowing Background Orbs */
+.glow-orb {
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(140px);
+    z-index: 0;
+    pointer-events: none;
+    animation: floatOrb 10s infinite alternate ease-in-out;
+}
+
+.orb-1 {
+    width: 500px;
+    height: 500px;
+    background: radial-gradient(circle, rgba(59, 130, 246, 0.35) 0%, rgba(0, 0, 0, 0) 70%);
+    top: -150px;
+    left: -150px;
+}
+
+.orb-2 {
+    width: 450px;
+    height: 450px;
+    background: radial-gradient(circle, rgba(168, 85, 247, 0.3) 0%, rgba(0, 0, 0, 0) 70%);
+    bottom: -150px;
+    right: -150px;
+    animation-delay: -5s;
+}
+
+.orb-3 {
+    width: 350px;
+    height: 350px;
+    background: radial-gradient(circle, rgba(53, 216, 182, 0.25) 0%, rgba(0, 0, 0, 0) 70%);
+    top: 40%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+@keyframes floatOrb {
+    0% { transform: translateY(0px) scale(1); }
+    100% { transform: translateY(30px) scale(1.08); }
+}
+
+/* Header & Container */
+.dashboard-wrapper {
+    width: 100%;
+    max-width: 1050px;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    gap: 30px;
+}
+
+.top-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+}
+
+.brand-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--border-color);
+    padding: 8px 18px;
+    border-radius: 999px;
+    backdrop-filter: blur(12px);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--teal);
+    letter-spacing: 0.5px;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    background-color: var(--teal);
+    border-radius: 50%;
+    box-shadow: 0 0 10px var(--teal);
+    animation: pulseDot 2s infinite;
+}
+
+@keyframes pulseDot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(1.3); }
+}
+
+/* Header Text */
+.hero-header {
+    text-align: center;
+    margin-top: 10px;
+}
+
+.hero-header h1 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 2.8rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, #ffffff 30%, var(--teal) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 12px;
+    letter-spacing: -0.5px;
+}
+
+.hero-header p {
+    color: var(--text-secondary);
+    font-size: 1.05rem;
+    max-width: 600px;
+    margin: 0 auto;
+    line-height: 1.5;
+}
+
+/* Stats Pill Bar */
+.stats-bar {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    width: 100%;
+}
+
+.stat-pill {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    padding: 16px 20px;
+    border-radius: 16px;
+    backdrop-filter: blur(16px);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    transition: all 0.3s ease;
+}
+
+.stat-pill:hover {
+    border-color: rgba(255, 255, 255, 0.25);
+    transform: translateY(-2px);
+}
+
+.stat-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+}
+
+.stat-icon.chat { background: rgba(59, 130, 246, 0.2); color: var(--blue); }
+.stat-icon.voice { background: rgba(168, 85, 247, 0.2); color: var(--purple); }
+.stat-icon.booking { background: rgba(245, 158, 11, 0.2); color: var(--amber); }
+.stat-icon.history { background: rgba(53, 216, 182, 0.2); color: var(--teal); }
+
+.stat-info h4 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.stat-info p {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+/* Grid of Action Cards */
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 22px;
+    width: 100%;
+}
+
+.dash-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 24px;
+    padding: 28px 24px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 20px;
+    backdrop-filter: blur(16px);
+    cursor: pointer;
+    transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+    text-align: left;
+    outline: none;
+    height: 100%;
+}
+
+.dash-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--teal), transparent);
+    opacity: 0;
+    transition: opacity 0.35s ease;
+}
+
+.dash-card:hover {
+    transform: translateY(-8px) scale(1.02);
+    background: var(--card-hover);
+    border-color: var(--border-hover);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4), 0 0 30px rgba(53, 216, 182, 0.15);
+}
+
+.dash-card:hover::before {
+    opacity: 1;
+}
+
+.card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+.card-icon-wrap {
+    width: 56px;
+    height: 56px;
+    border-radius: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.2);
+}
+
+.icon-profile { background: linear-gradient(135deg, #3b82f6, #1d4ed8); color: white; }
+.icon-bookings { background: linear-gradient(135deg, #f59e0b, #d97706); color: white; }
+.icon-chat { background: linear-gradient(135deg, #06b6d4, #0891b2); color: white; }
+.icon-voice { background: linear-gradient(135deg, #a855f7, #7e22ce); color: white; }
+.icon-history { background: linear-gradient(135deg, #10b981, #059669); color: white; }
+.icon-logout { background: linear-gradient(135deg, #ef4444, #b91c1c); color: white; }
+
+.action-badge {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 999px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-secondary);
+}
+
+.card-content h3 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+}
+
+.card-content p {
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+    line-height: 1.45;
+}
+
+.card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--teal);
+    margin-top: 10px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.card-footer i {
+    transition: transform 0.25s ease;
+}
+
+.dash-card:hover .card-footer i {
+    transform: translateX(5px);
+}
+
+/* Logout Card Override */
+.dash-card.card-logout {
+    border-color: rgba(239, 68, 68, 0.25);
+}
+
+.dash-card.card-logout:hover {
+    border-color: #ef4444;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4), 0 0 30px rgba(239, 68, 68, 0.2);
+}
+
+.dash-card.card-logout .card-footer {
+    color: #f87171;
+}
+
+@media (max-width: 768px) {
+    .hero-header h1 { font-size: 2.2rem; }
+    .grid { grid-template-columns: 1fr; }
+    body { padding: 20px 14px; }
+}
+</style>
+</head>
+
+<body>
+
+<!-- Ambient Glowing Orbs -->
+<div class="glow-orb orb-1"></div>
+<div class="glow-orb orb-2"></div>
+<div class="glow-orb orb-3"></div>
+
+<div class="dashboard-wrapper">
+
+    <!-- Top Navigation Bar -->
+    <div class="top-bar">
+        <div class="brand-badge">
+            <span class="status-dot"></span>
+            <span>SupportAI Console</span>
+        </div>
+        <div id="lang-selector-container"></div>
+    </div>
+
+    <!-- Hero Header -->
+    <div class="hero-header">
+        <h1 data-i18n="dashboard_welcome">Support AI Dashboard</h1>
+        <p data-i18n="dashboard_subtitle">Manage your bus travel, live trip updates, and AI customer support.</p>
+    </div>
+
+    <!-- Quick Stats Bar -->
+    <div class="stats-bar">
+        <div class="stat-pill">
+            <div class="stat-icon chat"><i class="fa-solid fa-comments"></i></div>
+            <div class="stat-info">
+                <h4 data-i18n="card_chat_title">Text Chat</h4>
+                <p>NLU & Context Active</p>
+            </div>
+        </div>
+        <div class="stat-pill">
+            <div class="stat-icon voice"><i class="fa-solid fa-microphone"></i></div>
+            <div class="stat-info">
+                <h4 data-i18n="card_voice_title">Voice Assistant</h4>
+                <p>Whisper & Edge TTS</p>
+            </div>
+        </div>
+        <div class="stat-pill">
+            <div class="stat-icon booking"><i class="fa-solid fa-ticket"></i></div>
+            <div class="stat-info">
+                <h4 data-i18n="card_booking_title">Bookings</h4>
+                <p>Real-time DB Sync</p>
+            </div>
+        </div>
+        <div class="stat-pill">
+            <div class="stat-icon history"><i class="fa-solid fa-clock-history"></i></div>
+            <div class="stat-info">
+                <h4 data-i18n="nav_history">History</h4>
+                <p>Permanent Logs</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Command Grid -->
+    <div class="grid">
+
+        <!-- Profile Card -->
+        <button class="dash-card" onclick="location.href='pages/profile.html'">
+            <div class="card-top">
+                <div class="card-icon-wrap icon-profile"><i class="fa-solid fa-user-gear"></i></div>
+                <span class="action-badge">Account</span>
+            </div>
+            <div class="card-content">
+                <h3 data-i18n="nav_profile">Profile Settings</h3>
+                <p>View account details and update your preferred voice & text language.</p>
+            </div>
+            <div class="card-footer">
+                <span>Manage Profile</span>
+                <i class="fa-solid fa-arrow-right"></i>
+            </div>
+        </button>
+
+        <!-- Bookings Card -->
+        <button class="dash-card" onclick="location.href='pages/bookings.html'">
+            <div class="card-top">
+                <div class="card-icon-wrap icon-bookings"><i class="fa-solid fa-ticket"></i></div>
+                <span class="action-badge">Live Sync</span>
+            </div>
+            <div class="card-content">
+                <h3 data-i18n="nav_bookings">My Bookings</h3>
+                <p data-i18n="card_booking_desc">Check ticket status, seat details, and payment information.</p>
+            </div>
+            <div class="card-footer">
+                <span>View Bookings</span>
+                <i class="fa-solid fa-arrow-right"></i>
+            </div>
+        </button>
+
+        <!-- Text Chat Card -->
+        <button class="dash-card" onclick="location.href='pages/chat.html'">
+            <div class="card-top">
+                <div class="card-icon-wrap icon-chat"><i class="fa-solid fa-robot"></i></div>
+                <span class="action-badge">AI Chat</span>
+            </div>
+            <div class="card-content">
+                <h3 data-i18n="nav_chat">AI Chat Support</h3>
+                <p data-i18n="card_chat_desc">Ask questions about booking, delays, refunds, cancellations, and policies.</p>
+            </div>
+            <div class="card-footer">
+                <span data-i18n="card_chat_btn">Open Chat</span>
+                <i class="fa-solid fa-arrow-right"></i>
+            </div>
+        </button>
+
+        <!-- Voice Assistant Card -->
+        <button class="dash-card" onclick="location.href='pages/voice.html'">
+            <div class="card-top">
+                <div class="card-icon-wrap icon-voice"><i class="fa-solid fa-microphone-lines"></i></div>
+                <span class="action-badge">Multilingual Voice</span>
+            </div>
+            <div class="card-content">
+                <h3 data-i18n="nav_voice">Voice Assistant</h3>
+                <p data-i18n="card_voice_desc">Speak naturally in your language to get instant voice support.</p>
+            </div>
+            <div class="card-footer">
+                <span data-i18n="card_voice_btn">Try Voice Support</span>
+                <i class="fa-solid fa-arrow-right"></i>
+            </div>
+        </button>
+
+        <!-- Conversation History Card -->
+        <button class="dash-card" onclick="location.href='pages/history.html'">
+            <div class="card-top">
+                <div class="card-icon-wrap icon-history"><i class="fa-solid fa-box-archive"></i></div>
+                <span class="action-badge">Permanent Storage</span>
+            </div>
+            <div class="card-content">
+                <h3 data-i18n="nav_history">Conversation History</h3>
+                <p data-i18n="history_subtitle">Permanent record of all text and voice support interactions.</p>
+            </div>
+            <div class="card-footer">
+                <span>View History</span>
+                <i class="fa-solid fa-arrow-right"></i>
+            </div>
+        </button>
+
+        <!-- Logout Card -->
+        <button class="dash-card card-logout" id="logout">
+            <div class="card-top">
+                <div class="card-icon-wrap icon-logout"><i class="fa-solid fa-right-from-bracket"></i></div>
+                <span class="action-badge" style="color: #f87171; border-color: rgba(239,68,68,0.2);">Session</span>
+            </div>
+            <div class="card-content">
+                <h3 data-i18n="nav_logout">Logout</h3>
+                <p>Sign out of your current session securely.</p>
+            </div>
+            <div class="card-footer">
+                <span>Sign Out</span>
+                <i class="fa-solid fa-arrow-right"></i>
+            </div>
+        </button>
+
+    </div>
+
+</div>
+
+<script>
+// Smooth staggered card entrance animation
+document.addEventListener("DOMContentLoaded", () => {
+    document.querySelectorAll(".dash-card, .stat-pill").forEach((el, i) => {
+        el.style.opacity = "0";
+        el.style.transform = "translateY(25px)";
+        setTimeout(() => {
+            el.style.transition = "all 0.5s cubic-bezier(0.16, 1, 0.3, 1)";
+            el.style.opacity = "1";
+            el.style.transform = "translateY(0)";
+        }, 80 * i);
+    });
+});
+</script>
+
+<script type="module" src="js/dashboard.js"></script>
+
+</body>
+</html>

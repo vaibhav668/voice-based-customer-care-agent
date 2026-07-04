@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Bookings</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+
+<style>
+
+    :root {
+        --ink: #0b1220; --ink-deep: #070c16;
+        --surface: #131f33; --surface-2: #1a2a44;
+        --line: #29395a; --amber: #ffb13d;
+        --teal: #35d8b6; --text: #eef2fa; --text-dim: #8fa0bf;
+        --radius-lg: 20px; --radius-sm: 10px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: 'Inter', sans-serif;
+        color: var(--text);
+        background: linear-gradient(180deg, var(--ink-deep), var(--ink) 60%);
+        padding: 28px 20px 60px;
+    }
+
+    .shell { max-width: 680px; margin: 0 auto; }
+
+    h1 {
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 24px;
+        font-weight: 700;
+        margin: 0;
+        letter-spacing: -0.01em;
+    }
+
+    .route-line {
+        height: 2px;
+        margin: 18px 0 24px;
+        background-image: repeating-linear-gradient(90deg, var(--line) 0 10px, transparent 10px 18px);
+    }
+
+    #booking-list {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        min-height: 80px;
+        color: var(--text-dim);
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 13.5px;
+    }
+
+    #booking-list:empty::before,
+    #booking-list::before {
+        content: '';
+    }
+
+    .back-row {
+        margin-top: 28px;
+    }
+
+    button {
+        background: var(--surface-2);
+        border: 1px solid var(--line);
+        color: var(--text);
+        font-weight: 600;
+        font-size: 13.5px;
+        padding: 11px 20px;
+        border-radius: 999px;
+        cursor: pointer;
+        transition: border-color .15s ease, transform .12s ease;
+    }
+    button:hover { border-color: var(--teal); transform: translateY(-1px); }
+
+</style>
+
+</head>
+
+<body>
+
+<div class="shell">
+
+<header style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+    <h1 data-i18n="nav_bookings">
+        My Bookings
+    </h1>
+    <div style="display: flex; align-items: center; gap: 10px;">
+        <div id="lang-selector-container"></div>
+        <button onclick="location.href='../dashboard.html'" data-i18n="nav_dashboard">
+            Dashboard
+        </button>
+    </div>
+</header>
+
+<div class="route-line" aria-hidden="true"></div>
+
+<div id="booking-list">
+
+Loading...
+
+</div>
+
+<div class="back-row">
+
+<button onclick="location.href='../dashboard.html'" data-i18n="nav_dashboard">
+
+← Dashboard
+
+</button>
+
+</div>
+
+</div>
+
+<script
+type="module"
+src="../js/bookings.js">
+
+</script>
+
+</body>
+
+</html>

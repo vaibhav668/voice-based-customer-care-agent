@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>AI Assistant</title>
+
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💬</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+
+<style>
+
+    :root {
+        --ink: #0b1220; --ink-deep: #070c16;
+        --surface: #131f33; --surface-2: #1a2a44;
+        --line: #29395a; --amber: #ffb13d;
+        --teal: #35d8b6; --text: #eef2fa; --text-dim: #8fa0bf;
+        --radius-lg: 20px; --radius-sm: 10px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: 'Inter', sans-serif;
+        color: var(--text);
+        background: linear-gradient(180deg, var(--ink-deep), var(--ink) 60%);
+        padding: 28px 20px 24px;
+        display: flex;
+        justify-content: center;
+    }
+
+    .shell {
+        width: 100%;
+        max-width: 680px;
+        display: flex;
+        flex-direction: column;
+        height: calc(100vh - 52px);
+    }
+
+    header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 8px;
+    }
+
+    h1 {
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 22px;
+        font-weight: 700;
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    header button {
+        background: var(--surface-2);
+        border: 1px solid var(--line);
+        color: var(--text);
+        font-weight: 600;
+        font-size: 13.5px;
+        padding: 10px 18px;
+        border-radius: 999px;
+        cursor: pointer;
+        transition: border-color .15s ease, transform .12s ease;
+    }
+    header button:hover { border-color: var(--amber); transform: translateY(-1px); }
+
+    .route-line {
+        height: 2px;
+        margin: 18px 0 20px;
+        background-image: repeating-linear-gradient(90deg, var(--line) 0 10px, transparent 10px 18px);
+    }
+
+    .chat-box {
+        flex: 1;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--radius-lg);
+        padding: 22px;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .chat-box:empty::before {
+        content: 'Ask the assistant anything about your trip, booking, or account.';
+        color: var(--text-dim);
+        font-size: 14px;
+        margin: auto;
+        text-align: center;
+    }
+
+    .input-row {
+        display: flex;
+        gap: 10px;
+        margin-top: 16px;
+    }
+
+    #message {
+        flex: 1;
+        padding: 14px 18px;
+        background: var(--surface-2);
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        color: var(--text);
+        font-size: 14.5px;
+        font-family: 'Inter', sans-serif;
+        outline: none;
+        transition: border-color .15s ease, box-shadow .15s ease;
+    }
+    #message::placeholder { color: var(--text-dim); }
+    #message:focus { border-color: var(--teal); box-shadow: 0 0 0 3px rgba(53,216,182,0.16); }
+
+    #send {
+        border: none;
+        border-radius: 999px;
+        padding: 0 26px;
+        background: linear-gradient(135deg, var(--amber), #ff8f3d);
+        color: #1a1102;
+        font-family: 'Space Grotesk', sans-serif;
+        font-weight: 700;
+        font-size: 14px;
+        cursor: pointer;
+        transition: transform .12s ease;
+    }
+    #send:hover { transform: translateY(-1px); }
+    #send:focus-visible { outline: 2px solid var(--teal); outline-offset: 3px; }
+
+</style>
+
+</head>
+
+<body>
+
+<div class="shell">
+
+<header>
+
+<h1 data-i18n="chat_title">
+
+🤖 AI Assistant
+
+</h1>
+
+<div style="display: flex; align-items: center; gap: 10px;">
+    <div id="lang-selector-container"></div>
+    <button
+        onclick="location.href='../dashboard.html'"
+        data-i18n="nav_dashboard">
+
+        Dashboard
+
+    </button>
+</div>
+
+</header>
+
+<div class="route-line" aria-hidden="true"></div>
+
+<div
+
+id="messages"
+
+class="chat-box">
+
+</div>
+
+<div class="input-row">
+
+<input
+
+id="message"
+
+placeholder="Ask something..."
+data-i18n-placeholder="chat_placeholder">
+
+<button
+
+id="send"
+data-i18n="send_btn">
+
+Send
+
+</button>
+
+</div>
+
+</div>
+
+<script
+
+type="module"
+
+src="../js/chat.js">
+
+</script>
+
+</body>
+
+</html>
