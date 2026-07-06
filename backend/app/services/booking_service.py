@@ -238,6 +238,11 @@ class BookingService:
         from app.database.models.user import User
         from sqlalchemy import select
 
+        if not user_id:
+            fallback_user = self.repository.db.scalar(select(User).limit(1))
+            if fallback_user:
+                user_id = fallback_user.id
+
         trip_repo = TripRepository(self.repository.db)
         trip = trip_repo.find_trip_by_route(source, destination)
 

@@ -7,6 +7,7 @@ from app.ai.intent.schemas import Intent
 class SupportAgent:
 
     def __init__(self, db: Session):
+        self.db = db
         self.registry = ToolRegistry(db)
 
     def execute(
@@ -103,6 +104,7 @@ class SupportAgent:
                     data=data,
                 )
             except Exception as e:
+                self.db.rollback()
                 return ToolResult(
                     success=False,
                     tool="create_booking",
@@ -122,6 +124,7 @@ class SupportAgent:
                     data=data,
                 )
             except Exception as e:
+                self.db.rollback()
                 return ToolResult(
                     success=False,
                     tool="list_bookings",
@@ -171,6 +174,7 @@ class SupportAgent:
                     data=data,
                 )
             except Exception as e:
+                self.db.rollback()
                 return ToolResult(
                     success=False,
                     tool="complaint",
@@ -203,6 +207,7 @@ class SupportAgent:
                 data=data,
             )
         except Exception as e:
+            self.db.rollback()
             return ToolResult(
                 success=False,
                 tool=intent.value.lower(),
