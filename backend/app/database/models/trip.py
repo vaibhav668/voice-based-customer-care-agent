@@ -7,6 +7,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
+    Text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -57,6 +58,26 @@ class Trip(UUIDMixin, TimestampMixin, Base):
         nullable=False,
     )
 
+    # Human-readable delay reason, e.g. "Heavy traffic near Nagpur"
+    delay_reason: Mapped[str] = mapped_column(
+        String(300),
+        nullable=True,
+    )
+
+    # Simulated/demo current location for bus tracking
+    # e.g. "Approaching Nagpur, ~120 km from Mumbai"
+    # NOTE: This is demo data, NOT a live GPS feed.
+    current_location: Mapped[str] = mapped_column(
+        String(200),
+        nullable=True,
+    )
+
+    # Updated ETA when bus is delayed (nullable, only set when delayed)
+    updated_eta: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
     available_seats: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
@@ -76,5 +97,3 @@ class Trip(UUIDMixin, TimestampMixin, Base):
         "Booking",
         back_populates="trip",
     )
-
-    

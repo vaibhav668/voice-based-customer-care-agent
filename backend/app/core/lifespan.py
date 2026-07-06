@@ -106,11 +106,25 @@ async def lifespan(app):
 
         with engine.begin() as conn:
             inspector = inspect(conn)
+            # Users table migrations
             if "users" in inspector.get_table_names():
                 columns = [c["name"] for c in inspector.get_columns("users")]
                 if "preferred_language" not in columns:
                     logger.info("Adding missing preferred_language column to users table...")
                     conn.execute(text("ALTER TABLE users ADD COLUMN preferred_language VARCHAR(10) DEFAULT 'en'"))
+
+            # Trips table migrations (new fields for delay/tracking)
+            if "trips" in inspector.get_table_names():
+                trip_cols = [c["name"] for c in inspector.get_columns("trips")]
+                if "delay_reason" not in trip_cols:
+                    logger.info("Adding delay_reason column to trips table...")
+                    conn.execute(text("ALTER TABLE trips ADD COLUMN delay_reason VARCHAR(300)"))
+                if "current_location" not in trip_cols:
+                    logger.info("Adding current_location column to trips table...")
+                    conn.execute(text("ALTER TABLE trips ADD COLUMN current_location VARCHAR(200)"))
+                if "updated_eta" not in trip_cols:
+                    logger.info("Adding updated_eta column to trips table...")
+                    conn.execute(text("ALTER TABLE trips ADD COLUMN updated_eta DATETIME"))
     except Exception as e:
         logger.warning(f"Database table/column sync warning: {e}")
     yield

@@ -74,9 +74,11 @@ User's Input / Request: {user_message or 'Answer user query based on data.'}
 
 INSTRUCTIONS:
 1. Directly answer the user's specific request or question using the provided data.
-2. If the user asked for departure time, seat number, bus name, arrival time, or status, provide those exact details clearly.
-3. If the data indicates that no booking was found (or an error occurred), explain politely that no booking was found for that booking code.
-4. Do NOT say a new booking was created unless the data explicitly says a new booking was created.
+2. If the data contains fields like delay_reason, current_location, or updated_eta, communicate them naturally.
+3. If the data explicitly says 'requires_confirmation' is True, you MUST ask the user if they want to proceed (e.g. "Would you like me to proceed with the cancellation? Reply YES to confirm."). Do not say the action was already completed.
+4. If the data indicates that no booking was found (or an error occurred), explain politely that no booking was found or they are not authorized to view it.
+5. Do NOT say a new booking was created unless the data explicitly says a new booking was created.
+6. Do NOT invent refund status, payment status, delay ETA, tracking info, or bus status. Use ONLY what is provided in the data.
 
 CRITICAL REQUIREMENT:
 You MUST generate your response ONLY in the following language: {lang_name}.
@@ -99,7 +101,7 @@ Do not invent information. Only use the supplied data.
         system = SystemMessage(
             content=f"""
 You are an AI customer support assistant for a bus company.
-Politely ask the user to provide their booking code (e.g. BK-100001) so you can assist them with their request.
+Politely ask the user to provide their booking code (e.g. BK-1234) so you can assist them with their request.
 
 CRITICAL REQUIREMENT:
 You MUST generate your response ONLY in the following language: {lang_name}.

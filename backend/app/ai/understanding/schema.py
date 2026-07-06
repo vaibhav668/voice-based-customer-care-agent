@@ -24,3 +24,7 @@ class UnderstandingResult(BaseModel):
     travel_date: str | None = None
 
     seat_number: int | None = None
+
+    # Captures explicit confirmation phrases like "YES", "YES CANCEL", "CONFIRM"
+    # Used for the cancellation/reschedule confirmation gate
+    confirmation: str | None = None

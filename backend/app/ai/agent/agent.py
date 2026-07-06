@@ -18,7 +18,8 @@ class SupportAgent:
         destination_city: str | None = None,
         travel_date: str | None = None,
         seat_number: int | None = None,
-        user_id=None,
+        confirmation: str | None = None,
+        user_id: str | None = None,
     ) -> ToolResult:
 
         # ----------------------------------------------------
@@ -51,8 +52,11 @@ class SupportAgent:
         if intent in (
             Intent.BOOKING_STATUS,
             Intent.BUS_DELAY,
+            Intent.BUS_TRACKING,
             Intent.BOOKING_CANCEL,
             Intent.REFUND_STATUS,
+            Intent.PAYMENT_ISSUE,
+            Intent.RESCHEDULE,
             ) and not booking_code:
 
             return ToolResult(
@@ -106,6 +110,25 @@ class SupportAgent:
                 )
 
         # ----------------------------------------------------
+        # List Bookings
+        # ----------------------------------------------------
+
+        if intent == Intent.LIST_BOOKINGS:
+            try:
+                data = tool.execute(user_id=user_id)
+                return ToolResult(
+                    success=True,
+                    tool="list_bookings",
+                    data=data,
+                )
+            except Exception as e:
+                return ToolResult(
+                    success=False,
+                    tool="list_bookings",
+                    data={"error": str(e), "message": "Failed to list bookings."},
+                )
+
+        # ----------------------------------------------------
         # FAQ
         # ----------------------------------------------------
 
@@ -132,11 +155,48 @@ class SupportAgent:
             )
 
         # ----------------------------------------------------
-        # Booking / Delay / Refund / Cancellation
+        # COMPLAINT
+        # ----------------------------------------------------
+
+        if intent == Intent.COMPLAINT:
+            try:
+                data = tool.execute(
+                    booking_code=booking_code,
+                    complaint=question,
+                    user_id=user_id,
+                )
+                return ToolResult(
+                    success=True,
+                    tool="complaint",
+                    data=data,
+                )
+            except Exception as e:
+                return ToolResult(
+                    success=False,
+                    tool="complaint",
+                    data={"error": str(e), "message": "Failed to register complaint."},
+                )
+
+        # ----------------------------------------------------
+        # Booking / Delay / Refund / Cancellation / Tracking / Payment / Reschedule
         # ----------------------------------------------------
 
         try:
-            data = tool.execute(booking_code)
+            if intent == Intent.BOOKING_CANCEL:
+                data = tool.execute(
+                    booking_code=booking_code,
+                    confirmation=confirmation,
+                    user_id=user_id,
+                )
+            elif intent in (Intent.BOOKING_STATUS, Intent.REFUND_STATUS, Intent.PAYMENT_ISSUE, Intent.RESCHEDULE, Intent.BUS_TRACKING):
+                # Pass user_id for authorization checks
+                data = tool.execute(
+                    booking_code=booking_code,
+                    user_id=user_id,
+                )
+            else:
+                data = tool.execute(booking_code)
+                
             return ToolResult(
                 success=True,
                 tool=intent.value.lower(),
@@ -150,6 +210,6 @@ class SupportAgent:
                     "booking_code": booking_code,
                     "found": False,
                     "error": str(e),
-                    "message": f"No booking found for booking code {booking_code}."
+                    "message": f"No booking found or you do not have permission to view it for code {booking_code}."
                 },
             )

@@ -1,7 +1,15 @@
-from unittest import result
-
 from app.repositories.booking_repository import BookingRepository
 from app.exceptions.common import NotFoundException
+
+
+def _fmt_dt(dt) -> str | None:
+    """Safely format a datetime to ISO string."""
+    if dt is None:
+        return None
+    try:
+        return dt.strftime("%Y-%m-%d %H:%M")
+    except Exception:
+        return str(dt)
 
 
 class BookingService:
@@ -13,6 +21,96 @@ class BookingService:
         self,
         booking_code: str,
     ):
+        booking = self.repository.get_booking_with_trip(
+            booking_code
+        )
+
+        if booking is None:
+            raise NotFoundException(
+                "Booking not found"
+            )
+
+        trip = booking.trip
+        route = trip.route if trip else None
+        bus = trip.bus if trip else None
+
+        return {
+            "booking_code": booking.booking_code,
+            "seat_number": booking.seat_number,
+            "booking_status": booking.booking_status.value,
+            "payment_status": booking.payment_status.value,
+            "bus_name": bus.bus_name if bus else "N/A",
+            "bus_number": bus.bus_number if bus else "N/A",
+            "bus_type": bus.bus_type.value if bus else "N/A",
+            "source": route.source_city if route else "N/A",
+            "destination": route.destination_city if route else "N/A",
+            "distance_km": route.distance_km if route else None,
+            "boarding_point": route.source_city if route else "N/A",
+            "drop_point": route.destination_city if route else "N/A",
+            "departure_time": _fmt_dt(trip.departure_time) if trip else "N/A",
+            "arrival_time": _fmt_dt(trip.arrival_time) if trip else "N/A",
+            "trip_status": trip.status.value if trip else "N/A",
+            "delay_minutes": trip.delay_minutes if trip else 0,
+            "delay_reason": trip.delay_reason if (trip and trip.delay_reason) else None,
+            "current_location": trip.current_location if (trip and trip.current_location) else None,
+            "updated_eta": _fmt_dt(trip.updated_eta) if (trip and trip.updated_eta) else None,
+        }
+
+    def get_booking_details_secure(
+        self,
+        booking_code: str,
+        user_id=None,
+    ):
+        """
+        Secure version: verifies that the booking belongs to the authenticated user.
+        Raises NotFoundException if booking is not found OR belongs to a different user.
+        """
+        import uuid as _uuid
+        booking = self.repository.get_booking_with_trip(booking_code)
+
+        if booking is None:
+            raise NotFoundException("No booking found with that code.")
+
+        # Authorization check: if booking has a user_id and a user is authenticated,
+        # verify ownership. Guest bookings (user_id=None) are accessible by anyone with the code.
+        if user_id and booking.user_id:
+            try:
+                uid = _uuid.UUID(str(user_id))
+                booking_uid = _uuid.UUID(str(booking.user_id))
+                if uid != booking_uid:
+                    raise NotFoundException(
+                        "This booking does not belong to your account."
+                    )
+            except (ValueError, AttributeError):
+                pass
+
+        trip = booking.trip
+        route = trip.route if trip else None
+        bus = trip.bus if trip else None
+
+        return {
+            "booking_code": booking.booking_code,
+            "seat_number": booking.seat_number,
+            "booking_status": booking.booking_status.value,
+            "payment_status": booking.payment_status.value,
+            "bus_name": bus.bus_name if bus else "N/A",
+            "bus_number": bus.bus_number if bus else "N/A",
+            "bus_type": bus.bus_type.value if bus else "N/A",
+            "source": route.source_city if route else "N/A",
+            "destination": route.destination_city if route else "N/A",
+            "distance_km": route.distance_km if route else None,
+            "boarding_point": route.source_city if route else "N/A",
+            "drop_point": route.destination_city if route else "N/A",
+            "departure_time": _fmt_dt(trip.departure_time) if trip else "N/A",
+            "arrival_time": _fmt_dt(trip.arrival_time) if trip else "N/A",
+            "trip_status": trip.status.value if trip else "N/A",
+            "delay_minutes": trip.delay_minutes if trip else 0,
+            "delay_reason": trip.delay_reason if (trip and trip.delay_reason) else None,
+            "current_location": trip.current_location if (trip and trip.current_location) else None,
+            "updated_eta": _fmt_dt(trip.updated_eta) if (trip and trip.updated_eta) else None,
+        }
+
+    def cancel_booking(self, booking_code: str):
 
         booking = self.repository.get_booking_with_trip(
             booking_code
@@ -23,57 +121,84 @@ class BookingService:
                 "Booking not found"
             )
 
+        booking = self.repository.cancel_booking(
+            booking
+        )
+
         return {
             "booking_code": booking.booking_code,
+            "status": booking.booking_status.value,
             "seat_number": booking.seat_number,
-            "booking_status": booking.booking_status.value,
-            "payment_status": booking.payment_status.value,
-            "bus_name": booking.trip.bus.bus_name,
-            "source": booking.trip.route.source_city,
-            "destination": booking.trip.route.destination_city,
-            "departure_time": booking.trip.departure_time,
-            "arrival_time": booking.trip.arrival_time,
         }
-    
-    def cancel_booking(self, booking_code: str):
 
-        booking = self.repository.get_booking_with_trip(
+    def get_refund_status(self, booking_code: str):
+
+        booking = self.repository.get_refund_status(
             booking_code
         )
 
         if booking is None:
             raise NotFoundException(
-            "Booking not found"
+                "Booking not found"
             )
 
-        booking = self.repository.cancel_booking(
-           booking
-        )
+        trip = booking.trip
 
-        return {
-        "booking_code": booking.booking_code,
-        "status": booking.booking_status.value,
-        "seat_number": booking.seat_number,
-    }
-
-
-    def get_refund_status(self, booking_code: str):
-
-        booking = self.repository.get_refund_status(
-           booking_code
-        )
-
-        if booking is None:
-           raise NotFoundException(
-            "Booking not found"
-           ) 
+        # Determine refund eligibility based on booking status and payment
+        if booking.booking_status.value == "CANCELLED":
+            if booking.payment_status.value == "REFUNDED":
+                refund_message = "Your refund has been processed and credited to your original payment method."
+            elif booking.payment_status.value == "PAID":
+                refund_message = "Your booking has been cancelled. Refund is being processed and will arrive within 5-7 business days."
+            else:
+                refund_message = "Your booking is cancelled. Payment was not charged, so no refund is applicable."
+        elif booking.booking_status.value == "CONFIRMED":
+            refund_message = "Your booking is active and confirmed. No refund is applicable for an active booking."
+        else:
+            refund_message = "Please contact customer support for refund information."
 
         return {
             "booking_code": booking.booking_code,
             "booking_status": booking.booking_status.value,
             "payment_status": booking.payment_status.value,
+            "refund_message": refund_message,
+            "departure_time": _fmt_dt(trip.departure_time) if trip else None,
+            "source": trip.route.source_city if (trip and trip.route) else None,
+            "destination": trip.route.destination_city if (trip and trip.route) else None,
         }
-    
+
+    def get_cancellation_preview(self, booking_code: str):
+        """
+        Returns booking preview for the cancellation confirmation gate.
+        Does NOT cancel the booking. Used to show what will be cancelled.
+        """
+        booking = self.repository.get_booking_with_trip(booking_code)
+
+        if booking is None:
+            raise NotFoundException("No booking found with that code.")
+
+        trip = booking.trip
+        route = trip.route if trip else None
+
+        if booking.booking_status.value == "CANCELLED":
+            return {
+                "already_cancelled": True,
+                "booking_code": booking.booking_code,
+                "status": booking.booking_status.value,
+                "message": "This booking is already cancelled.",
+            }
+
+        return {
+            "already_cancelled": False,
+            "booking_code": booking.booking_code,
+            "seat_number": booking.seat_number,
+            "booking_status": booking.booking_status.value,
+            "payment_status": booking.payment_status.value,
+            "source": route.source_city if route else "N/A",
+            "destination": route.destination_city if route else "N/A",
+            "departure_time": _fmt_dt(trip.departure_time) if trip else "N/A",
+        }
+
     def get_all_bookings(self, user_id=None):
 
         bookings = self.repository.get_all_bookings(user_id=user_id)
@@ -82,27 +207,21 @@ class BookingService:
 
         for booking in bookings:
 
+            trip = booking.trip
+            bus = trip.bus if trip else None
+            route = trip.route if trip else None
+
             result.append({
-
-            "booking_code": booking.booking_code,
-
-            "seat_number": booking.seat_number,
-
-            "booking_status": booking.booking_status.value,
-
-            "payment_status": booking.payment_status.value,
-
-            "bus_name": booking.trip.bus.bus_name if (booking.trip and booking.trip.bus) else "Volvo Express",
-
-            "source": booking.trip.route.source_city if (booking.trip and booking.trip.route) else "Vizag",
-
-            "destination": booking.trip.route.destination_city if (booking.trip and booking.trip.route) else "Delhi",
-
-            "departure_time": str(booking.trip.departure_time) if booking.trip else "08:00 AM",
-
-            "arrival_time": str(booking.trip.arrival_time) if booking.trip else "04:00 PM",
-
-        })
+                "booking_code": booking.booking_code,
+                "seat_number": booking.seat_number,
+                "booking_status": booking.booking_status.value,
+                "payment_status": booking.payment_status.value,
+                "bus_name": bus.bus_name if bus else "N/A",
+                "source": route.source_city if route else "N/A",
+                "destination": route.destination_city if route else "N/A",
+                "departure_time": _fmt_dt(trip.departure_time) if trip else "N/A",
+                "arrival_time": _fmt_dt(trip.arrival_time) if trip else "N/A",
+            })
 
         return result
 
@@ -118,8 +237,6 @@ class BookingService:
         from app.database.models.booking import Booking, BookingStatus, PaymentStatus
         from app.database.models.user import User
         from sqlalchemy import select
-
-        # Do not fallback to a random first user. Keep user_id as None if guest/unauthenticated.
 
         trip_repo = TripRepository(self.repository.db)
         trip = trip_repo.find_trip_by_route(source, destination)
@@ -193,6 +310,6 @@ class BookingService:
             "bus_name": booking.trip.bus.bus_name if (booking and booking.trip and booking.trip.bus) else "Volvo Express",
             "source": booking.trip.route.source_city if (booking and booking.trip and booking.trip.route) else source,
             "destination": booking.trip.route.destination_city if (booking and booking.trip and booking.trip.route) else destination,
-            "departure_time": str(booking.trip.departure_time) if (booking and booking.trip) else "08:00 AM",
-            "arrival_time": str(booking.trip.arrival_time) if (booking and booking.trip) else "04:00 PM",
+            "departure_time": _fmt_dt(booking.trip.departure_time) if (booking and booking.trip) else "N/A",
+            "arrival_time": _fmt_dt(booking.trip.arrival_time) if (booking and booking.trip) else "N/A",
         }

@@ -96,5 +96,9 @@ class BookingRepository(BaseRepository):
         return list(self.db.scalars(stmt).all())
 
     def generate_next_booking_code(self) -> str:
+        import random
+        # Generates a 4-digit code e.g. BK-1234
         count = self.db.query(Booking).count()
-        return f"BK-{100001 + count}"
+        # Ensure we always get 4 digits by adding a base offset and handling large counts
+        num = 1000 + (count % 9000)
+        return f"BK-{num}"

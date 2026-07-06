@@ -226,6 +226,8 @@ class ChatService:
             understanding.bus_number
             or session.entities.get("bus_number")
         )
+        
+        confirmation = understanding.confirmation
 
         # ----------------------------------------
         # Execute Agent
@@ -239,6 +241,7 @@ class ChatService:
             destination_city=destination_city,
             travel_date=travel_date,
             seat_number=seat_number,
+            confirmation=confirmation,
             user_id=user_id,
         )
 
