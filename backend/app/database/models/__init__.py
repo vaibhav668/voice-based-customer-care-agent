@@ -4,6 +4,7 @@ from .route import Route
 from .bus import Bus
 from .trip import Trip
 from .booking import Booking
+from .complaint import Complaint, ComplaintStatus
 from .conversation import Conversation, ConversationStatus, ConversationChannel
 from .conversation_message import ConversationMessage, MessageSender, MessageType
 
@@ -13,6 +14,8 @@ __all__ = [
     "Bus",
     "Trip",
     "Booking",
+    "Complaint",
+    "ComplaintStatus",
     "Conversation",
     "ConversationStatus",
     "ConversationChannel",
