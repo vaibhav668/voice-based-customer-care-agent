@@ -16,77 +16,264 @@ def auto_seed_database():
     from app.database.models.route import Route
     from app.database.models.bus import Bus, BusType
     from app.database.models.trip import Trip, TripStatus
+    from app.auth.security import hash_password
     from datetime import datetime, timedelta
+    import uuid
 
     db = SessionLocal()
     try:
-        existing = db.query(Booking).filter(Booking.booking_code == "BK-100001").first()
+        existing = db.query(Booking).filter(Booking.booking_code == "BK-1234").first()
         if existing:
             return
 
-        logger.info("🌱 Seeding initial database records (BK-100001, routes, buses, trips)...")
+        logger.info("🌱 Seeding database with customer support test scenarios (BK-1234, BK-5678, etc.)...")
 
-        user = User(
-            full_name="Sample Customer",
-            email="customer@example.com",
-            phone="9876543210",
-            password_hash="dummy_hash",
-            role=UserRole.CUSTOMER,
-            is_active=True,
-            is_verified=True,
-        )
-        db.add(user)
-        db.commit()
-        db.refresh(user)
+        # 1. Create demo users
+        demo_email = "demo@example.com"
+        user = db.query(User).filter_by(email=demo_email).first()
+        if not user:
+            user = User(
+                id=uuid.uuid4(),
+                full_name="Demo User",
+                email=demo_email,
+                phone="9876543999",
+                password_hash=hash_password("password123"),
+                role=UserRole.CUSTOMER,
+                is_active=True,
+                is_verified=True,
+                preferred_language="en",
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
 
-        route = Route(
-            source_city="Delhi",
-            destination_city="Mumbai",
-            distance_km=1400,
-            estimated_duration_minutes=1200,
-        )
-        db.add(route)
-        db.commit()
-        db.refresh(route)
+        other_email = "other@example.com"
+        other_user = db.query(User).filter_by(email=other_email).first()
+        if not other_user:
+            other_user = User(
+                id=uuid.uuid4(),
+                full_name="Other User",
+                email=other_email,
+                phone="9998887999",
+                password_hash=hash_password("password123"),
+                role=UserRole.CUSTOMER,
+                is_active=True,
+                is_verified=True,
+                preferred_language="en",
+            )
+            db.add(other_user)
+            db.commit()
+            db.refresh(other_user)
 
-        bus = Bus(
-            bus_number="DL01BUS1001",
-            bus_name="Volvo Multi Axle AC Sleeper",
-            registration_number="DL01REG1001",
-            bus_type=BusType.AC_SLEEPER,
-            capacity=36,
-        )
-        db.add(bus)
-        db.commit()
-        db.refresh(bus)
+        # 2. Setup routes
+        route_data = [
+            {"source": "Delhi", "dest": "Jaipur", "distance": 280, "duration": 315},
+            {"source": "Mumbai", "dest": "Pune", "distance": 150, "duration": 270},
+            {"source": "Bengaluru", "dest": "Chennai", "distance": 350, "duration": 510},
+            {"source": "Hyderabad", "dest": "Vijayawada", "distance": 270, "duration": 360},
+            {"source": "Dehradun", "dest": "Delhi", "distance": 250, "duration": 390},
+        ]
+        
+        routes_dict = {}
+        for rd in route_data:
+            route = db.query(Route).filter_by(source_city=rd["source"], destination_city=rd["dest"]).first()
+            if not route:
+                route = Route(
+                    id=uuid.uuid4(),
+                    source_city=rd["source"],
+                    destination_city=rd["dest"],
+                    distance_km=rd["distance"],
+                    estimated_duration_minutes=rd["duration"]
+                )
+                db.add(route)
+                db.commit()
+                db.refresh(route)
+            routes_dict[f"{rd['source']}-{rd['dest']}"] = route
 
-        departure = datetime.now() + timedelta(hours=4)
-        arrival = departure + timedelta(hours=18)
+        buses_dict = {}
+        for i in range(5):
+            bus_num = f"DEMO{i}BUS"
+            bus = db.query(Bus).filter_by(bus_number=bus_num).first()
+            if not bus:
+                bus = Bus(
+                    id=uuid.uuid4(),
+                    bus_number=bus_num,
+                    bus_name=f"Volvo Multi Axle AC Sleeper {i}",
+                    registration_number=f"DEMOREG{i}",
+                    bus_type=BusType.AC_SLEEPER,
+                    capacity=36
+                )
+                db.add(bus)
+                db.commit()
+                db.refresh(bus)
+            buses_dict[i] = bus
 
-        trip = Trip(
-            route_id=route.id,
-            bus_id=bus.id,
-            departure_time=departure,
-            arrival_time=arrival,
-            status=TripStatus.SCHEDULED,
-            delay_minutes=0,
-            available_seats=35,
-        )
-        db.add(trip)
-        db.commit()
-        db.refresh(trip)
+        now = datetime.now()
 
-        booking = Booking(
-            booking_code="BK-100001",
-            user_id=user.id,
-            trip_id=trip.id,
-            seat_number="A12",
-            booking_status=BookingStatus.CONFIRMED,
-            payment_status=PaymentStatus.PAID,
-        )
-        db.add(booking)
-        db.commit()
-        logger.info("✅ Database seeded with initial booking BK-100001.")
+        # BK-1234: Delhi -> Jaipur, Confirmed/Paid/On Time
+        b1_code = "BK-1234"
+        if not db.query(Booking).filter_by(booking_code=b1_code).first():
+            route = routes_dict["Delhi-Jaipur"]
+            t1 = Trip(
+                id=uuid.uuid4(),
+                route_id=route.id,
+                bus_id=buses_dict[0].id,
+                departure_time=now.replace(hour=18, minute=30, second=0, microsecond=0) + timedelta(days=1),
+                arrival_time=now.replace(hour=23, minute=45, second=0, microsecond=0) + timedelta(days=1),
+                status=TripStatus.ON_TIME,
+                delay_minutes=0,
+                available_seats=35
+            )
+            db.add(t1)
+            db.commit()
+            b1 = Booking(
+                booking_code=b1_code,
+                user_id=user.id,
+                trip_id=t1.id,
+                seat_number="A12",
+                booking_status=BookingStatus.CONFIRMED,
+                payment_status=PaymentStatus.PAID
+            )
+            db.add(b1)
+            db.commit()
+
+        # BK-5678: Mumbai -> Pune, Delayed 25 mins
+        b2_code = "BK-5678"
+        if not db.query(Booking).filter_by(booking_code=b2_code).first():
+            route = routes_dict["Mumbai-Pune"]
+            dep = now.replace(hour=8, minute=0, second=0, microsecond=0) + timedelta(days=2)
+            arr = dep + timedelta(hours=4, minutes=30)
+            t2 = Trip(
+                id=uuid.uuid4(),
+                route_id=route.id,
+                bus_id=buses_dict[1].id,
+                departure_time=dep,
+                arrival_time=arr,
+                status=TripStatus.DELAYED,
+                delay_minutes=25,
+                delay_reason="Heavy Traffic",
+                updated_eta=arr + timedelta(minutes=25),
+                current_location="Approaching Lonavala",
+                available_seats=35
+            )
+            db.add(t2)
+            db.commit()
+            b2 = Booking(
+                booking_code=b2_code,
+                user_id=user.id,
+                trip_id=t2.id,
+                seat_number="B07",
+                booking_status=BookingStatus.CONFIRMED,
+                payment_status=PaymentStatus.PAID
+            )
+            db.add(b2)
+            db.commit()
+
+        # BK-2468: Bengaluru -> Chennai, Cancelled/Refund Processing
+        b3_code = "BK-2468"
+        if not db.query(Booking).filter_by(booking_code=b3_code).first():
+            route = routes_dict["Bengaluru-Chennai"]
+            dep = now.replace(hour=21, minute=0, second=0, microsecond=0) + timedelta(days=5)
+            arr = dep + timedelta(hours=8, minutes=30)
+            t3 = Trip(
+                id=uuid.uuid4(),
+                route_id=route.id,
+                bus_id=buses_dict[2].id,
+                departure_time=dep,
+                arrival_time=arr,
+                status=TripStatus.SCHEDULED,
+                delay_minutes=0,
+                available_seats=35
+            )
+            db.add(t3)
+            db.commit()
+            b3 = Booking(
+                booking_code=b3_code,
+                user_id=user.id,
+                trip_id=t3.id,
+                seat_number="C15",
+                booking_status=BookingStatus.CANCELLED,
+                payment_status=PaymentStatus.PAID,
+            )
+            db.add(b3)
+            db.commit()
+
+        # BK-1357: Hyderabad -> Vijayawada, Pending/Pending
+        b4_code = "BK-1357"
+        if not db.query(Booking).filter_by(booking_code=b4_code).first():
+            route = routes_dict["Hyderabad-Vijayawada"]
+            dep = now.replace(hour=7, minute=0, second=0, microsecond=0) + timedelta(days=3)
+            arr = dep + timedelta(hours=6, minutes=0)
+            t4 = Trip(
+                id=uuid.uuid4(),
+                route_id=route.id,
+                bus_id=buses_dict[3].id,
+                departure_time=dep,
+                arrival_time=arr,
+                status=TripStatus.SCHEDULED,
+                delay_minutes=0,
+                available_seats=35
+            )
+            db.add(t4)
+            db.commit()
+            b4 = Booking(
+                booking_code=b4_code,
+                user_id=user.id,
+                trip_id=t4.id,
+                seat_number="D09",
+                booking_status=BookingStatus.CONFIRMED,
+                payment_status=PaymentStatus.PENDING
+            )
+            db.add(b4)
+            db.commit()
+
+        # BK-9876: Dehradun -> Delhi, Confirmed/Paid/In Transit
+        b5_code = "BK-9876"
+        if not db.query(Booking).filter_by(booking_code=b5_code).first():
+            route = routes_dict["Dehradun-Delhi"]
+            dep = now.replace(hour=22, minute=0, second=0, microsecond=0) - timedelta(hours=2)
+            arr = dep + timedelta(hours=6, minutes=30)
+            t5 = Trip(
+                id=uuid.uuid4(),
+                route_id=route.id,
+                bus_id=buses_dict[4].id,
+                departure_time=dep,
+                arrival_time=arr,
+                status=TripStatus.SCHEDULED,
+                delay_minutes=0,
+                current_location="Passed Muzaffarnagar bypass, approx 120km to Delhi",
+                available_seats=35
+            )
+            db.add(t5)
+            db.commit()
+            b5 = Booking(
+                booking_code=b5_code,
+                user_id=user.id,
+                trip_id=t5.id,
+                seat_number="A05",
+                booking_status=BookingStatus.CONFIRMED,
+                payment_status=PaymentStatus.PAID
+            )
+            db.add(b5)
+            db.commit()
+
+        # BK-9999: Other User booking (for cross-user security tests)
+        b6_code = "BK-9999"
+        if not db.query(Booking).filter_by(booking_code=b6_code).first():
+            trip_obj = db.query(Trip).first()
+            if trip_obj:
+                b6 = Booking(
+                    booking_code=b6_code,
+                    user_id=other_user.id,
+                    trip_id=trip_obj.id,
+                    seat_number="Z99",
+                    booking_status=BookingStatus.CONFIRMED,
+                    payment_status=PaymentStatus.PAID
+                )
+                db.add(b6)
+                db.commit()
+
+        logger.info("✅ Database seeded with all customer support test scenarios.")
     except Exception as e:
         logger.warning(f"Auto-seed warning: {e}")
         db.rollback()
