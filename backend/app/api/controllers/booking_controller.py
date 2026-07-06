@@ -15,6 +15,6 @@ class BookingController:
     def get_booking(self, booking_code: str):
         return self.service.get_booking_details(booking_code)
     
-    def get_all_bookings(self):
+    def get_all_bookings(self, user_id=None):
 
-        return self.service.get_all_bookings()
+        return self.service.get_all_bookings(user_id=user_id)

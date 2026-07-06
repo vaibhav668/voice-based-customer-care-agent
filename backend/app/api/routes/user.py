@@ -45,7 +45,7 @@ def update_language(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    valid_languages = {"en", "hi", "mr", "te", "ta"}
+    valid_languages = {"en", "hi", "mr", "te", "ta", "kn"}
     lang = request.preferred_language.lower()
     if lang not in valid_languages:
         lang = "en"

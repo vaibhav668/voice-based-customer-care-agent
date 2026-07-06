@@ -11,11 +11,14 @@ async function loadBookings() {
 
     try {
 
-        const bookings = await getBookings();
+        const response = await getBookings();
+
+        // API returns { success, message, data: [...] } — unwrap the data array
+        const bookings = response.data || response;
 
         container.innerHTML = "";
 
-        if (bookings.length === 0) {
+        if (!Array.isArray(bookings) || bookings.length === 0) {
 
             container.innerHTML = "<h2>No bookings found.</h2>";
 

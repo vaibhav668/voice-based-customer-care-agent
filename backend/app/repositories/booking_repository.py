@@ -72,17 +72,27 @@ class BookingRepository(BaseRepository):
     def get_refund_status(self, booking_code: str):
         return self.get_booking_with_trip(booking_code)
     
-    def get_all_bookings(self) -> list[Booking]:
+    def get_all_bookings(self, user_id=None) -> list[Booking]:
+        from sqlalchemy import or_
+        import uuid
 
         stmt = (
             select(Booking)
             .options(
                 joinedload(Booking.trip).joinedload(Trip.bus),
                 joinedload(Booking.trip).joinedload(Trip.route),
-            ) 
-            .order_by(Booking.created_at.desc())
+            )
         )
 
+        if user_id:
+            try:
+                uid = user_id if isinstance(user_id, uuid.UUID) else uuid.UUID(str(user_id))
+                # Filter by authenticated user's ID OR show guest/unassigned bookings (user_id is Null)
+                stmt = stmt.where(or_(Booking.user_id == uid, Booking.user_id == None))
+            except Exception:
+                pass
+
+        stmt = stmt.order_by(Booking.created_at.desc())
         return list(self.db.scalars(stmt).all())
 
     def generate_next_booking_code(self) -> str:

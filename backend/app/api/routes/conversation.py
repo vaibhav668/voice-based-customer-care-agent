@@ -27,10 +27,11 @@ def list_conversations(
     db: Session = Depends(get_db),
 ):
     repo = ConversationRepository(db)
+    user_id = current_user.get("sub") or current_user.get("id") if current_user else None
 
-    # Always load ALL conversations (user + guest sessions) so history is complete
+    # Load conversations for this authenticated user and guest sessions
     total, conversations = repo.list_conversations(
-        user_id=None,
+        user_id=user_id,
         channel=channel,
         status=status,
         limit=limit,
@@ -62,14 +63,15 @@ def search_conversations(
     db: Session = Depends(get_db),
 ):
     repo = ConversationRepository(db)
+    user_id = current_user.get("sub") or current_user.get("id") if current_user else None
 
-    # Search across ALL conversations (user + guest sessions)
+    # Search across conversations (matching this user's or guest sessions)
     total, conversations = repo.search_conversations(
         search_query=q,
         booking_code=booking_code,
         intent=intent,
         language=language,
-        user_id=None,
+        user_id=user_id,
         limit=limit,
         offset=offset,
     )
@@ -102,6 +104,12 @@ def get_conversation_detail(
             message="Conversation not found",
         )
 
+    # Security check: If conversation belongs to another user, restrict access
+    user_id = current_user.get("sub") or current_user.get("id") if current_user else None
+    if conv.user_id and str(conv.user_id) != str(user_id):
+        from app.exceptions.common import UnauthorizedException
+        raise UnauthorizedException("Access to this conversation is unauthorized")
+
     data = ConversationDetailSchema.model_validate(conv).model_dump(mode="json")
 
     return success_response(
@@ -117,6 +125,20 @@ def delete_conversation(
     db: Session = Depends(get_db),
 ):
     repo = ConversationRepository(db)
+    conv = repo.get_by_id(conversation_id)
+
+    if not conv:
+        return success_response(
+            data={"deleted": False},
+            message="Conversation not found",
+        )
+
+    # Security check: If conversation belongs to another user, restrict access
+    user_id = current_user.get("sub") or current_user.get("id") if current_user else None
+    if conv.user_id and str(conv.user_id) != str(user_id):
+        from app.exceptions.common import UnauthorizedException
+        raise UnauthorizedException("Access to this conversation is unauthorized")
+
     deleted = repo.soft_delete(conversation_id)
 
     return success_response(

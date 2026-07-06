@@ -1,7 +1,8 @@
 import "./config.js";
 import {
     getToken,
-    getSessionId
+    getSessionId,
+    removeToken
 } from "./storage.js";
 import { langManager } from "./language.js";
 
@@ -35,6 +36,15 @@ async function request(url, options = {}) {
         ...options,
         headers,
     });
+
+    // If unauthorized / token expired, automatically sign out and redirect
+    if (response.status === 401) {
+        removeToken();
+        const path = window.location.pathname;
+        if (!path.includes("login.html") && !path.includes("register.html") && path !== "/" && !path.endsWith("/index.html")) {
+            window.location.href = path.includes("/pages/") ? "../login.html" : "login.html";
+        }
+    }
 
     const data = await response.json();
 

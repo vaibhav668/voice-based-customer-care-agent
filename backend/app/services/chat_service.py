@@ -239,6 +239,7 @@ class ChatService:
             destination_city=destination_city,
             travel_date=travel_date,
             seat_number=seat_number,
+            user_id=user_id,
         )
 
         print("=" * 60)

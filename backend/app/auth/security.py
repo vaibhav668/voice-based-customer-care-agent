@@ -1,3 +1,4 @@
+import bcrypt
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -12,14 +13,13 @@ pwd_context = CryptContext(
 )
 
 
-import bcrypt
-
 def hash_password(password: str) -> str:
     try:
-        return pwd_context.hash(password)
-    except Exception:
         salt = bcrypt.gensalt()
         return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
+    except Exception:
+        pass
+    return pwd_context.hash(password)
 
 
 def verify_password(
@@ -27,18 +27,20 @@ def verify_password(
     hashed_password: str,
 ) -> bool:
     try:
+        plain_bytes = plain_password.encode('utf-8')
+        hashed_bytes = hashed_password.encode('utf-8')
+        if bcrypt.checkpw(plain_bytes, hashed_bytes):
+            return True
+    except Exception:
+        pass
+
+    try:
         return pwd_context.verify(
             plain_password,
             hashed_password,
         )
     except Exception:
-        try:
-            return bcrypt.checkpw(
-                plain_password.encode('utf-8'),
-                hashed_password.encode('utf-8'),
-            )
-        except Exception:
-            return False
+        return False
 
 
 def create_access_token(

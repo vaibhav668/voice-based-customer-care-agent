@@ -90,7 +90,7 @@ class ConversationRepository(BaseRepository):
         if user_id:
             try:
                 uid = user_id if isinstance(user_id, uuid.UUID) else uuid.UUID(str(user_id))
-                query = query.where(Conversation.user_id == uid)
+                query = query.where(or_(Conversation.user_id == uid, Conversation.user_id == None))
             except Exception:
                 pass
 
@@ -123,7 +123,7 @@ class ConversationRepository(BaseRepository):
         if user_id:
             try:
                 uid = user_id if isinstance(user_id, uuid.UUID) else uuid.UUID(str(user_id))
-                query = query.where(Conversation.user_id == uid)
+                query = query.where(or_(Conversation.user_id == uid, Conversation.user_id == None))
             except Exception:
                 pass
 
