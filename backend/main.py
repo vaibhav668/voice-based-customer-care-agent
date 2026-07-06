@@ -1,3 +1,11 @@
+import sys
+from pathlib import Path
+
+# Ensure backend root is on Python sys.path for absolute imports
+_BASE_DIR = Path(__file__).parent
+if str(_BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(_BASE_DIR))
+
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from app.core.exception_handler import register_exception_handlers
