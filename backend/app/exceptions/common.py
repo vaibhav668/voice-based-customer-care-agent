@@ -11,14 +11,12 @@ class NotFoundException(AppException):
             "NOT_FOUND",
         )
 
-from fastapi import HTTPException, status
-
-
-class ConflictException(HTTPException):
-    def __init__(self, message: str):
+class ConflictException(AppException):
+    def __init__(self, message="Resource conflict"):
         super().__init__(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=message,
+            message,
+            status.HTTP_409_CONFLICT,
+            "CONFLICT",
         )
 class UnauthorizedException(AppException):
     def __init__(self, message="Unauthorized"):
