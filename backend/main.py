@@ -1,0 +1,84 @@
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from app.core.exception_handler import register_exception_handlers
+from app.voice.routes import router as voice_router
+from app.api.routes.chat import router as chat_router
+from app.api.routes.health import router as health_router
+from app.config.logging import setup_logging
+from app.config.settings import settings 
+from app.middleware.request_id import RequestIDMiddleware
+from app.api.routes.auth import router as auth_router
+from app.api.routes.user import router as user_router
+from app.api.routes.booking import router as booking_router
+from app.websocket.routes import router as websocket_router
+from app.api.routes.trip import router as trip_router
+setup_logging()
+from fastapi.middleware.cors import CORSMiddleware
+from app.core.lifespan import lifespan
+
+
+app = FastAPI(
+    title=settings.app_name,
+    version=settings.app_version,
+    lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+from pathlib import Path
+
+# Use absolute paths so static files resolve correctly regardless of cwd
+_BASE_DIR = Path(__file__).parent
+_TEMP_DIR = _BASE_DIR / "temp"
+_AUDIO_DIR = _BASE_DIR / "generated_audio"
+_TEMP_DIR.mkdir(exist_ok=True)
+_AUDIO_DIR.mkdir(exist_ok=True)
+
+app.mount(
+    "/generated_audio",
+    StaticFiles(directory=str(_AUDIO_DIR)),
+    name="generated_audio",
+)
+app.mount(
+    "/temp",
+    StaticFiles(directory=str(_TEMP_DIR)),
+    name="temp",
+)
+app.include_router(voice_router)
+
+app.include_router(
+    trip_router,
+    prefix="/api/v1/trips",
+    tags=["Trips"],
+)
+
+
+from app.api.routes.conversation import router as conversation_router
+
+app.include_router(booking_router)
+app.include_router(user_router)
+app.include_router(auth_router)
+app.include_router(chat_router)
+app.include_router(conversation_router)
+app.include_router(websocket_router)
+register_exception_handlers(app)
+app.include_router(health_router)
+app.add_middleware(RequestIDMiddleware)
+@app.get("/")
+async def root():
+    return {
+        "message": "SupportAI Backend Running"
+    }
+print("\n========== ROUTES ==========")
+
+for route in app.routes:
+    methods = getattr(route, "methods", [])
+    print(methods, route.path)
+
+print("============================\n")

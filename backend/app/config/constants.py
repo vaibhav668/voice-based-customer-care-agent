@@ -1,0 +1,5 @@
+APP_AUTHOR = "Vaibhav Pokhriyal"
+
+DEFAULT_API_VERSION = "v1"
+
+DEFAULT_TIMEOUT = 30
