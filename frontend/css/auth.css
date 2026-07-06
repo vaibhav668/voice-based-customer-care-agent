@@ -1,0 +1,205 @@
+:root {
+    --ink: #0b1220;
+    --ink-deep: #070c16;
+    --surface: #131f33;
+    --surface-2: #1a2a44;
+    --line: #29395a;
+    --amber: #ffb13d;
+    --amber-soft: #ffd685;
+    --teal: #35d8b6;
+    --danger: #ff7a7a;
+    --text: #eef2fa;
+    --text-dim: #8fa0bf;
+    --radius-lg: 22px;
+    --radius-sm: 10px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 20px;
+    font-family: 'Inter', sans-serif;
+    color: var(--text);
+    background:
+        radial-gradient(circle at 12% 8%, rgba(53,216,182,0.10), transparent 40%),
+        radial-gradient(circle at 88% 92%, rgba(255,177,61,0.10), transparent 45%),
+        linear-gradient(180deg, var(--ink-deep), var(--ink) 60%);
+    position: relative;
+    overflow-x: hidden;
+}
+
+body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: radial-gradient(circle, rgba(255,255,255,0.05) 1px, transparent 1px);
+    background-size: 26px 26px;
+    pointer-events: none;
+}
+
+.auth-card {
+    position: relative;
+    width: 100%;
+    max-width: 420px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    padding: 44px 36px 34px;
+    box-shadow: 0 30px 60px -20px rgba(0,0,0,0.6);
+    z-index: 1;
+}
+
+.auth-card::before,
+.auth-card::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--ink-deep);
+    box-shadow: inset 0 0 0 1px var(--line);
+}
+.auth-card::before { left: -13px; }
+.auth-card::after { right: -13px; }
+
+.ticket-edge {
+    position: absolute;
+    left: 26px;
+    right: 26px;
+    top: 122px;
+    border-top: 2px dashed var(--line);
+}
+
+.logo-mark {
+    width: 56px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 26px;
+    border-radius: 16px;
+    background: linear-gradient(145deg, var(--teal), #1fa88a);
+    box-shadow: 0 10px 24px -8px rgba(53,216,182,0.5);
+    margin: 0 auto 18px;
+}
+
+h1 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 26px;
+    font-weight: 700;
+    text-align: center;
+    margin: 0 0 8px;
+    letter-spacing: -0.01em;
+}
+
+.subtitle {
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 14px;
+    margin: 0 0 34px;
+}
+
+form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-top: 6px;
+}
+
+.field {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.field i {
+    position: absolute;
+    left: 16px;
+    color: var(--text-dim);
+    font-size: 14px;
+    pointer-events: none;
+}
+
+.field #toggle-password {
+    left: auto;
+    right: 16px;
+    cursor: pointer;
+    pointer-events: auto;
+}
+
+input {
+    width: 100%;
+    padding: 14px 16px 14px 42px;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    font-size: 14.5px;
+    outline: none;
+    transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+input[type="password"] {
+    padding-right: 42px;
+}
+
+input::placeholder { color: var(--text-dim); }
+
+input:focus {
+    border-color: var(--teal);
+    box-shadow: 0 0 0 3px rgba(53,216,182,0.16);
+}
+
+button {
+    margin-top: 6px;
+    width: 100%;
+    padding: 14px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: linear-gradient(135deg, var(--teal), #1fa88a);
+    color: #052019;
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 15px;
+    letter-spacing: 0.01em;
+    cursor: pointer;
+    transition: transform .12s ease;
+    box-shadow: 0 14px 26px -12px rgba(53,216,182,0.5);
+}
+button:hover { transform: translateY(-1px); }
+button:active { transform: translateY(0); }
+button:focus-visible { outline: 2px solid var(--amber); outline-offset: 3px; }
+
+.auth-card > p {
+    text-align: center;
+    margin: 24px 0 0;
+    font-size: 13.5px;
+    color: var(--text-dim);
+}
+
+.auth-card > p a {
+    color: var(--amber-soft);
+    text-decoration: none;
+    font-weight: 600;
+}
+.auth-card > p a:hover { text-decoration: underline; }
+
+#message {
+    margin-top: 16px;
+    font-size: 13px;
+    text-align: center;
+    color: var(--danger);
+    min-height: 18px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+}

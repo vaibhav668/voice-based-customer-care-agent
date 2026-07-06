@@ -1,7 +1,8 @@
 import { langManager } from "./language.js";
 import { getToken } from "./storage.js";
+import { getBaseUrl } from "./api.js";
 
-const API_BASE = "http://127.0.0.1:8000/api/v1";
+const API_BASE = `${getBaseUrl()}/api/v1`;
 
 document.addEventListener("DOMContentLoaded", () => {
     langManager.init("lang-selector-container");
@@ -57,11 +58,11 @@ async function loadConversations() {
     convList.innerHTML = `<div class="empty-state"><p>Loading conversations...</p></div>`;
 
     try {
-        let endpoint = `/conversations?limit=50&offset=0`;
+        let endpoint = `/conversations?limit=100&offset=0`;
         if (currentSearchQuery) {
-            endpoint = `/conversations/search?q=${encodeURIComponent(currentSearchQuery)}&limit=50&offset=0`;
+            endpoint = `/conversations/search?q=${encodeURIComponent(currentSearchQuery)}&limit=100&offset=0`;
         } else if (currentChannelFilter) {
-            endpoint = `/conversations?channel=${currentChannelFilter}&limit=50&offset=0`;
+            endpoint = `/conversations?channel=${currentChannelFilter}&limit=100&offset=0`;
         }
 
         const data = await fetchAPI(endpoint);
@@ -141,11 +142,12 @@ async function loadConversationDetail(convId) {
             let audioWidget = "";
             if (m.audio_path) {
                 let cleanPath = m.audio_path.replace(/\\/g, "/");
-                if (!cleanPath.startsWith("generated_audio/") && !cleanPath.startsWith("http")) {
+                if (!cleanPath.startsWith("generated_audio/") && !cleanPath.startsWith("temp/") && !cleanPath.startsWith("http")) {
                     cleanPath = `generated_audio/${cleanPath}`;
                 }
-                const audioUrl = cleanPath.startsWith("http") ? cleanPath : `http://127.0.0.1:8000/${cleanPath}`;
-                audioWidget = `<div><audio controls style="width:100%; margin-top:8px;"><source src="${audioUrl}" type="audio/mpeg"></audio></div>`;
+                const audioUrl = cleanPath.startsWith("http") ? cleanPath : `${getBaseUrl()}/${cleanPath}`;
+                const mimeType = cleanPath.endsWith(".webm") ? "audio/webm" : "audio/mpeg";
+                audioWidget = `<div><audio controls style="width:100%; margin-top:8px;"><source src="${audioUrl}" type="${mimeType}">Your browser does not support audio playback.</audio></div>`;
             }
 
             let metaTags = [];

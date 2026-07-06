@@ -111,12 +111,28 @@
         padding-right: 4px;
     }
 
-    #conversation p {
+    .voice-placeholder {
         margin: 0;
         color: var(--text-dim);
         font-size: 14.5px;
         text-align: center;
         padding: 40px 0;
+    }
+
+    .transcript-box, .response-box {
+        background: var(--surface-2);
+        border: 1px solid var(--line);
+        border-radius: var(--radius-sm);
+        padding: 14px 18px;
+        margin-bottom: 12px;
+    }
+    .transcript-box p, .response-box p {
+        margin: 6px 0 0;
+        color: var(--text);
+        font-size: 14.5px;
+        line-height: 1.5;
+        text-align: left;
+        padding: 0;
     }
 
     .record-row {
@@ -211,10 +227,36 @@
     }
     #upload-btn:hover { background: var(--teal); color: #052019; }
 
-    hr { display: none; }
+    .keypad-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 10px;
+        margin-top: 14px;
+    }
+    .keypad-btn {
+        background: var(--surface-2);
+        border: 1px solid var(--line);
+        color: var(--text);
+        border-radius: var(--radius-sm);
+        padding: 12px 14px;
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 13.5px;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        transition: all 0.15s ease;
+    }
+    .keypad-btn:hover, .keypad-btn.active {
+        border-color: var(--amber);
+        background: rgba(255, 177, 61, 0.15);
+        color: var(--amber-soft);
+    }
 
     @media (max-width: 480px) {
         header { flex-wrap: wrap; }
+        .keypad-grid { grid-template-columns: repeat(2, 1fr); }
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -252,7 +294,7 @@
 
 <div id="conversation">
 
-    <p data-i18n="voice_subtitle">Click the microphone or upload an audio file.</p>
+    <p class="voice-placeholder" data-i18n="voice_subtitle">Click the microphone or upload an audio file.</p>
 
 </div>
 
@@ -293,7 +335,7 @@ Upload Recording
 
 </div>
 
-<script type="module" src="../js/voice.js"></script>
+<script type="module" src="../js/voice.js?v=1.0.1"></script>
 
 </body>
 

@@ -13,11 +13,7 @@
 
     <link
         rel="stylesheet"
-        href="css/style.css">
-
-    <link
-        rel="stylesheet"
-        href="css/auth.css">
+        href="css/auth.css?v=1.0.1">
 
     <link
         rel="stylesheet"
@@ -30,84 +26,79 @@
 
 <div id="lang-selector-container" style="position: fixed; top: 16px; right: 20px; z-index: 1000;"></div>
 
-<div class="auth-container">
+<div class="auth-card">
 
-    <div class="auth-card">
+    <div class="ticket-edge"></div>
 
-        <div class="logo">
+    <div class="logo-mark">🚌</div>
 
-            🚌
+    <h1 data-i18n="app_title">
+
+        Support AI
+
+    </h1>
+
+    <p class="subtitle" data-i18n="login_subtitle">
+
+        Sign in to continue
+
+    </p>
+
+    <form id="login-form">
+
+        <div class="field">
+
+            <i class="fa-solid fa-envelope"></i>
+
+            <input
+                id="email"
+                type="email"
+                placeholder="Email"
+                data-i18n-placeholder="email_placeholder"
+                required>
 
         </div>
 
-        <h1 data-i18n="app_title">
+        <div class="field">
 
-            Support AI
+            <i class="fa-solid fa-lock"></i>
 
-        </h1>
+            <input
+                id="password"
+                type="password"
+                placeholder="Password"
+                data-i18n-placeholder="password_placeholder"
+                required>
 
-        <p data-i18n="login_subtitle">
+            <i
+                id="toggle-password"
+                class="fa-solid fa-eye"></i>
 
-            Sign in to continue
+        </div>
 
-        </p>
+        <button
+            type="submit"
+            data-i18n="login_btn">
 
-        <form id="login-form">
+            Login
 
-            <div class="input-group">
+        </button>
 
-                <i class="fa-solid fa-envelope"></i>
+    </form>
 
-                <input
-                    id="email"
-                    type="email"
-                    placeholder="Email"
-                    data-i18n-placeholder="email_placeholder"
-                    required>
+    <p>
 
-            </div>
+        <span data-i18n="no_account">Don't have an account?</span>
 
-            <div class="input-group">
+        <a href="register.html" data-i18n="register_link">
 
-                <i class="fa-solid fa-lock"></i>
+            Register
 
-                <input
-                    id="password"
-                    type="password"
-                    placeholder="Password"
-                    data-i18n-placeholder="password_placeholder"
-                    required>
+        </a>
 
-                <i
-                    id="toggle-password"
-                    class="fa-solid fa-eye"></i>
+    </p>
 
-            </div>
-
-            <button
-                type="submit"
-                class="login-btn"
-                data-i18n="login_btn">
-
-                Login
-
-            </button>
-
-        </form>
-
-        <p class="bottom-text">
-
-            <span data-i18n="no_account">Don't have an account?</span>
-
-            <a href="register.html" data-i18n="register_link">
-
-                Register
-
-            </a>
-
-        </p>
-
-    </div>
+    <div id="message"></div>
 
 </div>
 

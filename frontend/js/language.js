@@ -1,4 +1,5 @@
 import { getSavedLanguage, saveLanguage, getToken } from "./storage.js";
+import { getBaseUrl } from "./api.js";
 
 export const TRANSLATIONS = {
     en: {
@@ -504,6 +505,107 @@ export const TRANSLATIONS = {
         select_audio: "தயவுசெய்து ஒரு ஆடியோ கோப்பைத் தேர்ந்தெடுக்கவும்.",
         processing: "செயல்பாட்டில் உள்ளது...",
         language_changed: "மொழி வெற்றிகரமாக மாற்றப்பட்டது"
+    },
+    kn: {
+        nav_home: "ಮುಖಪುಟ",
+        nav_dashboard: "ಡ್ಯಾಶ್‌ಬೋರ್ಡ್",
+        nav_chat: "AI ಚಾಟ್",
+        nav_voice: "ಧ್ವನಿ ಸಹಾಯಕ",
+        nav_bookings: "ನನ್ನ ಬುಕಿಂಗ್‌ಗಳು",
+        nav_trips: "ಪ್ರಯಾಣ ಸ್ಥಿತಿ",
+        nav_history: "ಸಂಭಾಷಣೆ ಇತಿಹಾಸ",
+        history_title: "ಸಂಭಾಷಣೆ ಇತಿಹಾಸ",
+        history_subtitle: "ಎಲ್ಲಾ ಪಠ್ಯ ಮತ್ತು ಧ್ವನಿ ಬೆಂಬಲ ಸಂಭಾಷಣೆಗಳ ದಾಖಲೆ",
+        search_history_placeholder: "ಬುಕಿಂಗ್ ಕೋಡ್, ಉದ್ದೇಶ, ಪ್ರಶ್ನೆಯ ಮೂಲಕ ಹುಡುಕಿ...",
+        all_channels: "ಎಲ್ಲಾ ಚಾನಲ್‌ಗಳು",
+        chat_channel: "ಚಾಟ್",
+        voice_channel: "ಧ್ವನಿ",
+        no_conversations: "ಯಾವುದೇ ಸಂಭಾಷಣೆಗಳು ಕಂಡುಬಂದಿಲ್ಲ.",
+        select_conversation_prompt: "ಪೂರ್ಣ ಚಾಟ್ ಇತಿಹಾಸವನ್ನು ವೀಕ್ಷಿಸಲು ಎಡಭಾಗದಿಂದ ಸಂಭಾಷಣೆಯನ್ನು ಆಯ್ಕೆಮಾಡಿ.",
+        user_sender: "ಗ್ರಾಹಕ",
+        ai_sender: "SupportAI ಸಹಾಯಕ",
+        intent_label: "ಉದ್ದೇಶ",
+        tool_label: "ಬಳಸಿದ ಉಪಕರಣ",
+        time_label: "ಸಮಯ",
+        response_time_label: "ಪ್ರತಿಕ್ರಿಯೆ ಸಮಯ",
+        nav_profile: "ಪ್ರೊಫೈಲ್",
+        nav_login: "ಲಾಗಿನ್",
+        nav_register: "ನೋಂದಣಿ",
+        nav_logout: "ಲಾಗ್‌ಔಟ್",
+        app_title: "SupportAI",
+
+        login_title: "ಮತ್ತೆ ಸ್ವಾಗತ",
+        login_subtitle: "ನಿಮ್ಮ SupportAI ಖಾತೆಗೆ ಲಾಗಿನ್ ಮಾಡಿ",
+        email_label: "ಇಮೇಲ್ ವಿಳಾಸ",
+        email_placeholder: "ನಿಮ್ಮ ಇಮೇಲ್ ನಮೂದಿಸಿ",
+        password_label: "ಪಾಸ್‌ವರ್ಡ್",
+        password_placeholder: "ನಿಮ್ಮ ಪಾಸ್‌ವರ್ಡ್ ನಮೂದಿಸಿ",
+        login_btn: "ಸೈನ್ ಇನ್",
+        no_account: "ಖಾತೆ ಇಲ್ಲವೇ?",
+        register_link: "ಇಲ್ಲಿ ನೋಂದಾಯಿಸಿ",
+
+        register_title: "ಖಾತೆ ರಚಿಸಿ",
+        register_subtitle: "SupportAI ಗ್ರಾಹಕ ಪೋರ್ಟಲ್‌ಗೆ ಸೇರಿ",
+        fullname_label: "ಪೂರ್ಣ ಹೆಸರು",
+        fullname_placeholder: "ನಿಮ್ಮ ಪೂರ್ಣ ಹೆಸರು ನಮೂದಿಸಿ",
+        phone_label: "ಫೋನ್ ಸಂಖ್ಯೆ",
+        phone_placeholder: "ನಿಮ್ಮ ಫೋನ್ ಸಂಖ್ಯೆ ನಮೂದಿಸಿ",
+        register_btn: "ಖಾತೆ ರಚಿಸಿ",
+        has_account: "ಈಗಾಗಲೇ ಖಾತೆ ಇದೆಯೇ?",
+        login_link: "ಇಲ್ಲಿ ಲಾಗಿನ್ ಮಾಡಿ",
+
+        dashboard_welcome: "SupportAI ಪೋರ್ಟಲ್‌ಗೆ ಸ್ವಾಗತ",
+        dashboard_subtitle: "ನಿಮ್ಮ ಬಸ್ ಪ್ರಯಾಣ, ಲೈವ್ ಅಪ್‌ಡೇಟ್‌ಗಳು ಮತ್ತು AI ಬೆಂಬಲವನ್ನು ನಿರ್ವಹಿಸಿ.",
+        card_chat_title: "ಪಠ್ಯ ಚಾಟ್ ಬೆಂಬಲ",
+        card_chat_desc: "ಬುಕಿಂಗ್, ವಿಳಂಬ, ಮರುಪಾವತಿ, ರದ್ದತಿ ಮತ್ತು ನೀತಿಗಳ ಬಗ್ಗೆ ಪ್ರಶ್ನೆಗಳನ್ನು ಕೇಳಿ.",
+        card_chat_btn: "ಚಾಟ್ ತೆರೆಯಿರಿ",
+        card_voice_title: "ಧ್ವನಿ ಸಹಾಯಕ",
+        card_voice_desc: "ತಕ್ಷಣದ ಧ್ವನಿ ಬೆಂಬಲವನ್ನು ಪಡೆಯಲು ನಿಮ್ಮ ಭಾಷೆಯಲ್ಲಿ ಮಾತನಾಡಿ.",
+        card_voice_btn: "ಧ್ವನಿ ಬೆಂಬಲ ಪ್ರಯತ್ನಿಸಿ",
+        card_booking_title: "ಬುಕಿಂಗ್ ಹುಡುಕಾಟ",
+        card_booking_desc: "ಟಿಕೆಟ್ ಸ್ಥಿತಿ, ಸೀಟ್ ವಿವರಗಳು ಮತ್ತು ಪಾವತಿ ಮಾಹಿತಿಯನ್ನು ಪರಿಶೀಲಿಸಿ.",
+        card_booking_btn: "ಬುಕಿಂಗ್ ಹುಡುಕಿ",
+        card_trips_title: "ಲೈವ್ ಟ್ರ್ಯಾಕಿಂಗ್",
+        card_trips_desc: "ಬಸ್ ಸ್ಥಿತಿ, ವಿಳಂಬ ಮತ್ತು ನಿರ್ಗಮನ/ಆಗಮನ ಸಮಯವನ್ನು ಟ್ರ್ಯಾಕ್ ಮಾಡಿ.",
+        card_trips_btn: "ಪ್ರಯಾಣಗಳನ್ನು ವೀಕ್ಷಿಸಿ",
+
+        chat_title: "AI ಬೆಂಬಲ ಚಾಟ್",
+        chat_subtitle: "ಬಸ್ ಬುಕಿಂಗ್ ಮತ್ತು ಪ್ರಯಾಣದ ಪ್ರಶ್ನೆಗಳಿಗೆ ತಕ್ಷಣದ ಸಹಾಯ",
+        chat_placeholder: "ನಿಮ್ಮ ಸಂದೇಶವನ್ನು ಇಲ್ಲಿ ಟೈಪ್ ಮಾಡಿ...",
+        send_btn: "ಕಳುಹಿಸಿ",
+        chat_welcome: "ನಮಸ್ಕಾರ! ನಾನು ನಿಮ್ಮ SupportAI ಸಹಾಯಕ. ಇಂದು ನಿಮಗೆ ಹೇಗೆ ಸಹಾಯ ಮಾಡಲಿ?",
+
+        voice_title: "ಬಹುಭಾಷಾ ಧ್ವನಿ ಬೆಂಬಲ",
+        voice_subtitle: "ನಮ್ಮ AI ಏಜೆಂಟ್‌ನೊಂದಿಗೆ ಮಾತನಾಡಲು ನಿಮ್ಮ ಧ್ವನಿಯನ್ನು ರೆಕಾರ್ಡ್ ಮಾಡಿ ಅಥವಾ ಆಡಿಯೊ ಫೈಲ್ ಅಪ್‌ಲೋಡ್ ಮಾಡಿ",
+        voice_start_record: "🎤 ರೆಕಾರ್ಡಿಂಗ್ ಪ್ರಾರಂಭಿಸಿ",
+        voice_stop_record: "⏹ ರೆಕಾರ್ಡಿಂಗ್ ನಿಲ್ಲಿಸಿ",
+        voice_upload_heading: "ಅಥವಾ ಆಡಿಯೊ ಫೈಲ್ ಅಪ್‌ಲೋಡ್ ಮಾಡಿ",
+        voice_upload_btn: "ಅಪ್‌ಲೋಡ್ ಮಾಡಿ ಮತ್ತು ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಿ",
+        voice_transcript: "🎤 ಪ್ರತಿಲಿಪಿ",
+        voice_response: "🤖 AI ಪ್ರತಿಕ್ರಿಯೆ",
+        voice_processing: "⏳ ನಿಮ್ಮ ಧ್ವನಿ ಪ್ರಶ್ನೆಯನ್ನು ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಲಾಗುತ್ತಿದೆ...",
+
+        booking_search_title: "ನಿಮ್ಮ ಬುಕಿಂಗ್ ಹುಡುಕಿ",
+        booking_code_label: "ಬುಕಿಂಗ್ ಕೋಡ್",
+        booking_code_placeholder: "ಉದಾ: BK-100001",
+        search_btn: "ಹುಡುಕಿ",
+        booking_details: "ಬುಕಿಂಗ್ ವಿವರಗಳು",
+        seat_label: "ಸೀಟ್ ಸಂಖ್ಯೆ",
+        status_label: "ಬುಕಿಂಗ್ ಸ್ಥಿತಿ",
+        payment_label: "ಪಾವತಿ ಸ್ಥಿತಿ",
+        departure_label: "ನಿರ್ಗಮನ",
+        arrival_label: "ಆಗಮನ",
+        origin_label: "ಪ್ರಾರಂಭದ ಸ್ಥಳ",
+        destination_label: "ತಲುಪುವ ಸ್ಥಳ",
+        search_error: "ಬುಕಿಂಗ್ ಹುಡುಕಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಕೋಡ್ ಪರಿಶೀಲಿಸಿ.",
+
+        login_success: "ಯಶಸ್ವಿಯಾಗಿ ಲಾಗಿನ್ ಆಗಿದ್ದೀರಿ!",
+        register_success: "ನೋಂದಣಿ ಯಶಸ್ವಿಯಾಗಿದೆ! ದಯವಿಟ್ಟು ಲಾಗಿನ್ ಮಾಡಿ.",
+        auth_error: "ಲಾಗಿನ್ ವಿಫಲವಾಗಿದೆ. ವಿವರಗಳನ್ನು ಪರಿಶೀಲಿಸಿ.",
+        request_failed: "ಕೋರಿಕೆ ವಿಫಲವಾಗಿದೆ. ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+        select_audio: "ದಯವಿಟ್ಟು ಆಡಿಯೊ ಫೈಲ್ ಆಯ್ಕೆಮಾಡಿ.",
+        processing: "ಪ್ರಕ್ರಿಯೆಯಲ್ಲಿದೆ...",
+        language_changed: "ಭಾಷೆ ಯಶಸ್ವಿಯಾಗಿ ಬದಲಾಗಿದೆ"
     }
 };
 
@@ -513,6 +615,7 @@ export const LANGUAGES = [
     { code: "mr", name: "मराठी", flag: "🇮🇳" },
     { code: "te", name: "తెలుగు", flag: "🇮🇳" },
     { code: "ta", name: "தமிழ்", flag: "🇮🇳" },
+    { code: "kn", name: "ಕನ್ನಡ", flag: "🇮🇳" },
 ];
 
 class LanguageManager {
@@ -530,10 +633,16 @@ class LanguageManager {
         saveLanguage(langCode);
         this.applyTranslations();
 
+        // Notify session listeners if any
+        if (window.onLanguageChanged) {
+            try { window.onLanguageChanged(langCode); } catch(e) {}
+        }
+
         // If user is authenticated, sync preferred language with backend DB
         if (updateBackend && getToken()) {
             try {
-                await fetch("http://127.0.0.1:8000/api/v1/users/me/language", {
+                const baseUrl = getBaseUrl();
+                await fetch(`${baseUrl}/api/v1/users/me/language`, {
                     method: "PUT",
                     headers: {
                         "Content-Type": "application/json",

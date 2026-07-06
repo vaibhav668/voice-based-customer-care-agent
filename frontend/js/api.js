@@ -4,7 +4,19 @@ import {
 } from "./storage.js";
 import { langManager } from "./language.js";
 
-const BASE_URL = "http://127.0.0.1:8000";
+export const getBaseUrl = () => {
+    if (window.API_BASE_URL) {
+        return window.API_BASE_URL.replace(/\/$/, "");
+    }
+    const host = window.location.hostname || "127.0.0.1";
+    const protocol = window.location.protocol === "https:" ? "https:" : "http:";
+    if (host === "localhost" || host === "127.0.0.1") {
+        return `http://${host}:8000`;
+    }
+    return `${protocol}//${host}:8000`;
+};
+
+export const BASE_URL = getBaseUrl();
 
 async function request(url, options = {}) {
 
@@ -138,44 +150,38 @@ export async function sendVoice(audio){
         "audio",
         audio,
         filename
-        );
+    );
 
     formData.append(
-
         "session_id",
-
         getSessionId()
-
     );
 
     formData.append(
-
         "language",
-
         langManager.getLanguage()
-
     );
 
-    const response = await fetch(
-
-        `${BASE_URL}/voice/chat`,
-
-        {
-
-            method:"POST",
-
-            body:formData,
-
-        }
-
-    );
-
-    if(!response.ok){
-
-        throw new Error("Voice request failed.");
-
+    const headers = {};
+    const token = getToken();
+    if (token) {
+        headers.Authorization = `Bearer ${token}`;
     }
 
-    return await response.json();
+    const response = await fetch(
+        `${BASE_URL}/voice/chat`,
+        {
+            method: "POST",
+            headers: headers,
+            body: formData,
+        }
+    );
 
+    const data = await response.json();
+
+    if(!response.ok){
+        throw new Error(data.message || data.detail || "Voice request failed.");
+    }
+
+    return data;
 }

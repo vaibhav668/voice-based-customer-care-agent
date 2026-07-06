@@ -1,0 +1,33 @@
+# Environment variables & secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+env/
+
+# Databases & local data
+*.db
+*.sqlite
+backend/temp/
+backend/generated_audio/
+backend/chroma_db/
+
+# IDEs
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS files
+.DS_Store
+Thumbs.db

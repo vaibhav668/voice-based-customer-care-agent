@@ -1,128 +1,98 @@
-import {
-sendMessage
-} from "./api.js";
+import { sendMessage } from "./api.js";
 import { langManager } from "./language.js";
 
-document.addEventListener("DOMContentLoaded", () => {
+function getMessagesContainer() {
+    return document.getElementById("messages");
+}
+
+function getInputElem() {
+    return document.getElementById("message");
+}
+
+function getSendBtn() {
+    return document.getElementById("send");
+}
+
+function addMessage(sender, text, type = "user", isTyping = false) {
+    const container = getMessagesContainer();
+    if (!container) return null;
+
+    const id = isTyping ? "typing-indicator" : `msg-${Date.now()}`;
+    const senderName = type === "user" ? "You" : "Support AI";
+    const wrapperClass = type === "user" ? "user" : (type === "error" ? "ai error" : "ai");
+
+    let contentHtml = text;
+    if (isTyping) {
+        contentHtml = `
+            <div class="typing-dots">
+                <span></span><span></span><span></span>
+            </div>
+        `;
+    }
+
+    const html = `
+        <div class="msg-wrapper ${wrapperClass}" id="${id}">
+            <div class="msg-sender">${senderName}</div>
+            <div class="msg-bubble">${contentHtml}</div>
+        </div>
+    `;
+
+    container.insertAdjacentHTML("beforeend", html);
+    container.scrollTop = container.scrollHeight;
+    return id;
+}
+
+function removeTypingIndicator() {
+    const typingEl = document.getElementById("typing-indicator");
+    if (typingEl) typingEl.remove();
+}
+
+async function handleSend() {
+    const input = getInputElem();
+    if (!input) return;
+
+    const text = input.value.trim();
+    if (!text) return;
+
+    addMessage("You", text, "user");
+    input.value = "";
+
+    addMessage("Support AI", "", "ai", true);
+
+    try {
+        const response = await sendMessage(text);
+        removeTypingIndicator();
+        
+        const replyText = response.response || response.message || "I'm sorry, I couldn't process your request.";
+        addMessage("Support AI", replyText, "ai");
+    } catch (err) {
+        removeTypingIndicator();
+        addMessage("Support AI", err.message || "Network Error", "error");
+    }
+}
+
+function initChat() {
     langManager.init("lang-selector-container");
-});
 
-const messages=
+    const sendBtn = getSendBtn();
+    const inputElem = getInputElem();
 
-document.getElementById(
+    if (sendBtn) {
+        sendBtn.onclick = handleSend;
+    }
 
-"messages"
-
-);
-
-const input=
-
-document.getElementById(
-
-"message"
-
-);
-
-const send=
-
-document.getElementById(
-
-"send"
-
-);
-
-function addMessage(sender,text){
-
-messages.insertAdjacentHTML(
-
-"beforeend",
-
-`
-
-<div>
-
-<b>
-
-${sender}
-
-</b>
-
-<p>
-
-${text}
-
-</p>
-
-</div>
-
-<hr>
-
-`
-
-);
-
-messages.scrollTop=
-
-messages.scrollHeight;
-
+    if (inputElem) {
+        inputElem.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
+            }
+        });
+    }
 }
 
-send.onclick=
-
-async()=>{
-
-const text=
-
-input.value.trim();
-
-if(!text)return;
-
-addMessage(
-
-"You",
-
-text
-
-);
-
-input.value="";
-
-try{
-
-const response=
-
-await sendMessage(text);
-
-addMessage(
-
-"Support AI",
-
-response.response
-
-);
-
-}catch(err){
-
-addMessage(
-
-"Error",
-
-err.message
-
-);
-
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initChat);
+} else {
+    initChat();
 }
-
-};
-
-input.addEventListener(
-
-"keydown",
-
-e=>{
-
-if(e.key==="Enter")
-
-send.click();
-
-});
