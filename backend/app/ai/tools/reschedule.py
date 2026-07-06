@@ -2,7 +2,6 @@ from sqlalchemy.orm import Session
 from app.repositories.booking_repository import BookingRepository
 from app.services.booking_service import BookingService
 from datetime import datetime
-import pytz
 
 
 class RescheduleTool:
