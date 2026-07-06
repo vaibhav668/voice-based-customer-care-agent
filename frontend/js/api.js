@@ -1,3 +1,4 @@
+import "./config.js";
 import {
     getToken,
     getSessionId
