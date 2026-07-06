@@ -65,4 +65,10 @@ class Booking(UUIDMixin, TimestampMixin, Base):
 
     trip = relationship("Trip", back_populates="bookings")
 
+    complaints = relationship(
+        "Complaint",
+        back_populates="booking",
+        cascade="all, delete-orphan",
+    )
+
     
