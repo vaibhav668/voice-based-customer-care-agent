@@ -9,6 +9,91 @@ from app.database.base import Base
 import app.database.models  # Ensures all ORM models are registered with Base.metadata
 
 
+def auto_seed_database():
+    from app.database.session import SessionLocal
+    from app.database.models.booking import Booking, BookingStatus, PaymentStatus
+    from app.database.models.user import User, UserRole
+    from app.database.models.route import Route
+    from app.database.models.bus import Bus, BusType
+    from app.database.models.trip import Trip, TripStatus
+    from datetime import datetime, timedelta
+
+    db = SessionLocal()
+    try:
+        existing = db.query(Booking).filter(Booking.booking_code == "BK-100001").first()
+        if existing:
+            return
+
+        logger.info("🌱 Seeding initial database records (BK-100001, routes, buses, trips)...")
+
+        user = User(
+            full_name="Sample Customer",
+            email="customer@example.com",
+            phone="9876543210",
+            password_hash="dummy_hash",
+            role=UserRole.CUSTOMER,
+            is_active=True,
+            is_verified=True,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+
+        route = Route(
+            source_city="Delhi",
+            destination_city="Mumbai",
+            distance_km=1400,
+            estimated_duration_minutes=1200,
+        )
+        db.add(route)
+        db.commit()
+        db.refresh(route)
+
+        bus = Bus(
+            bus_number="DL01BUS1001",
+            bus_name="Volvo Multi Axle AC Sleeper",
+            registration_number="DL01REG1001",
+            bus_type=BusType.AC_SLEEPER,
+            capacity=36,
+        )
+        db.add(bus)
+        db.commit()
+        db.refresh(bus)
+
+        departure = datetime.now() + timedelta(hours=4)
+        arrival = departure + timedelta(hours=18)
+
+        trip = Trip(
+            route_id=route.id,
+            bus_id=bus.id,
+            departure_time=departure,
+            arrival_time=arrival,
+            status=TripStatus.SCHEDULED,
+            delay_minutes=0,
+            available_seats=35,
+        )
+        db.add(trip)
+        db.commit()
+        db.refresh(trip)
+
+        booking = Booking(
+            booking_code="BK-100001",
+            user_id=user.id,
+            trip_id=trip.id,
+            seat_number="A12",
+            booking_status=BookingStatus.CONFIRMED,
+            payment_status=PaymentStatus.PAID,
+        )
+        db.add(booking)
+        db.commit()
+        logger.info("✅ Database seeded with initial booking BK-100001.")
+    except Exception as e:
+        logger.warning(f"Auto-seed warning: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(app):
     logger.info("🚀 SupportAI Backend Started")
@@ -16,6 +101,8 @@ async def lifespan(app):
         # Create all database tables automatically if missing
         Base.metadata.create_all(bind=engine)
         logger.info("Database tables verified/created successfully.")
+
+        auto_seed_database()
 
         with engine.begin() as conn:
             inspector = inspect(conn)

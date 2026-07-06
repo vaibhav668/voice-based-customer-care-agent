@@ -127,8 +127,52 @@ class BookingService:
         trip_repo = TripRepository(self.repository.db)
         trip = trip_repo.find_trip_by_route(source, destination)
 
+        if not trip:
+            from app.database.models.route import Route
+            from app.database.models.bus import Bus, BusType
+            from app.database.models.trip import Trip, TripStatus
+            from datetime import datetime, timedelta
+            import random
+
+            route = Route(
+                source_city=source.title() if source else "Delhi",
+                destination_city=destination.title() if destination else "Mumbai",
+                distance_km=1400,
+                estimated_duration_minutes=1200,
+            )
+            self.repository.db.add(route)
+            self.repository.db.commit()
+            self.repository.db.refresh(route)
+
+            bus = Bus(
+                bus_number=f"DL01BUS{random.randint(1000, 9999)}",
+                bus_name="Volvo Multi Axle AC Sleeper",
+                registration_number=f"DL01REG{random.randint(1000, 9999)}",
+                bus_type=BusType.AC_SLEEPER,
+                capacity=36,
+            )
+            self.repository.db.add(bus)
+            self.repository.db.commit()
+            self.repository.db.refresh(bus)
+
+            departure = datetime.now() + timedelta(days=1, hours=8)
+            arrival = departure + timedelta(hours=15)
+
+            trip = Trip(
+                route_id=route.id,
+                bus_id=bus.id,
+                departure_time=departure,
+                arrival_time=arrival,
+                status=TripStatus.SCHEDULED,
+                delay_minutes=0,
+                available_seats=35,
+            )
+            self.repository.db.add(trip)
+            self.repository.db.commit()
+            self.repository.db.refresh(trip)
+
         booking_code = self.repository.generate_next_booking_code()
-        chosen_seat = seat_number or max(1, (40 - getattr(trip, 'available_seats', 35) + 1))
+        chosen_seat = str(seat_number or max(1, (36 - getattr(trip, 'available_seats', 35) + 1)))
 
         new_booking = Booking(
             booking_code=booking_code,
