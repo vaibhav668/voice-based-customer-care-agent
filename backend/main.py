@@ -31,10 +31,29 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+origins = [
+    "https://voice-based-customer-care-agent.vercel.app",
+    "https://voice-based-customer-care-agent-1.onrender.com",
+    "http://localhost:5500",
+    "http://127.0.0.1:5500",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+
+raw_origins = getattr(settings, "allowed_origins", "") or ""
+if raw_origins and raw_origins.strip() != "*":
+    for o in raw_origins.split(","):
+        if o.strip() and o.strip() not in origins:
+            origins.append(o.strip())
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
+    allow_origins=origins,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
