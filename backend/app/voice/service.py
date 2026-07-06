@@ -1,3 +1,4 @@
+from sqlalchemy.orm import Session
 from app.schemas.chat import ChatRequest
 from app.services.chat_service import ChatService
 from app.voice.stt import SpeechToText
@@ -6,9 +7,9 @@ from app.voice.tts import TextToSpeech
 
 class VoiceService:
 
-    def __init__(self):
+    def __init__(self, db: Session | None = None):
 
-        self.chat_service = ChatService()
+        self.chat_service = ChatService(db=db)
 
         self.stt = SpeechToText()
 
@@ -21,7 +22,10 @@ class VoiceService:
         language: str = "en",
         user_id: str | None = None,
         audio_relative_path: str | None = None,
+        db: Session | None = None,
     ):
+        if db:
+            self.chat_service = ChatService(db=db)
 
         # ---------------- Speech → Text ---------------- #
 

@@ -16,8 +16,8 @@ from app.repositories.conversation_message_repository import ConversationMessage
 
 class ChatService:
 
-    def __init__(self):
-        self.db: Session = SessionLocal()
+    def __init__(self, db: Session | None = None):
+        self.db: Session = db or SessionLocal()
 
         self.agent = SupportAgent(self.db)
         self.context = ContextResolver()
