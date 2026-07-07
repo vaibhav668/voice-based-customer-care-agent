@@ -279,6 +279,131 @@ def auto_seed_database():
                 db.add(b6)
                 db.commit()
 
+        # BK-100001: Mumbai -> Pune, Cancelled
+        if not db.query(Booking).filter_by(booking_code="BK-100001").first():
+            t101 = Trip(
+                id=uuid.uuid4(),
+                route_id=routes_dict["Mumbai-Pune"].id,
+                bus_id=buses_dict[1].id,
+                departure_time=now + timedelta(days=4),
+                arrival_time=now + timedelta(days=4, hours=4),
+                status=TripStatus.SCHEDULED,
+                delay_minutes=0,
+                available_seats=35
+            )
+            db.add(t101)
+            db.commit()
+            b101 = Booking(
+                booking_code="BK-100001",
+                user_id=user.id,
+                trip_id=t101.id,
+                seat_number="B10",
+                booking_status=BookingStatus.CANCELLED,
+                payment_status=PaymentStatus.REFUNDED
+            )
+            db.add(b101)
+            db.commit()
+
+        # BK-100002: Delhi -> Jaipur, Confirmed
+        if not db.query(Booking).filter_by(booking_code="BK-100002").first():
+            t102 = Trip(
+                id=uuid.uuid4(),
+                route_id=routes_dict["Delhi-Jaipur"].id,
+                bus_id=buses_dict[0].id,
+                departure_time=now + timedelta(days=3),
+                arrival_time=now + timedelta(days=3, hours=5),
+                status=TripStatus.SCHEDULED,
+                delay_minutes=0,
+                available_seats=35
+            )
+            db.add(t102)
+            db.commit()
+            b102 = Booking(
+                booking_code="BK-100002",
+                user_id=user.id,
+                trip_id=t102.id,
+                seat_number="A04",
+                booking_status=BookingStatus.CONFIRMED,
+                payment_status=PaymentStatus.PAID
+            )
+            db.add(b102)
+            db.commit()
+
+        # BK-100003: Hyderabad -> Vijayawada, Confirmed
+        if not db.query(Booking).filter_by(booking_code="BK-100003").first():
+            t103 = Trip(
+                id=uuid.uuid4(),
+                route_id=routes_dict["Hyderabad-Vijayawada"].id,
+                bus_id=buses_dict[3].id,
+                departure_time=now + timedelta(days=2),
+                arrival_time=now + timedelta(days=2, hours=6),
+                status=TripStatus.SCHEDULED,
+                delay_minutes=0,
+                available_seats=35
+            )
+            db.add(t103)
+            db.commit()
+            b103 = Booking(
+                booking_code="BK-100003",
+                user_id=user.id,
+                trip_id=t103.id,
+                seat_number="D02",
+                booking_status=BookingStatus.CONFIRMED,
+                payment_status=PaymentStatus.PAID
+            )
+            db.add(b103)
+            db.commit()
+
+        # BK-100004: Dehradun -> Delhi, Confirmed
+        if not db.query(Booking).filter_by(booking_code="BK-100004").first():
+            t104 = Trip(
+                id=uuid.uuid4(),
+                route_id=routes_dict["Dehradun-Delhi"].id,
+                bus_id=buses_dict[4].id,
+                departure_time=now + timedelta(days=1),
+                arrival_time=now + timedelta(days=1, hours=6),
+                status=TripStatus.SCHEDULED,
+                delay_minutes=0,
+                available_seats=35
+            )
+            db.add(t104)
+            db.commit()
+            b104 = Booking(
+                booking_code="BK-100004",
+                user_id=user.id,
+                trip_id=t104.id,
+                seat_number="E11",
+                booking_status=BookingStatus.CONFIRMED,
+                payment_status=PaymentStatus.PAID
+            )
+            db.add(b104)
+            db.commit()
+
+        # BK-1010: Bengaluru -> Chennai, Confirmed
+        if not db.query(Booking).filter_by(booking_code="BK-1010").first():
+            t105 = Trip(
+                id=uuid.uuid4(),
+                route_id=routes_dict["Bengaluru-Chennai"].id,
+                bus_id=buses_dict[2].id,
+                departure_time=now + timedelta(days=7),
+                arrival_time=now + timedelta(days=7, hours=8),
+                status=TripStatus.SCHEDULED,
+                delay_minutes=0,
+                available_seats=35
+            )
+            db.add(t105)
+            db.commit()
+            b105 = Booking(
+                booking_code="BK-1010",
+                user_id=user.id,
+                trip_id=t105.id,
+                seat_number="C08",
+                booking_status=BookingStatus.CONFIRMED,
+                payment_status=PaymentStatus.PAID
+            )
+            db.add(b105)
+            db.commit()
+
         logger.info("✅ Database seeded with all customer support test scenarios.")
     except Exception as e:
         logger.warning(f"Auto-seed warning: {e}")
