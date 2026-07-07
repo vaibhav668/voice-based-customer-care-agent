@@ -207,6 +207,8 @@ class SupportAgent:
                 data=data,
             )
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             self.db.rollback()
             return ToolResult(
                 success=False,

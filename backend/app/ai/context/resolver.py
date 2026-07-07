@@ -34,7 +34,16 @@ class ContextResolver:
         self,
         question: str,
         session,
+        intent: str | None = None,
     ):
+        # 1. Do not resolve contextually if user query contains an explicit booking code
+        import re
+        if re.search(r'\bBK-\d+\b', question, re.IGNORECASE):
+            return None
+
+        # 2. Do not resolve contextually if intent is a specific database/policy tool intent
+        if intent not in (None, "FOLLOW_UP", "GENERAL", "PROVIDE_BOOKING_CODE"):
+            return None
 
         # No previous tool output
         if not session.last_result:

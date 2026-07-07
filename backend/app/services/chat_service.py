@@ -68,7 +68,10 @@ class ChatService:
 
         print("=" * 60)
         print("SESSION MEMORY")
-        print(session.entities, "Language:", language)
+        try:
+            print(str(session.entities).encode('ascii', 'replace').decode('ascii'), "Language:", language)
+        except Exception:
+            pass
         print("=" * 60)
 
         # ----------------------------------------
@@ -84,6 +87,7 @@ class ChatService:
         context_response = self.context.resolve(
             request.message,
             session,
+            intent=understanding.intent,
         )
 
         print("=" * 60)
@@ -247,7 +251,10 @@ class ChatService:
 
         print("=" * 60)
         print("TOOL:", result.tool)
-        print("DATA:", result.data)
+        try:
+            print("DATA:", str(result.data).encode('ascii', 'replace').decode('ascii'))
+        except Exception:
+            pass
         print("=" * 60)
 
         session.entities["last_tool"] = result.tool
@@ -322,7 +329,10 @@ class ChatService:
 
         print("=" * 60)
         print("FINAL RESPONSE")
-        print(response)
+        try:
+            print(response.encode('ascii', 'replace').decode('ascii'))
+        except Exception:
+            pass
         print("=" * 60)
 
         elapsed_ms = round((time.time() - start_time) * 1000, 2)
