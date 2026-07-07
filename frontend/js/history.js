@@ -142,8 +142,16 @@ async function loadConversationDetail(convId) {
             let audioWidget = "";
             if (m.audio_path) {
                 let cleanPath = m.audio_path.replace(/\\/g, "/");
-                if (!cleanPath.startsWith("generated_audio/") && !cleanPath.startsWith("temp/") && !cleanPath.startsWith("http")) {
-                    cleanPath = `generated_audio/${cleanPath}`;
+                if (!cleanPath.startsWith("http")) {
+                    const tempIdx = cleanPath.indexOf("temp/");
+                    const genIdx = cleanPath.indexOf("generated_audio/");
+                    if (tempIdx !== -1) {
+                        cleanPath = cleanPath.substring(tempIdx);
+                    } else if (genIdx !== -1) {
+                        cleanPath = cleanPath.substring(genIdx);
+                    } else {
+                        cleanPath = `generated_audio/${cleanPath}`;
+                    }
                 }
                 const audioUrl = cleanPath.startsWith("http") ? cleanPath : `${getBaseUrl()}/${cleanPath}`;
                 const mimeType = cleanPath.endsWith(".webm") ? "audio/webm" : "audio/mpeg";

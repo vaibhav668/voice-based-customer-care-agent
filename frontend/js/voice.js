@@ -133,8 +133,16 @@ async function processVoice(audio) {
         let audioUrl = "";
         if (result.audio_path) {
             let cleanPath = result.audio_path.replace(/\\/g, "/");
-            if (!cleanPath.startsWith("generated_audio/") && !cleanPath.startsWith("temp/") && !cleanPath.startsWith("http")) {
-                cleanPath = `generated_audio/${cleanPath}`;
+            if (!cleanPath.startsWith("http")) {
+                const tempIdx = cleanPath.indexOf("temp/");
+                const genIdx = cleanPath.indexOf("generated_audio/");
+                if (tempIdx !== -1) {
+                    cleanPath = cleanPath.substring(tempIdx);
+                } else if (genIdx !== -1) {
+                    cleanPath = cleanPath.substring(genIdx);
+                } else {
+                    cleanPath = `generated_audio/${cleanPath}`;
+                }
             }
             const baseUrl = getBaseUrl();
             audioUrl = cleanPath.startsWith("http") ? cleanPath : `${baseUrl}/${cleanPath}`;
