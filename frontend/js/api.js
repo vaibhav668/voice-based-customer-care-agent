@@ -20,6 +20,20 @@ export const getBaseUrl = () => {
 
 export const BASE_URL = getBaseUrl();
 
+async function safeJson(response) {
+    const text = await response.text();
+    try {
+        return JSON.parse(text);
+    } catch (e) {
+        // Handle non-JSON HTML error pages from Render/Cloudflare/etc.
+        const cleanText = text.replace(/<[^>]*>/g, '').trim().substring(0, 150);
+        return { 
+            success: false, 
+            message: cleanText || `Server returned HTTP ${response.status}` 
+        };
+    }
+}
+
 async function request(url, options = {}) {
 
     const headers = {
@@ -46,10 +60,10 @@ async function request(url, options = {}) {
         }
     }
 
-    const data = await response.json();
+    const data = await safeJson(response);
 
     if (!response.ok) {
-        throw new Error(data.message || "Request Failed");
+        throw new Error(data.message || data.detail || "Request Failed");
     }
 
     return data;
@@ -188,7 +202,7 @@ export async function sendVoice(audio){
         }
     );
 
-    const data = await response.json();
+    const data = await safeJson(response);
 
     if(!response.ok){
         throw new Error(data.message || data.detail || "Voice request failed.");
