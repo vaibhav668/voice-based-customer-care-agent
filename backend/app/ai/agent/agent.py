@@ -192,7 +192,7 @@ class SupportAgent:
                     confirmation=confirmation,
                     user_id=user_id,
                 )
-            elif intent in (Intent.BOOKING_STATUS, Intent.REFUND_STATUS, Intent.PAYMENT_ISSUE, Intent.RESCHEDULE, Intent.BUS_TRACKING):
+            elif intent in (Intent.BOOKING_STATUS, Intent.REFUND_STATUS, Intent.PAYMENT_ISSUE, Intent.RESCHEDULE, Intent.BUS_TRACKING, Intent.BUS_DELAY):
                 # Pass user_id for authorization checks
                 data = tool.execute(
                     booking_code=booking_code,

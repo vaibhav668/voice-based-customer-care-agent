@@ -422,6 +422,13 @@ async def lifespan(app):
 
         auto_seed_database()
 
+        # Automatically ingest RAG knowledge files at startup
+        try:
+            from app.ai.rag.ingest import ingest_knowledge_base
+            ingest_knowledge_base()
+        except Exception as e:
+            logger.warning(f"Failed to auto-ingest RAG knowledge base: {e}")
+
         with engine.begin() as conn:
             inspector = inspect(conn)
             # Users table migrations
