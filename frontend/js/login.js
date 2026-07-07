@@ -1,5 +1,5 @@
 import { login } from "./api.js";
-import { saveToken } from "./storage.js";
+import { saveToken, newSession } from "./storage.js";
 import { langManager } from "./language.js";
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -37,6 +37,7 @@ if (form) {
 
             const authData = response.data || response;
             saveToken(authData.access_token);
+            newSession(); // Start a brand-new chat session for this login
 
             if (authData.preferred_language) {
                 await langManager.setLanguage(authData.preferred_language, false);

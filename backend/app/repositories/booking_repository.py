@@ -73,7 +73,6 @@ class BookingRepository(BaseRepository):
         return self.get_booking_with_trip(booking_code)
     
     def get_all_bookings(self, user_id=None) -> list[Booking]:
-        from sqlalchemy import or_
         import uuid
 
         stmt = (
@@ -87,10 +86,14 @@ class BookingRepository(BaseRepository):
         if user_id:
             try:
                 uid = user_id if isinstance(user_id, uuid.UUID) else uuid.UUID(str(user_id))
-                # Filter by authenticated user's ID OR show guest/unassigned bookings (user_id is Null)
-                stmt = stmt.where(or_(Booking.user_id == uid, Booking.user_id == None))
+                # Only return this user's bookings (strict match, no anonymous bleed)
+                stmt = stmt.where(Booking.user_id == uid)
             except Exception:
-                pass
+                # Invalid user_id: return empty list for safety
+                return []
+        else:
+            # No authenticated user: only guest/anonymous bookings
+            stmt = stmt.where(Booking.user_id == None)
 
         stmt = stmt.order_by(Booking.created_at.desc())
         return list(self.db.scalars(stmt).all())

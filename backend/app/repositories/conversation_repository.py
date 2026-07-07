@@ -90,9 +90,14 @@ class ConversationRepository(BaseRepository):
         if user_id:
             try:
                 uid = user_id if isinstance(user_id, uuid.UUID) else uuid.UUID(str(user_id))
-                query = query.where(or_(Conversation.user_id == uid, Conversation.user_id == None))
+                # ONLY show conversations belonging to this user (strict match)
+                query = query.where(Conversation.user_id == uid)
             except Exception:
-                pass
+                # If user_id is invalid, return nothing for safety
+                query = query.where(Conversation.user_id == None)
+        else:
+            # Guest/unauthenticated: only anonymous conversations
+            query = query.where(Conversation.user_id == None)
 
         if channel:
             query = query.where(Conversation.channel == channel.upper())
@@ -123,9 +128,12 @@ class ConversationRepository(BaseRepository):
         if user_id:
             try:
                 uid = user_id if isinstance(user_id, uuid.UUID) else uuid.UUID(str(user_id))
-                query = query.where(or_(Conversation.user_id == uid, Conversation.user_id == None))
+                # ONLY show conversations belonging to this user (strict match)
+                query = query.where(Conversation.user_id == uid)
             except Exception:
-                pass
+                query = query.where(Conversation.user_id == None)
+        else:
+            query = query.where(Conversation.user_id == None)
 
         if language:
             query = query.where(Conversation.language == language.lower())

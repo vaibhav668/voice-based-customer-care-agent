@@ -3,7 +3,7 @@ import {
 } from "./api.js";
 
 import {
-    removeToken
+    clearAll
 } from "./storage.js";
 import { langManager } from "./language.js";
 
@@ -13,9 +13,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
 const logout = document.getElementById("logout");
 if (logout) {
-    logout.onclick=()=>{
-        removeToken();
-        location.href="login.html";
+    logout.onclick = () => {
+        clearAll(); // Clears both access_token AND chat_session
+        location.href = "login.html";
     };
 }
 
