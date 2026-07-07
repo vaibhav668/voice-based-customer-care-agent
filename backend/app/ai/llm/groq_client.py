@@ -8,10 +8,14 @@ from app.config.settings import settings
 class GroqLLM(BaseLLM):
 
     def __init__(self):
+        model = settings.groq_model
+        # Force switch to llama-3.1-8b-instant to avoid rate limits
+        if not model or model == "llama-3.3-70b-versatile":
+            model = "llama-3.1-8b-instant"
 
         self.llm = ChatGroq(
             api_key=settings.groq_api_key,
-            model=settings.groq_model,
+            model=model,
             temperature=0,
         )
 
