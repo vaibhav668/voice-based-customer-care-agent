@@ -22,48 +22,54 @@ def auto_seed_database():
 
     db = SessionLocal()
     try:
+        # 1. Create and verify all test users
+        test_users_data = [
+            {"email": "vaibhav@gmail.com", "name": "Vaibhav Pokhriyal", "pw": "vaibhav123", "phone": "9568987360"},
+            {"email": "admin@gmail.com", "name": "admin", "pw": "admin123", "phone": "9568987369"},
+            {"email": "mnc@gmail.com", "name": "mnc", "pw": "mnc123", "phone": "9568987361"},
+            {"email": "vpokhriyal35@gmail.com", "name": "vaibhav", "pw": "vpokhriyal35123", "phone": "9568987362"},
+            {"email": "vaibhav100@example.com", "name": "Vaibhav", "pw": "vaibhav100123", "phone": "9568987363"},
+            {"email": "user@example.com", "name": "string", "pw": "user123", "phone": "9568987364"},
+            {"email": "demo@example.com", "name": "Demo User", "pw": "password123", "phone": "9876543999"},
+            {"email": "other@example.com", "name": "Other User", "pw": "password123", "phone": "9998887999"},
+        ]
+
+        users_dict = {}
+        for ud in test_users_data:
+            user = db.query(User).filter_by(email=ud["email"]).first()
+            hashed_pw = hash_password(ud["pw"])
+            if not user:
+                user = User(
+                    id=uuid.uuid4(),
+                    full_name=ud["name"],
+                    email=ud["email"],
+                    phone=ud["phone"],
+                    password_hash=hashed_pw,
+                    role=UserRole.CUSTOMER,
+                    is_active=True,
+                    is_verified=True,
+                    preferred_language="en",
+                )
+                db.add(user)
+                db.commit()
+                db.refresh(user)
+                logger.info(f"Created test user: {ud['email']}")
+            else:
+                # Ensure the password hash is correctly synced/reset to the known value
+                user.password_hash = hashed_pw
+                db.commit()
+                db.refresh(user)
+            users_dict[ud["email"]] = user
+
+        user = users_dict["vaibhav@gmail.com"]  # Primary user for booking scenarios
+        other_user = users_dict["other@example.com"]
+
+        # Check if already seeded to avoid duplicates
         existing = db.query(Booking).filter(Booking.booking_code == "BK-1234").first()
         if existing:
             return
 
         logger.info("🌱 Seeding database with customer support test scenarios (BK-1234, BK-5678, etc.)...")
-
-        # 1. Create demo users
-        demo_email = "demo@example.com"
-        user = db.query(User).filter_by(email=demo_email).first()
-        if not user:
-            user = User(
-                id=uuid.uuid4(),
-                full_name="Demo User",
-                email=demo_email,
-                phone="9876543999",
-                password_hash=hash_password("password123"),
-                role=UserRole.CUSTOMER,
-                is_active=True,
-                is_verified=True,
-                preferred_language="en",
-            )
-            db.add(user)
-            db.commit()
-            db.refresh(user)
-
-        other_email = "other@example.com"
-        other_user = db.query(User).filter_by(email=other_email).first()
-        if not other_user:
-            other_user = User(
-                id=uuid.uuid4(),
-                full_name="Other User",
-                email=other_email,
-                phone="9998887999",
-                password_hash=hash_password("password123"),
-                role=UserRole.CUSTOMER,
-                is_active=True,
-                is_verified=True,
-                preferred_language="en",
-            )
-            db.add(other_user)
-            db.commit()
-            db.refresh(other_user)
 
         # 2. Setup routes
         route_data = [

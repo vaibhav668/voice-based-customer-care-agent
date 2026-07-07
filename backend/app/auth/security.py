@@ -1,4 +1,3 @@
-import bcrypt
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -7,18 +6,15 @@ from passlib.context import CryptContext
 
 from app.config.settings import settings
 
+# rounds=10 → ~0.1s per verify (secure + fast). rounds=12 → ~0.4s, rounds=14 → ~1.6s
 pwd_context = CryptContext(
     schemes=["bcrypt"],
     deprecated="auto",
+    bcrypt__rounds=10,
 )
 
 
 def hash_password(password: str) -> str:
-    try:
-        salt = bcrypt.gensalt()
-        return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
-    except Exception:
-        pass
     return pwd_context.hash(password)
 
 
@@ -27,18 +23,7 @@ def verify_password(
     hashed_password: str,
 ) -> bool:
     try:
-        plain_bytes = plain_password.encode('utf-8')
-        hashed_bytes = hashed_password.encode('utf-8')
-        if bcrypt.checkpw(plain_bytes, hashed_bytes):
-            return True
-    except Exception:
-        pass
-
-    try:
-        return pwd_context.verify(
-            plain_password,
-            hashed_password,
-        )
+        return pwd_context.verify(plain_password, hashed_password)
     except Exception:
         return False
 
