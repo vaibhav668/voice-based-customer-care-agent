@@ -24,20 +24,22 @@ def auto_seed_database():
     try:
         # 1. Create and verify all test users
         test_users_data = [
-            {"email": "vaibhav@gmail.com", "name": "Vaibhav Pokhriyal", "pw": "vaibhav123", "phone": "9568987360"},
-            {"email": "admin@gmail.com", "name": "admin", "pw": "admin123", "phone": "9568987369"},
-            {"email": "mnc@gmail.com", "name": "mnc", "pw": "mnc123", "phone": "9568987361"},
-            {"email": "vpokhriyal35@gmail.com", "name": "vaibhav", "pw": "vpokhriyal35123", "phone": "9568987362"},
-            {"email": "vaibhav100@example.com", "name": "Vaibhav", "pw": "vaibhav100123", "phone": "9568987363"},
-            {"email": "user@example.com", "name": "string", "pw": "user123", "phone": "9568987364"},
-            {"email": "demo@example.com", "name": "Demo User", "pw": "password123", "phone": "9876543999"},
-            {"email": "other@example.com", "name": "Other User", "pw": "password123", "phone": "9998887999"},
+            {"email": "vaibhav@gmail.com", "name": "Vaibhav Pokhriyal", "pw": "vaibhav123", "phone": "9568987360", "role": UserRole.CUSTOMER},
+            {"email": "admin@gmail.com", "name": "admin", "pw": "admin123", "phone": "9568987369", "role": UserRole.CUSTOMER},
+            {"email": "mnc@gmail.com", "name": "mnc", "pw": "mnc123", "phone": "9568987361", "role": UserRole.CUSTOMER},
+            {"email": "vpokhriyal35@gmail.com", "name": "vaibhav", "pw": "vpokhriyal35123", "phone": "9568987362", "role": UserRole.CUSTOMER},
+            {"email": "vaibhav100@example.com", "name": "Vaibhav", "pw": "vaibhav100123", "phone": "9568987363", "role": UserRole.CUSTOMER},
+            {"email": "user@example.com", "name": "string", "pw": "user123", "phone": "9568987364", "role": UserRole.CUSTOMER},
+            {"email": "demo@example.com", "name": "Demo User", "pw": "password123", "phone": "9876543999", "role": UserRole.CUSTOMER},
+            {"email": "other@example.com", "name": "Other User", "pw": "password123", "phone": "9998887999", "role": UserRole.CUSTOMER},
+            {"email": "admin@example.com", "name": "System Admin", "pw": "admin123", "phone": "9990001112", "role": UserRole.ADMIN},
         ]
 
         users_dict = {}
         for ud in test_users_data:
             user = db.query(User).filter_by(email=ud["email"]).first()
             hashed_pw = hash_password(ud["pw"])
+            role_val = ud.get("role", UserRole.CUSTOMER)
             if not user:
                 user = User(
                     id=uuid.uuid4(),
@@ -45,7 +47,7 @@ def auto_seed_database():
                     email=ud["email"],
                     phone=ud["phone"],
                     password_hash=hashed_pw,
-                    role=UserRole.CUSTOMER,
+                    role=role_val,
                     is_active=True,
                     is_verified=True,
                     preferred_language="en",
@@ -55,8 +57,9 @@ def auto_seed_database():
                 db.refresh(user)
                 logger.info(f"Created test user: {ud['email']}")
             else:
-                # Ensure the password hash is correctly synced/reset to the known value
+                # Ensure the password hash and role are correctly synced/reset to the known value
                 user.password_hash = hashed_pw
+                user.role = role_val
                 db.commit()
                 db.refresh(user)
             users_dict[ud["email"]] = user
