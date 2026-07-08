@@ -26,6 +26,11 @@ try{
 const response=await getProfile();
 const profile = response.data || response;
 
+if (profile.role === "ADMIN") {
+    location.href = "admin_dashboard.html";
+    return;
+}
+
 if (profile.preferred_language) {
     await langManager.setLanguage(profile.preferred_language, false);
 }

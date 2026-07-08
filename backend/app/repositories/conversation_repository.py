@@ -84,20 +84,22 @@ class ConversationRepository(BaseRepository):
         status: str | None = None,
         limit: int = 20,
         offset: int = 0,
+        is_admin: bool = False,
     ):
         query = select(Conversation).where(Conversation.is_deleted == False)
 
-        if user_id:
-            try:
-                uid = user_id if isinstance(user_id, uuid.UUID) else uuid.UUID(str(user_id))
-                # ONLY show conversations belonging to this user (strict match)
-                query = query.where(Conversation.user_id == uid)
-            except Exception:
-                # If user_id is invalid, return nothing for safety
+        if not is_admin:
+            if user_id:
+                try:
+                    uid = user_id if isinstance(user_id, uuid.UUID) else uuid.UUID(str(user_id))
+                    # ONLY show conversations belonging to this user (strict match)
+                    query = query.where(Conversation.user_id == uid)
+                except Exception:
+                    # If user_id is invalid, return nothing for safety
+                    query = query.where(Conversation.user_id == None)
+            else:
+                # Guest/unauthenticated: only anonymous conversations
                 query = query.where(Conversation.user_id == None)
-        else:
-            # Guest/unauthenticated: only anonymous conversations
-            query = query.where(Conversation.user_id == None)
 
         if channel:
             query = query.where(Conversation.channel == channel.upper())
@@ -122,18 +124,20 @@ class ConversationRepository(BaseRepository):
         user_id: str | None = None,
         limit: int = 20,
         offset: int = 0,
+        is_admin: bool = False,
     ):
         query = select(Conversation).where(Conversation.is_deleted == False)
 
-        if user_id:
-            try:
-                uid = user_id if isinstance(user_id, uuid.UUID) else uuid.UUID(str(user_id))
-                # ONLY show conversations belonging to this user (strict match)
-                query = query.where(Conversation.user_id == uid)
-            except Exception:
+        if not is_admin:
+            if user_id:
+                try:
+                    uid = user_id if isinstance(user_id, uuid.UUID) else uuid.UUID(str(user_id))
+                    # ONLY show conversations belonging to this user (strict match)
+                    query = query.where(Conversation.user_id == uid)
+                except Exception:
+                    query = query.where(Conversation.user_id == None)
+            else:
                 query = query.where(Conversation.user_id == None)
-        else:
-            query = query.where(Conversation.user_id == None)
 
         if language:
             query = query.where(Conversation.language == language.lower())

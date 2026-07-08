@@ -88,12 +88,14 @@ app.include_router(
 
 
 from app.api.routes.conversation import router as conversation_router
+from app.api.routes.complaint import router as complaint_router
 
 app.include_router(booking_router)
 app.include_router(user_router)
 app.include_router(auth_router)
 app.include_router(chat_router)
 app.include_router(conversation_router)
+app.include_router(complaint_router)
 app.include_router(websocket_router)
 register_exception_handlers(app)
 app.include_router(health_router)

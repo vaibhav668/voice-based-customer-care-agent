@@ -28,6 +28,8 @@ def list_conversations(
 ):
     repo = ConversationRepository(db)
     user_id = current_user.get("sub") or current_user.get("id") if current_user else None
+    role = current_user.get("role") if current_user else None
+    is_admin = (role == "ADMIN")
 
     # Load conversations for this authenticated user and guest sessions
     total, conversations = repo.list_conversations(
@@ -36,6 +38,7 @@ def list_conversations(
         status=status,
         limit=limit,
         offset=offset,
+        is_admin=is_admin,
     )
 
     data = [ConversationSchema.model_validate(c).model_dump(mode="json") for c in conversations]
@@ -64,6 +67,8 @@ def search_conversations(
 ):
     repo = ConversationRepository(db)
     user_id = current_user.get("sub") or current_user.get("id") if current_user else None
+    role = current_user.get("role") if current_user else None
+    is_admin = (role == "ADMIN")
 
     # Search across conversations (matching this user's or guest sessions)
     total, conversations = repo.search_conversations(
@@ -74,6 +79,7 @@ def search_conversations(
         user_id=user_id,
         limit=limit,
         offset=offset,
+        is_admin=is_admin,
     )
 
     data = [ConversationSchema.model_validate(c).model_dump(mode="json") for c in conversations]
@@ -106,7 +112,8 @@ def get_conversation_detail(
 
     # Security check: If conversation belongs to another user, restrict access
     user_id = current_user.get("sub") or current_user.get("id") if current_user else None
-    if conv.user_id and str(conv.user_id) != str(user_id):
+    role = current_user.get("role") if current_user else None
+    if role != "ADMIN" and conv.user_id and str(conv.user_id) != str(user_id):
         from app.exceptions.common import UnauthorizedException
         raise UnauthorizedException("Access to this conversation is unauthorized")
 
@@ -135,7 +142,8 @@ def delete_conversation(
 
     # Security check: If conversation belongs to another user, restrict access
     user_id = current_user.get("sub") or current_user.get("id") if current_user else None
-    if conv.user_id and str(conv.user_id) != str(user_id):
+    role = current_user.get("role") if current_user else None
+    if role != "ADMIN" and conv.user_id and str(conv.user_id) != str(user_id):
         from app.exceptions.common import UnauthorizedException
         raise UnauthorizedException("Access to this conversation is unauthorized")
 

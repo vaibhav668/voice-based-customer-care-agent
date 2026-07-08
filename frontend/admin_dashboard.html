@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EchoCore AI - Enterprise Console</title>
+    
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/admin_dashboard.css">
+</head>
+<body>
+
+    <!-- Ambient Glowing Background Orbs -->
+    <div class="glow-orb orb-1"></div>
+    <div class="glow-orb orb-2"></div>
+    <div class="glow-orb orb-3"></div>
+
+    <div class="admin-wrapper">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="brand-section">
+                <div class="brand-icon">
+                    <i class="fa-solid fa-tower-broadcast"></i>
+                </div>
+                <div class="brand-text">
+                    <h2>EchoCore AI</h2>
+                    <p>Enterprise Voice Ops</p>
+                </div>
+            </div>
+
+            <nav class="nav-menu">
+                <button class="nav-item active" data-tab="dashboard">
+                    <i class="fa-solid fa-chart-line"></i>
+                    <span>Dashboard</span>
+                </button>
+                <button class="nav-item" data-tab="live-calls">
+                    <i class="fa-solid fa-phone-volume"></i>
+                    <span>Live Calls</span>
+                    <span class="pulse-badge">LIVE</span>
+                </button>
+                <button class="nav-item" data-tab="bookings">
+                    <i class="fa-solid fa-ticket"></i>
+                    <span>Bookings</span>
+                </button>
+                <button class="nav-item" data-tab="drivers">
+                    <i class="fa-solid fa-id-card"></i>
+                    <span>Drivers</span>
+                </button>
+                <button class="nav-item" data-tab="tickets">
+                    <i class="fa-solid fa-receipt"></i>
+                    <span>Tickets</span>
+                </button>
+                <button class="nav-item" data-tab="analytics">
+                    <i class="fa-solid fa-square-poll-vertical"></i>
+                    <span>Analytics</span>
+                </button>
+                <button class="nav-item" data-tab="knowledge-base">
+                    <i class="fa-solid fa-book-open"></i>
+                    <span>Knowledge Base</span>
+                </button>
+                <button class="nav-item" data-tab="settings">
+                    <i class="fa-solid fa-sliders"></i>
+                    <span>Settings</span>
+                </button>
+            </nav>
+
+            <div class="sidebar-footer">
+                <button class="btn-campaign" id="btn-new-campaign">
+                    <i class="fa-solid fa-plus"></i>
+                    <span>New Campaign</span>
+                </button>
+                <button class="btn-logout" id="admin-logout">
+                    <i class="fa-solid fa-right-from-bracket"></i>
+                    <span>Logout</span>
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="header">
+                <div class="search-bar">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input type="text" id="global-search" placeholder="Search operations, agents, or logs...">
+                </div>
+
+                <div class="header-actions">
+                    <div class="status-indicator">
+                        <span class="status-dot"></span>
+                        <span class="status-text">AI: STABLE</span>
+                    </div>
+
+                    <button class="btn-live-ops">Live Ops</button>
+
+                    <button class="icon-btn" title="Notifications">
+                        <i class="fa-regular fa-bell"></i>
+                        <span class="badge-dot"></span>
+                    </button>
+                    <button class="icon-btn" title="Headset Diagnostics">
+                        <i class="fa-solid fa-headphones"></i>
+                    </button>
+                    <button class="icon-btn" title="Cloud Database Status">
+                        <i class="fa-solid fa-cloud"></i>
+                    </button>
+
+                    <div class="user-profile">
+                        <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=100" alt="Admin Avatar" id="profile-avatar">
+                        <div class="profile-meta">
+                            <span class="profile-name" id="admin-name">Loading...</span>
+                            <span class="profile-role">Admin Console</span>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <!-- TABS CONTAINER -->
+            <div class="tab-content-container">
+
+                <!-- 1. DASHBOARD OVERVIEW TAB -->
+                <section class="tab-pane active" id="tab-dashboard">
+                    <!-- Stats Grid -->
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-header">
+                                <span class="stat-title">TODAYS CALLS</span>
+                                <span class="trend positive"><i class="fa-solid fa-arrow-trend-up"></i> +14.2%</span>
+                            </div>
+                            <div class="stat-value" id="stat-todays-calls">12,842</div>
+                            <div class="stat-description">Total voice bookings handled</div>
+                        </div>
+
+                        <div class="stat-card">
+                            <div class="stat-header">
+                                <span class="stat-title">ACTIVE CALLS</span>
+                                <span class="realtime-tag"><span class="tiny-pulse"></span> Real-time</span>
+                            </div>
+                            <div class="stat-value" id="stat-active-calls">420</div>
+                            <div class="stat-sub-visual">
+                                <div class="mini-bar-chart">
+                                    <div style="height: 40%"></div>
+                                    <div style="height: 60%"></div>
+                                    <div style="height: 30%"></div>
+                                    <div style="height: 80%"></div>
+                                    <div style="height: 50%"></div>
+                                    <div style="height: 70%"></div>
+                                    <div style="height: 90%"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="stat-card">
+                            <div class="stat-header">
+                                <span class="stat-title">AI RESOLUTION RATE</span>
+                            </div>
+                            <div class="stat-value" id="stat-resolution-rate">94.0%</div>
+                            <div class="stat-progress-bar">
+                                <div class="progress-fill" style="width: 94%;"></div>
+                            </div>
+                        </div>
+
+                        <div class="stat-card">
+                            <div class="stat-header">
+                                <span class="stat-title">TRANSFERRED TO HUMAN</span>
+                            </div>
+                            <div class="stat-value" id="stat-transfer-rate">2.0%</div>
+                            <div class="stat-description"><i class="fa-solid fa-bullseye"></i> Target: &lt; 3.5%</div>
+                        </div>
+                    </div>
+
+                    <!-- Flow and Alerts Grid -->
+                    <div class="flow-grid">
+                        <!-- Live Intelligence Flow -->
+                        <div class="flow-card">
+                            <div class="card-header">
+                                <div>
+                                    <h3>Live Intelligence Flow</h3>
+                                    <p class="subtitle">Neural processing density across global clusters</p>
+                                </div>
+                                <div class="cluster-toggles">
+                                    <button class="btn-toggle active" data-cluster="A1">CLUSTER A1</button>
+                                    <button class="btn-toggle" data-cluster="B4">CLUSTER B4</button>
+                                </div>
+                            </div>
+                            
+                            <div class="flow-canvas-container">
+                                <canvas id="flowCanvas"></canvas>
+                                <div class="canvas-glow"></div>
+                            </div>
+
+                            <div class="flow-legend">
+                                <span class="legend-item"><span class="legend-color synth"></span> Synthesizing</span>
+                                <span class="legend-item"><span class="legend-color context"></span> Context Analysis</span>
+                                <span class="legend-item"><span class="legend-color nlp"></span> NLP Scoring</span>
+                            </div>
+                        </div>
+
+                        <!-- Support Interceptions -->
+                        <div class="interception-card">
+                            <div class="card-header">
+                                <h3>Support Interceptions</h3>
+                                <span class="live-badge">LIVE</span>
+                            </div>
+                            
+                            <div class="interception-list" id="dashboard-interceptions">
+                                <!-- Dynamic insertions -->
+                                <div class="interception-item">
+                                    <div class="item-header">
+                                        <span class="ticket-code"><i class="fa-solid fa-triangle-exclamation"></i> Ticket #8412</span>
+                                        <span class="time-stamp">2m ago</span>
+                                    </div>
+                                    <p class="item-body">AI detected high frustration. Switching to <strong>Empathy Model V2</strong>.</p>
+                                    <div class="item-footer">
+                                        <span class="badge badge-frustration">Frustration: 88%</span>
+                                        <button class="btn-transcript-view" data-ticket="8412">View Transcript</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Bottom Grid -->
+                    <div class="bottom-dash-grid">
+                        <!-- Global Latency -->
+                        <div class="sub-panel latency-panel">
+                            <div class="panel-header">
+                                <h4>Global Latency (ms)</h4>
+                                <i class="fa-solid fa-gauge-high text-cyan"></i>
+                            </div>
+                            <div class="latency-list">
+                                <div class="latency-item">
+                                    <span class="region">North America</span>
+                                    <div class="latency-bar-container">
+                                        <div class="latency-fill" style="width: 15%; background: var(--teal);"></div>
+                                    </div>
+                                    <span class="ms">12ms</span>
+                                </div>
+                                <div class="latency-item">
+                                    <span class="region">EU-West</span>
+                                    <div class="latency-bar-container">
+                                        <div class="latency-fill" style="width: 32%; background: var(--blue);"></div>
+                                    </div>
+                                    <span class="ms">28ms</span>
+                                </div>
+                                <div class="latency-item">
+                                    <span class="region">APAC Cluster</span>
+                                    <div class="latency-bar-container">
+                                        <div class="latency-fill" style="width: 78%; background: var(--purple);"></div>
+                                    </div>
+                                    <span class="ms">84ms</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Sample AI Output -->
+                        <div class="sub-panel output-panel">
+                            <div class="panel-header">
+                                <h4>Sample AI Output</h4>
+                            </div>
+                            <div class="wave-container">
+                                <canvas id="waveCanvas"></canvas>
+                                <span class="synth-badge">SPEECH-SYNTH-ACTIVE (ENG-US)</span>
+                            </div>
+                        </div>
+
+                        <!-- Engine Health -->
+                        <div class="sub-panel health-panel">
+                            <div class="panel-header">
+                                <h4>Engine Health</h4>
+                                <i class="fa-solid fa-microchip text-violet"></i>
+                            </div>
+                            <div class="health-grid">
+                                <div class="health-card">
+                                    <span class="title">GPU COMPUTE</span>
+                                    <span class="value" id="health-gpu">42%</span>
+                                    <div class="mini-radial-progress" data-value="42"></div>
+                                </div>
+                                <div class="health-card">
+                                    <span class="title">MEMORY</span>
+                                    <span class="value" id="health-mem">1.8TB</span>
+                                </div>
+                                <div class="health-card">
+                                    <span class="title">THREADS</span>
+                                    <span class="value" id="health-threads">18k</span>
+                                </div>
+                                <div class="health-card">
+                                    <span class="title">UPTIME</span>
+                                    <span class="value" id="health-uptime">100%</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 2. LIVE CALLS TAB -->
+                <section class="tab-pane" id="tab-live-calls">
+                    <div class="pane-split-layout">
+                        <div class="pane-list-column">
+                            <div class="column-header">
+                                <h3>Ongoing Conversations</h3>
+                                <div class="live-counter"><span class="tiny-pulse"></span> <span id="live-calls-count">3</span> Active</div>
+                            </div>
+                            <div class="scrollable-list" id="live-conversations-list">
+                                <!-- Populated dynamically -->
+                            </div>
+                        </div>
+
+                        <div class="pane-detail-column" id="live-call-detail">
+                            <div class="empty-state-panel">
+                                <i class="fa-solid fa-phone-volume" style="font-size: 48px; color: var(--text-dim); margin-bottom: 16px;"></i>
+                                <h3>Select an active call to monitor</h3>
+                                <p>You can listen in, read live transcripts, and inspect NLU logs in real time.</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 3. BOOKINGS TAB -->
+                <section class="tab-pane" id="tab-bookings">
+                    <div class="data-table-container">
+                        <div class="table-actions">
+                            <h3>Live Booking Database Sync</h3>
+                            <div class="search-filters">
+                                <input type="text" id="booking-table-search" placeholder="Search booking code, source, status...">
+                                <button class="btn-refresh" id="btn-refresh-bookings"><i class="fa-solid fa-rotate"></i> Refresh</button>
+                            </div>
+                        </div>
+                        <table class="dashboard-table">
+                            <thead>
+                                <tr>
+                                    <th>Booking Code</th>
+                                    <th>Source</th>
+                                    <th>Destination</th>
+                                    <th>Seat</th>
+                                    <th>Departure</th>
+                                    <th>Arrival</th>
+                                    <th>Payment Status</th>
+                                    <th>Booking Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="bookings-table-body">
+                                <!-- Populated from API -->
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- 4. DRIVERS TAB -->
+                <section class="tab-pane" id="tab-drivers">
+                    <div class="grid-layout-3col" id="drivers-grid">
+                        <!-- Populated by JS -->
+                    </div>
+                </section>
+
+                <!-- 5. TICKETS TAB -->
+                <section class="tab-pane" id="tab-tickets">
+                    <div class="pane-split-layout">
+                        <div class="pane-list-column">
+                            <div class="column-header">
+                                <h3>Frustration Alerts & Escalations</h3>
+                                <span class="badge-red">ALERT ACTIVE</span>
+                            </div>
+                            <div class="scrollable-list" id="tickets-list">
+                                <!-- Populated dynamically -->
+                            </div>
+                        </div>
+
+                        <div class="pane-detail-column" id="ticket-detail">
+                            <div class="empty-state-panel">
+                                <i class="fa-solid fa-ticket-simple" style="font-size: 48px; color: var(--text-dim); margin-bottom: 16px;"></i>
+                                <h3>Select a ticket to review</h3>
+                                <p>Inspect transcripts, sentiment analysis scoring, and reason for human hand-offs.</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 6. ANALYTICS TAB -->
+                <section class="tab-pane" id="tab-analytics">
+                    <div class="analytics-grid">
+                        <div class="analytics-card large">
+                            <h3>System Response Times (ms)</h3>
+                            <div class="chart-mock">
+                                <!-- Inline styled SVG for responsive premium graph representation -->
+                                <svg viewBox="0 0 800 250" class="svg-chart">
+                                    <defs>
+                                        <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="0%" stop-color="var(--teal)" stop-opacity="0.4"/>
+                                            <stop offset="100%" stop-color="var(--teal)" stop-opacity="0"/>
+                                        </linearGradient>
+                                    </defs>
+                                    <path d="M 0 200 Q 100 120 200 150 T 400 80 T 600 130 T 800 50 L 800 250 L 0 250 Z" fill="url(#chartGrad)"/>
+                                    <path d="M 0 200 Q 100 120 200 150 T 400 80 T 600 130 T 800 50" fill="none" stroke="var(--teal)" stroke-width="3"/>
+                                    <circle cx="200" cy="150" r="5" fill="var(--teal)"/>
+                                    <circle cx="400" cy="80" r="5" fill="var(--teal)"/>
+                                    <circle cx="600" cy="130" r="5" fill="var(--teal)"/>
+                                </svg>
+                            </div>
+                        </div>
+
+                        <div class="analytics-card">
+                            <h3>Intent Distribution</h3>
+                            <div class="intent-chart-list">
+                                <div class="intent-item">
+                                    <span>Check Delay</span>
+                                    <div class="bar-container">
+                                        <div class="fill" style="width: 45%; background: var(--teal);"></div>
+                                    </div>
+                                    <span>45%</span>
+                                </div>
+                                <div class="intent-item">
+                                    <span>Create Booking</span>
+                                    <div class="bar-container">
+                                        <div class="fill" style="width: 30%; background: var(--blue);"></div>
+                                    </div>
+                                    <span>30%</span>
+                                </div>
+                                <div class="intent-item">
+                                    <span>Cancel Ticket</span>
+                                    <div class="bar-container">
+                                        <div class="fill" style="width: 15%; background: var(--purple);"></div>
+                                    </div>
+                                    <span>15%</span>
+                                </div>
+                                <div class="intent-item">
+                                    <span>Other / FAQ</span>
+                                    <div class="bar-container">
+                                        <div class="fill" style="width: 10%; background: var(--text-dim);"></div>
+                                    </div>
+                                    <span>10%</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="analytics-card">
+                            <h3>Language Breakdown</h3>
+                            <div class="donut-visual">
+                                <svg viewBox="0 0 100 100" class="donut-svg">
+                                    <circle cx="50" cy="50" r="40" fill="transparent" stroke="var(--surface-light)" stroke-width="10"/>
+                                    <!-- Segment 1 English (60%) -->
+                                    <circle cx="50" cy="50" r="40" fill="transparent" stroke="var(--teal)" stroke-width="10" stroke-dasharray="150.7 251.2" stroke-dashoffset="0"/>
+                                    <!-- Segment 2 Hindi (25%) -->
+                                    <circle cx="50" cy="50" r="40" fill="transparent" stroke="var(--blue)" stroke-width="10" stroke-dasharray="62.8 251.2" stroke-dashoffset="-150.7"/>
+                                    <!-- Segment 3 Marathi/Others (15%) -->
+                                    <circle cx="50" cy="50" r="40" fill="transparent" stroke="var(--purple)" stroke-width="10" stroke-dasharray="37.7 251.2" stroke-dashoffset="-213.5"/>
+                                </svg>
+                                <div class="donut-legend">
+                                    <div><span class="dot" style="background:var(--teal)"></span> EN (60%)</div>
+                                    <div><span class="dot" style="background:var(--blue)"></span> HI (25%)</div>
+                                    <div><span class="dot" style="background:var(--purple)"></span> Regional (15%)</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 7. KNOWLEDGE BASE TAB -->
+                <section class="tab-pane" id="tab-knowledge-base">
+                    <div class="knowledge-container">
+                        <div class="kb-header">
+                            <div>
+                                <h3>Vector Database / RAG Context</h3>
+                                <p>Manage documents searched by the AI agent during customer queries</p>
+                            </div>
+                            <button class="btn-primary"><i class="fa-solid fa-cloud-arrow-up"></i> Upload Document</button>
+                        </div>
+                        <div class="kb-grid">
+                            <div class="kb-file-card">
+                                <div class="file-icon"><i class="fa-regular fa-file-pdf"></i></div>
+                                <h4>Bus_Cancellation_Policy.pdf</h4>
+                                <p>12 chunks | Last indexed 1d ago</p>
+                            </div>
+                            <div class="kb-file-card">
+                                <div class="file-icon"><i class="fa-regular fa-file-pdf"></i></div>
+                                <h4>Refund_Eligibility_Rules.pdf</h4>
+                                <p>8 chunks | Last indexed 2d ago</p>
+                            </div>
+                            <div class="kb-file-card">
+                                <div class="file-icon"><i class="fa-regular fa-file-lines"></i></div>
+                                <h4>Delhi_Jaipur_Bus_Routes.txt</h4>
+                                <p>4 chunks | Last indexed 4h ago</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 8. SETTINGS TAB -->
+                <section class="tab-pane" id="tab-settings">
+                    <div class="settings-form">
+                        <h3>Console Parameters & Model Configuration</h3>
+                        <div class="settings-section">
+                            <h4>Active LLM Model</h4>
+                            <div class="select-group">
+                                <select id="model-select">
+                                    <option value="llama-3.1-8b-instant">Llama-3.1-8b-instant (Groq)</option>
+                                    <option value="llama-3.1-70b-versatile">Llama-3.1-70b-versatile (Groq)</option>
+                                    <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="settings-section">
+                            <h4>NLU Confidence Threshold</h4>
+                            <input type="range" min="0" max="100" value="75" class="slider" id="threshold-slider">
+                            <span class="threshold-val">75%</span>
+                        </div>
+
+                        <div class="settings-section">
+                            <h4>System Parameter Flags</h4>
+                            <label class="switch-container">
+                                <input type="checkbox" checked id="switch-tts">
+                                <span class="switch-slider"></span>
+                                <span>Enable High-fidelity Edge Text-to-Speech (TTS)</span>
+                            </label>
+                            <label class="switch-container">
+                                <input type="checkbox" checked id="switch-cache">
+                                <span class="switch-slider"></span>
+                                <span>Enable Vector RAG Cache</span>
+                            </label>
+                        </div>
+                    </div>
+                </section>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- Transcript Overlay Modal -->
+    <div class="modal" id="transcript-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Conversation Detail</h3>
+                <button class="btn-close-modal">&times;</button>
+            </div>
+            <div class="modal-body" id="modal-messages-container">
+                <!-- Messages go here -->
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="js/admin_dashboard.js"></script>
+</body>
+</html>

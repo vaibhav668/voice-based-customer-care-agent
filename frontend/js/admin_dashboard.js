@@ -1,0 +1,864 @@
+import {
+    getProfile,
+    getBooking,
+    getBaseUrl
+} from "./api.js";
+import { clearAll, getToken } from "./storage.js";
+
+const API_BASE = `${getBaseUrl()}/api/v1`;
+
+// Seeded bookings we want to query live from the database
+const SEEDED_BOOKING_CODES = ["BK-1234", "BK-5678", "BK-2468", "BK-1357", "BK-9876"];
+
+// Global state
+let adminProfile = null;
+let currentCluster = "A1";
+let particles = [];
+let wavePhase = 0;
+let waveAnimationFrame = null;
+let flowAnimationFrame = null;
+
+document.addEventListener("DOMContentLoaded", async () => {
+    // 1. Authenticate Admin
+    const token = getToken();
+    if (!token) {
+        location.href = "login.html";
+        return;
+    }
+
+    try {
+        const response = await getProfile();
+        adminProfile = response.data || response;
+        
+        // Safety check: redirect non-admins back to user dashboard
+        if (adminProfile.role !== "ADMIN") {
+            location.href = "dashboard.html";
+            return;
+        }
+
+        // Set name on header
+        const nameEl = document.getElementById("admin-name");
+        if (nameEl) {
+            nameEl.textContent = adminProfile.full_name || "Admin User";
+        }
+    } catch (err) {
+        console.error("Auth check failed:", err);
+        clearAll();
+        location.href = "login.html";
+        return;
+    }
+
+    // 2. Initialize UI Components
+    initTabNavigation();
+    initCanvasAnimations();
+    initLiveAlerts();
+    initSettingsTab();
+    
+    // 3. Load Real-time Data
+    await loadBookings();
+    await loadConversations();
+    initDriversTab();
+
+    // 4. Set up Refresh handler
+    const btnRefresh = document.getElementById("btn-refresh-bookings");
+    if (btnRefresh) {
+        btnRefresh.addEventListener("click", async () => {
+            btnRefresh.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Syncing...`;
+            await loadBookings();
+            await loadConversations();
+            btnRefresh.innerHTML = `<i class="fa-solid fa-rotate"></i> Refresh`;
+        });
+    }
+
+    // 5. Handle Logout
+    const logoutBtn = document.getElementById("admin-logout");
+    if (logoutBtn) {
+        logoutBtn.addEventListener("click", () => {
+            clearAll();
+            location.href = "login.html";
+        });
+    }
+});
+
+/* ----------------- TAB NAVIGATION ----------------- */
+function initTabNavigation() {
+    const navItems = document.querySelectorAll(".nav-item");
+    const tabPanes = document.querySelectorAll(".tab-pane");
+
+    navItems.forEach(item => {
+        item.addEventListener("click", () => {
+            const targetTab = item.dataset.tab;
+            if (!targetTab) return;
+            switchToTab(targetTab);
+        });
+    });
+}
+
+function switchToTab(tabName) {
+    const navItems = document.querySelectorAll(".nav-item");
+    const tabPanes = document.querySelectorAll(".tab-pane");
+
+    const targetItem = Array.from(navItems).find(item => item.dataset.tab === tabName);
+    if (!targetItem) return;
+
+    // Update active menu item
+    navItems.forEach(nav => nav.classList.remove("active"));
+    targetItem.classList.add("active");
+
+    // Update active tab panel
+    tabPanes.forEach(pane => {
+        pane.classList.remove("active");
+        if (pane.id === `tab-${tabName}`) {
+            pane.classList.add("active");
+        }
+    });
+
+    // Resize canvasses if showing dashboard
+    if (tabName === "dashboard") {
+        resizeCanvases();
+    }
+}
+
+/* ----------------- REAL-TIME DATA LOGS ----------------- */
+async function fetchAPI(endpoint) {
+    const token = getToken();
+    const headers = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    const res = await fetch(`${API_BASE}${endpoint}`, { headers });
+    if (!res.ok) throw new Error(`API Error: ${res.status}`);
+    return await res.json();
+}
+
+async function loadBookings() {
+    const tbody = document.getElementById("bookings-table-body");
+    if (!tbody) return;
+
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align: center;"><i class="fa-solid fa-spinner fa-spin"></i> Querying SQLite databases...</td></tr>`;
+
+    try {
+        const bookingsList = [];
+
+        // Fetch each seeded booking directly from the live API
+        for (const code of SEEDED_BOOKING_CODES) {
+            try {
+                const bDetails = await getBooking(code);
+                if (bDetails) bookingsList.push(bDetails);
+            } catch (err) {
+                console.warn(`Booking ${code} query failed:`, err);
+            }
+        }
+
+        if (bookingsList.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-dim);">No bookings found in SQLite database.</td></tr>`;
+            return;
+        }
+
+        // Render Bookings into Table
+        tbody.innerHTML = bookingsList.map(b => {
+            const bStatusClass = b.booking_status === "CONFIRMED" ? "confirmed" : (b.booking_status === "CANCELLED" ? "cancelled" : "pending");
+            const pStatusClass = b.payment_status === "PAID" ? "paid" : "pending";
+            return `
+                <tr>
+                    <td style="font-family: var(--font-mono); font-weight: 700; color: white;">${b.booking_code}</td>
+                    <td><i class="fa-solid fa-location-dot" style="color: var(--teal)"></i> ${b.source}</td>
+                    <td><i class="fa-solid fa-location-arrow" style="color: var(--blue)"></i> ${b.destination}</td>
+                    <td style="font-family: var(--font-mono);">${b.seat_number}</td>
+                    <td>${b.departure_time}</td>
+                    <td>${b.arrival_time}</td>
+                    <td><span class="badge-status ${pStatusClass}">${b.payment_status}</span></td>
+                    <td><span class="badge-status ${bStatusClass}">${b.booking_status}</span></td>
+                </tr>
+            `;
+        }).join("");
+
+    } catch (err) {
+        console.error("Failed to load bookings list:", err);
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--red);">Error loading bookings. Check backend logs.</td></tr>`;
+    }
+}
+
+async function loadConversations() {
+    const listContainer = document.getElementById("live-conversations-list");
+    if (!listContainer) return;
+
+    listContainer.innerHTML = `<div style="text-align:center; padding: 20px;"><i class="fa-solid fa-spinner fa-spin"></i> Fetching active logs...</div>`;
+
+    try {
+        const response = await fetchAPI("/conversations?limit=25&offset=0");
+        const conversations = response.data.conversations || [];
+
+        if (conversations.length === 0) {
+            listContainer.innerHTML = `<div style="text-align:center; padding: 20px; color:var(--text-dim)">No active customer sessions found.</div>`;
+        } else {
+            // Render Session Cards
+            listContainer.innerHTML = conversations.map((c, idx) => {
+                const channelIcon = c.channel === "VOICE" ? "fa-microphone-lines" : "fa-comments";
+                const badgeClass = c.channel === "VOICE" ? "style='color: var(--purple)'" : "style='color: var(--cyan)'";
+                const dateStr = c.updated_at ? new Date(c.updated_at).toLocaleTimeString() : "";
+
+                return `
+                    <div class="list-item ${idx === 0 ? 'active' : ''}" data-conv-id="${c.id}">
+                        <div class="item-meta">
+                            <span class="channel"><i class="fa-solid ${channelIcon}" ${badgeClass}></i> ${c.channel}</span>
+                            <span>${dateStr}</span>
+                        </div>
+                        <div class="item-title">${c.current_intent || 'General Support'}</div>
+                        <div class="item-subtitle">Lang: ${(c.language || 'en').toUpperCase()} | Msg count: ${c.message_count || 0}</div>
+                    </div>
+                `;
+            }).join("");
+
+            // Click handlers to load details
+            const items = listContainer.querySelectorAll(".list-item");
+            items.forEach(item => {
+                item.addEventListener("click", () => {
+                    items.forEach(i => i.classList.remove("active"));
+                    item.classList.add("active");
+                    loadConversationDetail(item.dataset.convId);
+                });
+            });
+        }
+
+        // Fetch Complaints (Tickets) from Database
+        await loadComplaints();
+
+        // Load the first one by default inside Live Calls Details
+        if (conversations.length > 0) {
+            loadConversationDetail(conversations[0].id);
+        }
+
+    } catch (err) {
+        console.error("Failed to load conversations list:", err);
+        listContainer.innerHTML = `<div style="text-align:center; padding: 20px; color:var(--red)">Failed to load.</div>`;
+    }
+}
+
+async function loadComplaints() {
+    try {
+        const response = await fetchAPI("/complaints");
+        const complaints = response.data || response;
+        
+        renderInterceptions(complaints);
+        renderTickets(complaints);
+    } catch (err) {
+        console.error("Failed to load complaints:", err);
+        renderInterceptions([]);
+        renderTickets([]);
+    }
+}
+
+async function selectAndLoadConversation(convId) {
+    // 1. Switch active view to Live Calls tab
+    switchToTab("live-calls");
+
+    // 2. Select and highlight list item
+    const items = document.querySelectorAll("#live-conversations-list .list-item");
+    items.forEach(item => {
+        item.classList.remove("active");
+        if (item.dataset.convId === convId) {
+            item.classList.add("active");
+            item.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
+    });
+
+    // 3. Load detail messages
+    await loadConversationDetail(convId);
+}
+
+async function selectAndLoadConversationByBooking(bookingCode) {
+    if (!bookingCode) {
+        switchToTab("live-calls");
+        return;
+    }
+
+    try {
+        // Search for conversation belonging to this booking code using backend search
+        const response = await fetchAPI(`/conversations/search?booking_code=${bookingCode}&limit=1`);
+        const results = response.data.conversations || [];
+
+        if (results.length > 0) {
+            const matchedConv = results[0];
+            await selectAndLoadConversation(matchedConv.id);
+        } else {
+            switchToTab("live-calls");
+            console.log(`No active conversation logs found for booking: ${bookingCode}`);
+        }
+    } catch (err) {
+        console.error("Error searching conversation by booking code:", err);
+        switchToTab("live-calls");
+    }
+}
+
+// Render real ticket complaints into support interceptions
+function renderInterceptions(complaints) {
+    const feed = document.getElementById("dashboard-interceptions");
+    if (!feed) return;
+
+    if (!complaints || complaints.length === 0) {
+        feed.innerHTML = `<div style="text-align:center; padding: 20px; color:var(--text-dim)">No active operations/tickets detected in database.</div>`;
+        return;
+    }
+
+    feed.innerHTML = complaints.slice(0, 5).map(c => {
+        const dateStr = c.created_at ? formatRelativeTime(c.created_at) : "recently";
+        
+        let badgeText = c.status;
+        let badgeClass = "badge-frustration"; // open -> red
+        if (c.status === "RESOLVED") {
+            badgeClass = "badge-resolved"; // teal
+        } else if (c.status === "IN_PROGRESS") {
+            badgeClass = "badge-escalated"; // blue/yellow
+        }
+
+        const customerName = c.customer ? c.customer.name : "Guest Customer";
+        const customerEmail = c.customer ? c.customer.email : "N/A";
+        const tripRoute = c.trip ? `${c.trip.source} → ${c.trip.destination}` : "Route: N/A";
+        
+        const desc = `${c.description}<br><span style="color:var(--cyan); font-size:11px; display:inline-block; margin-top:6px;"><i class="fa-solid fa-user"></i> ${customerName} (${customerEmail}) | <i class="fa-solid fa-bus"></i> ${tripRoute}</span>`;
+
+        return `
+            <div class="interception-item clickable-card" data-booking-code="${c.booking_code || ''}" style="cursor: pointer;">
+                <div class="item-header">
+                    <span class="ticket-code"><i class="fa-solid fa-receipt"></i> Ticket #${c.complaint_code}</span>
+                    <span class="time-stamp">${dateStr}</span>
+                </div>
+                <p class="item-body">${desc}</p>
+                <div class="item-footer">
+                    <span class="badge ${badgeClass}">${badgeText}</span>
+                    <button class="btn-transcript-view" data-booking-code="${c.booking_code || ''}">View Convo</button>
+                </div>
+            </div>
+        `;
+    }).join("");
+
+    // Attach click events
+    feed.querySelectorAll(".interception-item").forEach(item => {
+        item.addEventListener("click", () => {
+            const bookingCode = item.dataset.bookingCode;
+            selectAndLoadConversationByBooking(bookingCode);
+        });
+    });
+
+    feed.querySelectorAll(".btn-transcript-view").forEach(btn => {
+        btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const bookingCode = btn.dataset.bookingCode;
+            selectAndLoadConversationByBooking(bookingCode);
+        });
+    });
+}
+
+function formatRelativeTime(isoString) {
+    try {
+        const date = new Date(isoString);
+        const now = new Date();
+        const diffMs = now - date;
+        const diffMins = Math.floor(diffMs / 60000);
+        
+        if (diffMins < 1) return "Just now";
+        if (diffMins === 1) return "1m ago";
+        if (diffMins < 60) return `${diffMins}m ago`;
+        
+        const diffHours = Math.floor(diffMins / 60);
+        if (diffHours === 1) return "1h ago";
+        if (diffHours < 24) return `${diffHours}h ago`;
+        
+        return date.toLocaleDateString();
+    } catch (e) {
+        return "recently";
+    }
+}
+
+async function loadConversationDetail(convId) {
+    const detailCol = document.getElementById("live-call-detail");
+    if (!detailCol) return;
+
+    detailCol.innerHTML = `<div class="empty-state-panel"><i class="fa-solid fa-spinner fa-spin fa-2x"></i></div>`;
+
+    try {
+        const response = await fetchAPI(`/conversations/${convId}`);
+        const c = response.data || response;
+
+        if (!c) {
+            detailCol.innerHTML = `<div class="empty-state-panel"><h3>Conversation not found</h3></div>`;
+            return;
+        }
+
+        const dateStr = c.updated_at ? new Date(c.updated_at).toLocaleString() : "";
+        const messages = c.messages || [];
+
+        let messagesHtml = `<div class="empty-state-panel"><p>No messages recorded.</p></div>`;
+        if (messages.length > 0) {
+            messagesHtml = messages.map(m => {
+                const isUser = m.sender === "USER";
+                const rowClass = isUser ? "user" : "ai";
+                const label = isUser ? "User" : "AI Agent";
+                const msgTime = m.created_at ? new Date(m.created_at).toLocaleTimeString() : "";
+
+                let metaTags = [];
+                if (m.intent) metaTags.push(`<span class="meta-pill">NLU Intent: ${m.intent}</span>`);
+                if (m.tool_used) metaTags.push(`<span class="meta-pill">Tool: ${m.tool_used}</span>`);
+                if (m.booking_code) metaTags.push(`<span class="meta-pill" style="border-color: var(--teal); color: var(--teal)">Booking: ${m.booking_code}</span>`);
+                if (m.response_time_ms) metaTags.push(`<span class="meta-pill">${m.response_time_ms} ms</span>`);
+
+                let audioWidget = "";
+                if (m.audio_path) {
+                    let cleanPath = m.audio_path.replace(/\\/g, "/");
+                    if (!cleanPath.startsWith("http")) {
+                        const tempIdx = cleanPath.indexOf("temp/");
+                        const genIdx = cleanPath.indexOf("generated_audio/");
+                        if (tempIdx !== -1) {
+                            cleanPath = cleanPath.substring(tempIdx);
+                        } else if (genIdx !== -1) {
+                            cleanPath = cleanPath.substring(genIdx);
+                        } else {
+                            cleanPath = `generated_audio/${cleanPath}`;
+                        }
+                    }
+                    const audioUrl = cleanPath.startsWith("http") ? cleanPath : `${getBaseUrl()}/${cleanPath}`;
+                    audioWidget = `
+                        <div style="margin-top:8px;">
+                            <audio controls style="width:100%; max-width:280px; height: 32px;">
+                                <source src="${audioUrl}" type="audio/webm">
+                            </audio>
+                        </div>`;
+                }
+
+                return `
+                    <div class="bubble-row ${rowClass}">
+                        <span class="bubble-sender">${label} • ${msgTime}</span>
+                        <div class="bubble-text">${escapeHTML(m.message)} ${audioWidget}</div>
+                        <div class="bubble-meta-tags">
+                            ${metaTags.join("")}
+                        </div>
+                    </div>
+                `;
+            }).join("");
+        }
+
+        detailCol.innerHTML = `
+            <div class="detail-header">
+                <div class="detail-header-info">
+                    <h3>Session: ${c.session_id.slice(0, 12)}...</h3>
+                    <p>Channel: ${c.channel} | Lang: ${(c.language || 'en').toUpperCase()} | Last Updated: ${dateStr}</p>
+                </div>
+                <div class="detail-actions">
+                    <span class="live-badge" style="background: rgba(53, 216, 182, 0.1); color: var(--teal); border: 1px solid var(--teal)">Active</span>
+                </div>
+            </div>
+            <div class="conversation-body">
+                ${messagesHtml}
+            </div>
+        `;
+
+        // Scroll to bottom
+        const body = detailCol.querySelector(".conversation-body");
+        if (body) body.scrollTop = body.scrollHeight;
+
+    } catch (err) {
+        console.error("Failed to load conversation details:", err);
+        detailCol.innerHTML = `<div class="empty-state-panel"><p style="color:var(--red)">Failed to load details.</p></div>`;
+    }
+}
+
+function escapeHTML(str) {
+    if (!str) return "";
+    return str.replace(/[&<>'"]/g, tag => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;"
+    }[tag] || tag));
+}
+
+/* ----------------- TICKETS TAB COMPONENT ----------------- */
+function renderTickets(complaints) {
+    const listContainer = document.getElementById("tickets-list");
+    if (!listContainer) return;
+
+    if (!complaints || complaints.length === 0) {
+        listContainer.innerHTML = `<div style="text-align:center; padding: 20px; color:var(--text-dim)">No ticket logs found in database.</div>`;
+        return;
+    }
+
+    listContainer.innerHTML = complaints.map((c, idx) => {
+        const dateStr = c.created_at ? formatRelativeTime(c.created_at) : "recently";
+        const customerName = c.customer ? c.customer.name : "Guest Customer";
+        
+        return `
+            <div class="list-item ${idx === 0 ? 'active' : ''}" data-complaint-id="${c.id}">
+                <div class="item-meta">
+                    <span>Ticket #${c.complaint_code}</span>
+                    <span>${dateStr}</span>
+                </div>
+                <div class="item-title">${c.title}</div>
+                <div class="item-subtitle">Customer: ${customerName} | Code: ${c.booking_code || 'N/A'}</div>
+            </div>
+        `;
+    }).join("");
+
+    const items = listContainer.querySelectorAll(".list-item");
+    items.forEach(item => {
+        item.addEventListener("click", () => {
+            items.forEach(i => i.classList.remove("active"));
+            item.classList.add("active");
+            loadTicketDetail(item.dataset.complaintId);
+        });
+    });
+
+    if (complaints.length > 0) {
+        loadTicketDetail(complaints[0].id);
+    }
+}
+
+async function loadTicketDetail(complaintId) {
+    const detailCol = document.getElementById("ticket-detail");
+    if (!detailCol) return;
+
+    detailCol.innerHTML = `<div class="empty-state-panel"><i class="fa-solid fa-spinner fa-spin fa-2x"></i></div>`;
+
+    try {
+        // Fetch complaints to find current selection
+        const response = await fetchAPI("/complaints");
+        const list = response.data || response;
+        const c = list.find(item => item.id === complaintId);
+
+        if (!c) {
+            detailCol.innerHTML = `<div class="empty-state-panel"><h3>Ticket not found</h3></div>`;
+            return;
+        }
+
+        const customerName = c.customer ? c.customer.name : "Guest Customer";
+        const customerEmail = c.customer ? c.customer.email : "N/A";
+        const customerPhone = c.customer ? c.customer.phone : "N/A";
+        const tripRoute = c.trip ? `${c.trip.source} → ${c.trip.destination}` : "Route: N/A";
+        
+        let badgeText = c.status;
+        let badgeClass = "badge-frustration";
+        if (c.status === "RESOLVED") {
+            badgeClass = "badge-resolved";
+        } else if (c.status === "IN_PROGRESS") {
+            badgeClass = "badge-escalated";
+        }
+
+        // Search for associated chat transcript in db
+        let convoHtml = `<div style="text-align: center; color: var(--text-dim); padding: 20px;"><i class="fa-solid fa-circle-info"></i> No active support chat transcript recorded for this ticket.</div>`;
+        
+        if (c.booking_code) {
+            try {
+                const searchRes = await fetchAPI(`/conversations/search?booking_code=${c.booking_code}&limit=1`);
+                const results = searchRes.data.conversations || [];
+                if (results.length > 0) {
+                    const detailRes = await fetchAPI(`/conversations/${results[0].id}`);
+                    const conv = detailRes.data || detailRes;
+                    const messages = conv.messages || [];
+                    
+                    if (messages.length > 0) {
+                        convoHtml = messages.map(m => {
+                            const isUser = m.sender === "USER";
+                            const rowClass = isUser ? "user" : "ai";
+                            const label = isUser ? "User" : "AI Agent";
+                            const msgTime = m.created_at ? new Date(m.created_at).toLocaleTimeString() : "";
+
+                            let metaTags = [];
+                            if (m.intent) metaTags.push(`<span class="meta-pill">NLU: ${m.intent}</span>`);
+                            if (m.tool_used) metaTags.push(`<span class="meta-pill">Tool: ${m.tool_used}</span>`);
+                            if (m.response_time_ms) metaTags.push(`<span class="meta-pill">${m.response_time_ms} ms</span>`);
+
+                            return `
+                                <div class="bubble-row ${rowClass}">
+                                    <span class="bubble-sender">${label} • ${msgTime}</span>
+                                    <div class="bubble-text">${escapeHTML(m.message)}</div>
+                                    <div class="bubble-meta-tags">
+                                        ${metaTags.join("")}
+                                    </div>
+                                </div>
+                            `;
+                        }).join("");
+                    }
+                }
+            } catch (err) {
+                console.warn("Failed to load associated conversation:", err);
+            }
+        }
+
+        detailCol.innerHTML = `
+            <div class="detail-header">
+                <div class="detail-header-info">
+                    <h3>Ticket #${c.complaint_code} Details</h3>
+                    <p>Booking Reference: <strong>${c.booking_code || 'N/A'}</strong></p>
+                </div>
+                <div class="detail-actions">
+                    <span class="live-badge ${badgeClass}">${badgeText}</span>
+                </div>
+            </div>
+            
+            <!-- Ticket Details Meta -->
+            <div style="background: rgba(255,255,255,0.015); border-bottom: 1px solid var(--border-color); padding: 18px 24px; display:flex; flex-direction:column; gap:10px;">
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; font-size:12px;">
+                    <div><span style="color:var(--text-dim)">Customer:</span> <strong style="color:white">${customerName}</strong></div>
+                    <div><span style="color:var(--text-dim)">Route:</span> <strong style="color:white">${tripRoute}</strong></div>
+                    <div><span style="color:var(--text-dim)">Email:</span> <strong style="color:white">${customerEmail}</strong></div>
+                    <div><span style="color:var(--text-dim)">Phone:</span> <strong style="color:white">${customerPhone}</strong></div>
+                </div>
+                <div style="margin-top:6px; font-size:13px; line-height:1.45; color:var(--text-secondary); background:rgba(0,0,0,0.15); padding:10px 14px; border-radius:6px; border:1px solid rgba(255,255,255,0.02);">
+                    <div style="font-size:10px; font-weight:700; color:var(--text-dim); margin-bottom:4px; text-transform:uppercase;">Complaint Description</div>
+                    ${escapeHTML(c.description)}
+                </div>
+            </div>
+
+            <!-- Associated Conversation History -->
+            <div style="padding: 18px 24px 8px; font-family: var(--font-display); font-size: 13px; font-weight: 700; color: var(--text-dim); border-bottom: 1px solid rgba(255,255,255,0.04);">
+                <i class="fa-solid fa-comments"></i> Associated Chat Transcript
+            </div>
+            
+            <div class="conversation-body" style="flex-grow: 1; overflow-y: auto; padding: 20px;">
+                ${convoHtml}
+            </div>
+        `;
+
+        const body = detailCol.querySelector(".conversation-body");
+        if (body) body.scrollTop = body.scrollHeight;
+
+    } catch (err) {
+        console.error("Failed to load ticket details:", err);
+        detailCol.innerHTML = `<div class="empty-state-panel"><p style="color:var(--red)">Failed to load ticket details.</p></div>`;
+    }
+}
+
+/* ----------------- DRIVERS TAB COMPONENT ----------------- */
+function initDriversTab() {
+    const driversGrid = document.getElementById("drivers-grid");
+    if (!driversGrid) return;
+
+    const mockDrivers = [
+        { name: "Rajesh Kumar", id: "DR-4091", route: "Delhi -> Jaipur", speed: "78 km/h", status: "In Transit", active: true, avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=100" },
+        { name: "Amit Singh", id: "DR-2391", route: "Mumbai -> Pune", speed: "0 km/h", status: "On Break", active: false, avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=100" },
+        { name: "Vijay Sharma", id: "DR-9011", route: "Bengaluru -> Chennai", speed: "65 km/h", status: "In Transit", active: true, avatar: "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=crop&q=80&w=100" },
+        { name: "Suresh Patil", id: "DR-5612", route: "None", speed: "0 km/h", status: "Off Duty", active: false, avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=100" }
+    ];
+
+    driversGrid.innerHTML = mockDrivers.map(d => {
+        const statClass = d.status === "In Transit" ? "style='color: var(--teal)'" : "style='color: var(--text-dim)'";
+        return `
+            <div class="driver-card">
+                <div class="driver-profile">
+                    <img src="${d.avatar}" alt="${d.name}">
+                    <div class="driver-info">
+                        <h4>${d.name}</h4>
+                        <p>ID: ${d.id}</p>
+                    </div>
+                    <span class="live-badge" style="margin-left:auto; background:${d.active ? 'rgba(53, 216, 182, 0.08)' : 'rgba(255,255,255,0.03)'}; color:${d.active ? 'var(--teal)' : 'var(--text-dim)'}">${d.status}</span>
+                </div>
+                <div class="driver-stats">
+                    <div class="driver-stat-item">
+                        <span class="label">ACTIVE ROUTE</span>
+                        <span class="val">${d.route}</span>
+                    </div>
+                    <div class="driver-stat-item">
+                        <span class="label">SPEED</span>
+                        <span class="val" ${statClass}>${d.speed}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join("");
+}
+
+/* ----------------- CANVAS VISUALIZATIONS ----------------- */
+function initCanvasAnimations() {
+    const flowCanvas = document.getElementById("flowCanvas");
+    const waveCanvas = document.getElementById("waveCanvas");
+
+    if (flowCanvas) {
+        resizeCanvas(flowCanvas);
+        setupFlowParticles();
+        animateFlow();
+    }
+
+    if (waveCanvas) {
+        resizeCanvas(waveCanvas);
+        animateWave();
+    }
+
+    window.addEventListener("resize", resizeCanvases);
+}
+
+function resizeCanvas(canvas) {
+    const rect = canvas.parentNode.getBoundingClientRect();
+    canvas.width = rect.width * window.devicePixelRatio;
+    canvas.height = rect.height * window.devicePixelRatio;
+    
+    const ctx = canvas.getContext("2d");
+    ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+}
+
+function resizeCanvases() {
+    const flowCanvas = document.getElementById("flowCanvas");
+    const waveCanvas = document.getElementById("waveCanvas");
+    if (flowCanvas) resizeCanvas(flowCanvas);
+    if (waveCanvas) resizeCanvas(waveCanvas);
+}
+
+// Flow Particles setup
+function setupFlowParticles() {
+    particles = [];
+    const count = 45;
+    for (let i = 0; i < count; i++) {
+        particles.push({
+            x: Math.random() * 500,
+            y: Math.random() * 280,
+            vx: (Math.random() - 0.5) * 0.8,
+            vy: (Math.random() - 0.5) * 0.8,
+            radius: Math.random() * 3 + 1,
+            // Types map to Synthesizing (purple), Context (cyan), NLP (teal)
+            type: Math.random() < 0.33 ? "synth" : (Math.random() < 0.66 ? "context" : "nlp"),
+            pulse: Math.random() * Math.PI
+        });
+    }
+}
+
+function animateFlow() {
+    const canvas = document.getElementById("flowCanvas");
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    const w = canvas.width / window.devicePixelRatio;
+    const h = canvas.height / window.devicePixelRatio;
+
+    ctx.clearRect(0, 0, w, h);
+
+    // Dynamic speed based on Cluster toggle
+    const speedMultiplier = currentCluster === "A1" ? 1.0 : 1.6;
+
+    // Draw grid mesh behind
+    ctx.strokeStyle = "rgba(255,255,255,0.015)";
+    ctx.lineWidth = 1;
+    const gridSize = 25;
+    for (let x = 0; x < w; x += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, h);
+        ctx.stroke();
+    }
+    for (let y = 0; y < h; y += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(w, y);
+        ctx.stroke();
+    }
+
+    // Move & draw particles
+    particles.forEach(p => {
+        p.x += p.vx * speedMultiplier;
+        p.y += p.vy * speedMultiplier;
+
+        // Boundaries
+        if (p.x < 0 || p.x > w) p.vx *= -1;
+        if (p.y < 0 || p.y > h) p.vy *= -1;
+
+        p.pulse += 0.02;
+        const alpha = 0.3 + Math.sin(p.pulse) * 0.2;
+
+        let color = "rgba(6, 182, 212, " + alpha + ")"; // Cyan default
+        if (p.type === "synth") color = "rgba(139, 92, 246, " + alpha + ")"; // Purple
+        if (p.type === "nlp") color = "rgba(53, 216, 182, " + alpha + ")"; // Teal
+
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.radius + Math.sin(p.pulse) * 0.5, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.shadowBlur = 6;
+        ctx.shadowColor = color.replace(/[\d\.]+\)$/, "0.5)");
+        ctx.fill();
+        ctx.shadowBlur = 0; // reset
+    });
+
+    // Draw links between nearby particles
+    ctx.lineWidth = 0.5;
+    for (let i = 0; i < particles.length; i++) {
+        for (let j = i + 1; j < particles.length; j++) {
+            const p1 = particles[i];
+            const p2 = particles[j];
+            const dx = p1.x - p2.x;
+            const dy = p1.y - p2.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+
+            if (dist < 65) {
+                const alpha = (1 - dist / 65) * 0.12;
+                ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
+                ctx.beginPath();
+                ctx.moveTo(p1.x, p1.y);
+                ctx.lineTo(p2.x, p2.y);
+                ctx.stroke();
+            }
+        }
+    }
+
+    flowAnimationFrame = requestAnimationFrame(animateFlow);
+}
+
+// Bouncing speech synth waveform
+function animateWave() {
+    const canvas = document.getElementById("waveCanvas");
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    const w = canvas.width / window.devicePixelRatio;
+    const h = canvas.height / window.devicePixelRatio;
+
+    ctx.clearRect(0, 0, w, h);
+
+    ctx.strokeStyle = "rgba(6, 182, 212, 0.4)";
+    ctx.lineWidth = 1.5;
+
+    // Draw central grid line
+    ctx.beginPath();
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.03)";
+    ctx.moveTo(0, h/2);
+    ctx.lineTo(w, h/2);
+    ctx.stroke();
+
+    wavePhase += 0.07;
+
+    // We draw 3 overlapping waves with different phases
+    const waves = [
+        { color: "rgba(53, 216, 182, 0.75)", amp: 20, freq: 0.015, phase: wavePhase },
+        { color: "rgba(37, 99, 235, 0.5)", amp: 14, freq: 0.025, phase: wavePhase + 1.5 },
+        { color: "rgba(139, 92, 246, 0.4)", amp: 8, freq: 0.035, phase: wavePhase - 1.0 }
+    ];
+
+    waves.forEach(wave => {
+        ctx.strokeStyle = wave.color;
+        ctx.beginPath();
+        ctx.moveTo(0, h / 2);
+
+        for (let x = 0; x < w; x++) {
+            // Envelope to pinch waves at the start and end edges
+            const envelope = Math.sin((x / w) * Math.PI);
+            const y = h / 2 + Math.sin(x * wave.freq + wave.phase) * wave.amp * envelope;
+            ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+    });
+
+    waveAnimationFrame = requestAnimationFrame(animateWave);
+}
+
+// Attach cluster toggles logic
+function initLiveAlerts() {
+    const toggles = document.querySelectorAll(".btn-toggle");
+    toggles.forEach(toggle => {
+        toggle.addEventListener("click", () => {
+            toggles.forEach(t => t.classList.remove("active"));
+            toggle.classList.add("active");
+            currentCluster = toggle.dataset.cluster;
+        });
+    });
+}
+
+/* ----------------- SETTINGS & THRESHOLDS ----------------- */
+function initSettingsTab() {
+    const slider = document.getElementById("threshold-slider");
+    const valSpan = document.querySelector(".threshold-val");
+    if (slider && valSpan) {
+        slider.addEventListener("input", (e) => {
+            valSpan.textContent = `${e.target.value}%`;
+        });
+    }
+}
