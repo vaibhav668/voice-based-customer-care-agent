@@ -1,11 +1,13 @@
 import {
     getProfile,
     getBooking,
-    getBaseUrl
+    getBaseUrl,
+    getConversations,
+    getComplaints,
+    searchConversations,
+    getConversationDetail
 } from "./api.js";
 import { clearAll, getToken } from "./storage.js";
-
-const API_BASE = `${getBaseUrl()}/api/v1`;
 
 // Seeded bookings we want to query live from the database
 const SEEDED_BOOKING_CODES = ["BK-1234", "BK-5678", "BK-2468", "BK-1357", "BK-9876"];
@@ -120,16 +122,6 @@ function switchToTab(tabName) {
 }
 
 /* ----------------- REAL-TIME DATA LOGS ----------------- */
-async function fetchAPI(endpoint) {
-    const token = getToken();
-    const headers = { "Content-Type": "application/json" };
-    if (token) headers["Authorization"] = `Bearer ${token}`;
-
-    const res = await fetch(`${API_BASE}${endpoint}`, { headers });
-    if (!res.ok) throw new Error(`API Error: ${res.status}`);
-    return await res.json();
-}
-
 async function loadBookings() {
     const tbody = document.getElementById("bookings-table-body");
     if (!tbody) return;
@@ -185,7 +177,7 @@ async function loadConversations() {
     listContainer.innerHTML = `<div style="text-align:center; padding: 20px;"><i class="fa-solid fa-spinner fa-spin"></i> Fetching active logs...</div>`;
 
     try {
-        const response = await fetchAPI("/conversations?limit=25&offset=0");
+        const response = await getConversations();
         const conversations = response.data.conversations || [];
 
         if (conversations.length === 0) {
@@ -236,7 +228,7 @@ async function loadConversations() {
 
 async function loadComplaints() {
     try {
-        const response = await fetchAPI("/complaints");
+        const response = await getComplaints();
         const complaints = response.data || response;
         
         renderInterceptions(complaints);
@@ -274,7 +266,7 @@ async function selectAndLoadConversationByBooking(bookingCode) {
 
     try {
         // Search for conversation belonging to this booking code using backend search
-        const response = await fetchAPI(`/conversations/search?booking_code=${bookingCode}&limit=1`);
+        const response = await searchConversations(bookingCode);
         const results = response.data.conversations || [];
 
         if (results.length > 0) {
@@ -377,7 +369,7 @@ async function loadConversationDetail(convId) {
     detailCol.innerHTML = `<div class="empty-state-panel"><i class="fa-solid fa-spinner fa-spin fa-2x"></i></div>`;
 
     try {
-        const response = await fetchAPI(`/conversations/${convId}`);
+        const response = await getConversationDetail(convId);
         const c = response.data || response;
 
         if (!c) {
@@ -517,7 +509,7 @@ async function loadTicketDetail(complaintId) {
 
     try {
         // Fetch complaints to find current selection
-        const response = await fetchAPI("/complaints");
+        const response = await getComplaints();
         const list = response.data || response;
         const c = list.find(item => item.id === complaintId);
 
@@ -544,10 +536,10 @@ async function loadTicketDetail(complaintId) {
         
         if (c.booking_code) {
             try {
-                const searchRes = await fetchAPI(`/conversations/search?booking_code=${c.booking_code}&limit=1`);
+                const searchRes = await searchConversations(c.booking_code);
                 const results = searchRes.data.conversations || [];
                 if (results.length > 0) {
-                    const detailRes = await fetchAPI(`/conversations/${results[0].id}`);
+                    const detailRes = await getConversationDetail(results[0].id);
                     const conv = detailRes.data || detailRes;
                     const messages = conv.messages || [];
                     

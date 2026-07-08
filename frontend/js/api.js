@@ -210,3 +210,19 @@ export async function sendVoice(audio){
 
     return data;
 }
+
+export function getConversations() {
+    return request("/api/v1/conversations?limit=25&offset=0");
+}
+
+export function getComplaints() {
+    return request("/api/v1/complaints");
+}
+
+export function searchConversations(bookingCode) {
+    return request(`/api/v1/conversations/search?booking_code=${bookingCode}&limit=1`);
+}
+
+export function getConversationDetail(id) {
+    return request(`/api/v1/conversations/${id}`);
+}
