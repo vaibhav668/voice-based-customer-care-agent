@@ -21,6 +21,17 @@ def run_tests():
     from app.database.session import engine
     from app.database.base import Base
     import app.database.models
+    from sqlalchemy import inspect, text
+    
+    with engine.begin() as conn:
+        inspector = inspect(conn)
+        if "users" in inspector.get_table_names():
+            columns = [c["name"] for c in inspector.get_columns("users")]
+            if "name_encrypted" not in columns:
+                conn.execute(text("ALTER TABLE users ADD COLUMN name_encrypted VARCHAR(255)"))
+            if "full_name" not in columns:
+                conn.execute(text("ALTER TABLE users ADD COLUMN full_name VARCHAR(100)"))
+
     Base.metadata.create_all(bind=engine)
 
     # Run alter migrations as well

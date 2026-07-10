@@ -57,6 +57,14 @@ class User(UUIDMixin, TimestampMixin, Base):
         nullable=True,
     )
 
+    # Legacy column for backward compatibility on databases where full_name is NOT NULL
+    full_name_legacy: Mapped[str | None] = mapped_column(
+        "full_name",
+        String(100),
+        nullable=True,
+        default="",
+    )
+
     @hybrid_property
     def full_name(self) -> str:
         return self.name_encrypted
