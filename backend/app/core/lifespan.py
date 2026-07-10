@@ -25,7 +25,7 @@ def auto_seed_database():
         # 1. Create and verify all test users
         test_users_data = [
             {"email": "vaibhav@gmail.com", "name": "Vaibhav Pokhriyal", "pw": "vaibhav123", "phone": "9568987360", "role": UserRole.CUSTOMER},
-            {"email": "admin@gmail.com", "name": "admin", "pw": "admin123", "phone": "9568987369", "role": UserRole.CUSTOMER},
+            {"email": "admin@gmail.com", "name": "admin", "pw": "admin123", "phone": "9568987369", "role": UserRole.ADMIN},
             {"email": "mnc@gmail.com", "name": "mnc", "pw": "mnc123", "phone": "9568987361", "role": UserRole.CUSTOMER},
             {"email": "vpokhriyal35@gmail.com", "name": "vaibhav", "pw": "vpokhriyal35123", "phone": "9568987362", "role": UserRole.CUSTOMER},
             {"email": "vaibhav100@example.com", "name": "Vaibhav", "pw": "vaibhav100123", "phone": "9568987363", "role": UserRole.CUSTOMER},

@@ -80,4 +80,5 @@ class AuthService:
             "access_token": token,
             "token_type": "bearer",
             "preferred_language": user.preferred_language or "en",
+            "role": user.role.value,
         }

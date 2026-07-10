@@ -65,7 +65,13 @@ if (form) {
                 await langManager.setLanguage(authData.preferred_language, false);
             }
 
-            location.href = "dashboard.html";
+            // Route based on role: admins go to CRM, customers go to chat dashboard
+            const role = authData.role || "";
+            if (role === "ADMIN") {
+                location.href = "admin_dashboard.html";
+            } else {
+                location.href = "dashboard.html";
+            }
 
         } catch (err) {
             message.innerText = err.message || langManager.getText("auth_error");
