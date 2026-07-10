@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     groq_api_key: str
     groq_model: str
 
+    openrouter_api_key: str = ""
+    openrouter_model: str = "openrouter/free"
+
     host: str
     port: int
 
