@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     groq_model: str = "llama-3.1-8b-instant"
 
     openrouter_api_key: str = ""
-    openrouter_model: str = "openrouter/free"
+    openrouter_model: str = "openai/gpt-oss-20b:free"
 
     host: str
     port: int
