@@ -435,9 +435,54 @@ def auto_seed_database():
 async def lifespan(app):
     logger.info("🚀 SupportAI Backend Started")
     try:
+        # Check if users table needs structural migration (full_name -> name_encrypted)
+        with engine.begin() as conn:
+            inspector = inspect(conn)
+            if "users" in inspector.get_table_names():
+                columns = [c["name"] for c in inspector.get_columns("users")]
+                if "full_name" in columns:
+                    logger.info("Migrating users table structure (replacing full_name with name_encrypted)...")
+                    conn.execute(text("DROP INDEX IF EXISTS ix_users_email"))
+                    conn.execute(text("DROP INDEX IF EXISTS ix_users_phone"))
+                    conn.execute(text("ALTER TABLE users RENAME TO users_old"))
+
         # Create all database tables automatically if missing
         Base.metadata.create_all(bind=engine)
         logger.info("Database tables verified/created successfully.")
+
+        # Migrate data
+        with engine.begin() as conn:
+            inspector = inspect(conn)
+            if "users_old" in inspector.get_table_names():
+                logger.info("Copying and encrypting users data...")
+                from app.database.models.user import encrypt_field
+                
+                # Fetch all data
+                res = conn.execute(text("SELECT id, full_name, email, phone, password_hash, role, is_active, is_verified, preferred_language, created_at, updated_at FROM users_old")).fetchall()
+                for row in res:
+                    encrypted_name = encrypt_field(row[1])
+                    conn.execute(
+                        text("""
+                            INSERT INTO users (id, name_encrypted, email, phone, password_hash, role, is_active, is_verified, preferred_language, created_at, updated_at)
+                            VALUES (:id, :name_encrypted, :email, :phone, :password_hash, :role, :is_active, :is_verified, :preferred_language, :created_at, :updated_at)
+                        """),
+                        {
+                            "id": row[0],
+                            "name_encrypted": encrypted_name,
+                            "email": row[2],
+                            "phone": row[3],
+                            "password_hash": row[4],
+                            "role": row[5],
+                            "is_active": row[6],
+                            "is_verified": row[7],
+                            "preferred_language": row[8],
+                            "created_at": row[9],
+                            "updated_at": row[10],
+                        }
+                    )
+                # Drop old table
+                conn.execute(text("DROP TABLE users_old"))
+                logger.info("Users table migration complete!")
 
         try:
             from migrate import run_migrations
@@ -462,6 +507,20 @@ async def lifespan(app):
                 if "preferred_language" not in columns:
                     logger.info("Adding missing preferred_language column to users table...")
                     conn.execute(text("ALTER TABLE users ADD COLUMN preferred_language VARCHAR(10) DEFAULT 'en'"))
+                
+                if "name_encrypted" not in columns:
+                    logger.info("Adding name_encrypted column and migrating existing data...")
+                    conn.execute(text("ALTER TABLE users ADD COLUMN name_encrypted VARCHAR(255)"))
+                    # Migrate data from full_name to name_encrypted by encrypting it
+                    if "full_name" in columns:
+                        from app.database.models.user import encrypt_field
+                        res = conn.execute(text("SELECT id, full_name FROM users")).fetchall()
+                        for row in res:
+                            encrypted = encrypt_field(row[1])
+                            conn.execute(
+                                text("UPDATE users SET name_encrypted = :enc WHERE id = :id"),
+                                {"enc": encrypted, "id": row[0]}
+                            )
 
             # Trips table migrations (new fields for delay/tracking)
             if "trips" in inspector.get_table_names():

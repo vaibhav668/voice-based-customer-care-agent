@@ -233,3 +233,26 @@ export function searchConversations(bookingCode) {
 export function getConversationDetail(id) {
     return request(`/api/v1/conversations/${id}`);
 }
+
+export function getAnalyticsBookings() {
+    return request("/api/v1/conversations/analytics/bookings");
+}
+
+export function updateResolutionStatus(id, status) {
+    return request(`/api/v1/conversations/${id}/resolution?status=${status}`, {
+        method: "PUT"
+    });
+}
+
+export function submitCallReview(id, outcome, notes) {
+    return request(`/api/v1/conversations/${id}/reviews`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            outcome_tag: outcome,
+            notes: notes
+        })
+    });
+}

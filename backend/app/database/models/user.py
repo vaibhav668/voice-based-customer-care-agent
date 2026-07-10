@@ -1,10 +1,47 @@
 import enum
-
+import base64
 from sqlalchemy import Boolean, Enum, String
+from sqlalchemy.types import TypeDecorator
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.ext.hybrid import hybrid_property
 
 from app.database.base import Base
 from app.database.mixins import TimestampMixin, UUIDMixin
+
+# Symmetric field-level encryption helper functions
+KEY = b"supersecretkey"
+
+def encrypt_field(val: str) -> str:
+    if not val:
+        return val
+    encoded = val.encode('utf-8')
+    xored = bytes(b ^ KEY[i % len(KEY)] for i, b in enumerate(encoded))
+    return base64.b64encode(xored).decode('utf-8')
+
+def decrypt_field(val: str) -> str:
+    if not val:
+        return val
+    try:
+        xored = base64.b64decode(val.encode('utf-8'))
+        decrypted = bytes(b ^ KEY[i % len(KEY)] for i, b in enumerate(xored))
+        return decrypted.decode('utf-8')
+    except Exception:
+        return val
+
+
+class EncryptedString(TypeDecorator):
+    impl = String
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is not None:
+            return encrypt_field(value)
+        return value
+
+    def process_result_value(self, value, dialect):
+        if value is not None:
+            return decrypt_field(value)
+        return value
 
 
 class UserRole(str, enum.Enum):
@@ -15,10 +52,18 @@ class UserRole(str, enum.Enum):
 class User(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "users"
 
-    full_name: Mapped[str] = mapped_column(
-        String(100),
-        nullable=False,
+    name_encrypted: Mapped[str] = mapped_column(
+        EncryptedString(255),
+        nullable=True,
     )
+
+    @hybrid_property
+    def full_name(self) -> str:
+        return self.name_encrypted
+
+    @full_name.setter
+    def full_name(self, value: str):
+        self.name_encrypted = value
 
     email: Mapped[str] = mapped_column(
         String(255),

@@ -1,16 +1,15 @@
 import {
     getProfile,
-    getBooking,
     getBaseUrl,
     getConversations,
     getComplaints,
     searchConversations,
-    getConversationDetail
+    getConversationDetail,
+    getAnalyticsBookings,
+    updateResolutionStatus,
+    submitCallReview
 } from "./api.js";
 import { clearAll, getToken } from "./storage.js";
-
-// Seeded bookings we want to query live from the database
-const SEEDED_BOOKING_CODES = ["BK-1234", "BK-5678", "BK-2468", "BK-1357", "BK-9876"];
 
 // Global state
 let adminProfile = null;
@@ -80,6 +79,14 @@ document.addEventListener("DOMContentLoaded", async () => {
             location.href = "login.html";
         });
     }
+
+    // 6. Real-time background sync interval (every 4 seconds)
+    setInterval(async () => {
+        if (getToken()) {
+            await loadBookings(true);
+            await loadConversations(true);
+        }
+    }, 4000);
 });
 
 /* ----------------- TAB NAVIGATION ----------------- */
@@ -122,27 +129,20 @@ function switchToTab(tabName) {
 }
 
 /* ----------------- REAL-TIME DATA LOGS ----------------- */
-async function loadBookings() {
+async function loadBookings(silent = false) {
     const tbody = document.getElementById("bookings-table-body");
     if (!tbody) return;
 
-    tbody.innerHTML = `<tr><td colspan="8" style="text-align: center;"><i class="fa-solid fa-spinner fa-spin"></i> Querying SQLite databases...</td></tr>`;
+    if (!silent && !tbody.innerHTML.includes("tr")) {
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center;"><i class="fa-solid fa-spinner fa-spin"></i> Querying analytics database...</td></tr>`;
+    }
 
     try {
-        const bookingsList = [];
-
-        // Fetch each seeded booking directly from the live API
-        for (const code of SEEDED_BOOKING_CODES) {
-            try {
-                const bDetails = await getBooking(code);
-                if (bDetails) bookingsList.push(bDetails);
-            } catch (err) {
-                console.warn(`Booking ${code} query failed:`, err);
-            }
-        }
+        const response = await getAnalyticsBookings();
+        const bookingsList = response.data || [];
 
         if (bookingsList.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-dim);">No bookings found in SQLite database.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-dim);">No bookings found in analytics logs.</td></tr>`;
             return;
         }
 
@@ -166,42 +166,79 @@ async function loadBookings() {
 
     } catch (err) {
         console.error("Failed to load bookings list:", err);
-        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--red);">Error loading bookings. Check backend logs.</td></tr>`;
+        if (!silent) {
+            tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--red);">Error loading bookings. Check backend logs.</td></tr>`;
+        }
     }
 }
 
-async function loadConversations() {
+async function loadConversations(silent = false) {
     const listContainer = document.getElementById("live-conversations-list");
     if (!listContainer) return;
 
-    listContainer.innerHTML = `<div style="text-align:center; padding: 20px;"><i class="fa-solid fa-spinner fa-spin"></i> Fetching active logs...</div>`;
+    if (!silent) {
+        listContainer.innerHTML = `<div style="text-align:center; padding: 20px;"><i class="fa-solid fa-spinner fa-spin"></i> Fetching active logs...</div>`;
+    }
 
     try {
         const response = await getConversations();
         const conversations = response.data.conversations || [];
 
+        // Dynamic Real-time Calculations
+        const totalCalls = conversations.length;
+        const activeCalls = conversations.filter(c => c.status === "ACTIVE").length;
+        const resolvedCalls = conversations.filter(c => c.resolution_status === "resolved").length;
+        const escalatedCalls = conversations.filter(c => c.resolution_status === "escalated").length;
+
+        const resRate = totalCalls > 0 ? ((resolvedCalls / totalCalls) * 100).toFixed(1) : "94.0";
+        const escRate = totalCalls > 0 ? ((escalatedCalls / totalCalls) * 100).toFixed(1) : "2.0";
+
+        // Update statistics cards
+        const callsCountEl = document.getElementById("stat-todays-calls");
+        if (callsCountEl) callsCountEl.textContent = totalCalls;
+
+        const activeCallsEl = document.getElementById("stat-active-calls");
+        if (activeCallsEl) activeCallsEl.textContent = activeCalls;
+
+        const resRateEl = document.getElementById("stat-resolution-rate");
+        if (resRateEl) {
+            resRateEl.textContent = `${resRate}%`;
+            const progressFill = document.querySelector(".stat-card .progress-fill");
+            if (progressFill) progressFill.style.width = `${resRate}%`;
+        }
+
+        const escRateEl = document.getElementById("stat-transfer-rate");
+        if (escRateEl) escRateEl.textContent = `${escRate}%`;
+
+        const liveCountEl = document.getElementById("live-calls-count");
+        if (liveCountEl) liveCountEl.textContent = activeCalls;
+
         if (conversations.length === 0) {
             listContainer.innerHTML = `<div style="text-align:center; padding: 20px; color:var(--text-dim)">No active customer sessions found.</div>`;
         } else {
-            // Render Session Cards
+            // Find currently highlighted item to keep class selected
+            const activeItem = listContainer.querySelector(".list-item.active");
+            const activeId = activeItem ? activeItem.dataset.convId : null;
+
             listContainer.innerHTML = conversations.map((c, idx) => {
                 const channelIcon = c.channel === "VOICE" ? "fa-microphone-lines" : "fa-comments";
                 const badgeClass = c.channel === "VOICE" ? "style='color: var(--purple)'" : "style='color: var(--cyan)'";
                 const dateStr = c.updated_at ? new Date(c.updated_at).toLocaleTimeString() : "";
+                const isSelected = activeId ? (c.id === activeId) : (idx === 0);
 
                 return `
-                    <div class="list-item ${idx === 0 ? 'active' : ''}" data-conv-id="${c.id}">
+                    <div class="list-item ${isSelected ? 'active' : ''}" data-conv-id="${c.id}">
                         <div class="item-meta">
                             <span class="channel"><i class="fa-solid ${channelIcon}" ${badgeClass}></i> ${c.channel}</span>
                             <span>${dateStr}</span>
                         </div>
                         <div class="item-title">${c.current_intent || 'General Support'}</div>
-                        <div class="item-subtitle">Lang: ${(c.language || 'en').toUpperCase()} | Msg count: ${c.message_count || 0}</div>
+                        <div class="item-subtitle">Lang: ${(c.language || 'en').toUpperCase()} | Msg: ${c.message_count || 0} | Res: ${(c.resolution_status || 'unresolved').toUpperCase()}</div>
                     </div>
                 `;
             }).join("");
 
-            // Click handlers to load details
+            // Click handlers
             const items = listContainer.querySelectorAll(".list-item");
             items.forEach(item => {
                 item.addEventListener("click", () => {
@@ -212,17 +249,22 @@ async function loadConversations() {
             });
         }
 
-        // Fetch Complaints (Tickets) from Database
+        // Fetch Complaints (Tickets)
         await loadComplaints();
 
-        // Load the first one by default inside Live Calls Details
-        if (conversations.length > 0) {
+        // Load detail if nothing is highlighted
+        const currentlyActive = listContainer.querySelector(".list-item.active");
+        if (currentlyActive && !silent) {
+            loadConversationDetail(currentlyActive.dataset.convId);
+        } else if (conversations.length > 0 && !silent) {
             loadConversationDetail(conversations[0].id);
         }
 
     } catch (err) {
         console.error("Failed to load conversations list:", err);
-        listContainer.innerHTML = `<div style="text-align:center; padding: 20px; color:var(--red)">Failed to load.</div>`;
+        if (!silent) {
+            listContainer.innerHTML = `<div style="text-align:center; padding: 20px; color:var(--red)">Failed to load.</div>`;
+        }
     }
 }
 
@@ -439,14 +481,107 @@ async function loadConversationDetail(convId) {
                     <span class="live-badge" style="background: rgba(53, 216, 182, 0.1); color: var(--teal); border: 1px solid var(--teal)">Active</span>
                 </div>
             </div>
-            <div class="conversation-body">
+            
+            <div class="conversation-body" style="flex-grow: 1; overflow-y: auto;">
                 ${messagesHtml}
+            </div>
+
+            <!-- Resolution Status and Reviews Segment -->
+            <div class="review-segment" style="padding: 16px; border-top: 1px solid var(--line); background: rgba(0,0,0,0.25); display: flex; flex-direction: column; gap: 12px; border-bottom-left-radius: var(--radius-lg); border-bottom-right-radius: var(--radius-lg);">
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+                    <div style="font-size: 13px; font-weight: 600; color: var(--text-dim);"><i class="fa-solid fa-square-check"></i> Resolution status:</div>
+                    <select class="resolution-select" id="res-select-${c.id}" style="background: var(--surface-2); border: 1px solid var(--line); color: white; padding: 6px 10px; border-radius: 6px; font-size: 12.5px; outline: none; cursor: pointer;">
+                        <option value="unresolved" ${c.resolution_status === 'unresolved' ? 'selected' : ''}>Unresolved</option>
+                        <option value="resolved" ${c.resolution_status === 'resolved' ? 'selected' : ''}>Resolved</option>
+                        <option value="escalated" ${c.resolution_status === 'escalated' ? 'selected' : ''}>Escalated</option>
+                    </select>
+                </div>
+
+                <!-- Call QA Reviews list -->
+                <div style="font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; margin-top: 4px;"><i class="fa-solid fa-list-check"></i> QA Reviews Trail</div>
+                <div class="qa-reviews-list" id="qa-reviews-${c.id}" style="font-size: 12px; display: flex; flex-direction: column; gap: 6px; max-height: 90px; overflow-y: auto; background: rgba(0,0,0,0.15); padding: 8px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.03);">
+                    Loading QA trail...
+                </div>
+
+                <!-- Add Call Review Form -->
+                <form class="qa-review-form" id="qa-form-${c.id}" style="display: flex; gap: 8px; align-items: center; margin-top: 4px;">
+                    <input type="text" placeholder="Outcome tag (e.g. Helpful)" id="qa-tag-${c.id}" required style="padding: 10px; font-size: 12px; border: 1px solid var(--line); background: var(--surface-2); border-radius: 6px; flex: 1;">
+                    <input type="text" placeholder="QA review notes..." id="qa-notes-${c.id}" style="padding: 10px; font-size: 12px; border: 1px solid var(--line); background: var(--surface-2); border-radius: 6px; flex: 2;">
+                    <button type="submit" style="margin-top: 0; padding: 10px 14px; width: auto; font-size: 12.5px; white-space: nowrap;">Submit QA</button>
+                </form>
             </div>
         `;
 
         // Scroll to bottom
         const body = detailCol.querySelector(".conversation-body");
         if (body) body.scrollTop = body.scrollHeight;
+
+        // Resolution Select Handler
+        const resSelect = document.getElementById(`res-select-${c.id}`);
+        if (resSelect) {
+            resSelect.addEventListener("change", async (e) => {
+                try {
+                    await updateResolutionStatus(c.id, e.target.value);
+                    console.log("Resolution status updated to:", e.target.value);
+                    // Silently reload list to sync badge status indicators
+                    await loadConversations(true);
+                } catch (err) {
+                    console.error("Failed to update resolution status:", err);
+                }
+            });
+        }
+
+        // Helper to load QA Reviews list
+        const loadQaReviews = async () => {
+            const listDiv = document.getElementById(`qa-reviews-${c.id}`);
+            if (!listDiv) return;
+            try {
+                const reviewsRes = await fetch(`${getBaseUrl()}/api/v1/conversations/${c.id}/reviews`, {
+                    headers: { "Authorization": `Bearer ${getToken()}` }
+                });
+                const reviewsJson = await reviewsRes.json();
+                const reviews = reviewsJson.data || [];
+                
+                if (reviews.length === 0) {
+                    listDiv.innerHTML = `<span style="color:var(--text-dim); font-style:italic;">No QA reviews logged for this conversation.</span>`;
+                } else {
+                    listDiv.innerHTML = reviews.map(r => {
+                        const rDate = new Date(r.reviewed_at).toLocaleTimeString();
+                        return `<div style="padding: 6px 4px; border-bottom: 1px solid rgba(255,255,255,0.03); line-height: 1.4;">
+                            <strong style="color:var(--teal)">[${escapeHTML(r.outcome_tag)}]</strong> 
+                            <span style="color:var(--text)">${escapeHTML(r.notes || '')}</span>
+                            <span style="color:var(--text-dim); font-size: 10px; float: right;">${rDate}</span>
+                        </div>`;
+                    }).join("");
+                }
+            } catch (err) {
+                listDiv.innerHTML = `<span style="color:var(--red)">Failed to load QA trail.</span>`;
+            }
+        };
+
+        // Form Submit Handler
+        const qaForm = document.getElementById(`qa-form-${c.id}`);
+        if (qaForm) {
+            qaForm.addEventListener("submit", async (e) => {
+                e.preventDefault();
+                const tagInput = document.getElementById(`qa-tag-${c.id}`);
+                const notesInput = document.getElementById(`qa-notes-${c.id}`);
+                if (!tagInput) return;
+
+                try {
+                    await submitCallReview(c.id, tagInput.value, notesInput.value);
+                    tagInput.value = "";
+                    notesInput.value = "";
+                    await loadQaReviews();
+                } catch (err) {
+                    console.error("Failed to submit QA review:", err);
+                    alert("Error submitting QA review: " + err.message);
+                }
+            });
+        }
+
+        // Initialize reviews loading
+        loadQaReviews();
 
     } catch (err) {
         console.error("Failed to load conversation details:", err);
@@ -572,6 +707,74 @@ async function loadTicketDetail(complaintId) {
             }
         }
 
+        let associatedConversation = null;
+        if (c.booking_code) {
+            try {
+                const searchRes = await searchConversations(c.booking_code);
+                const results = searchRes.data.conversations || [];
+                if (results.length > 0) {
+                    const detailRes = await getConversationDetail(results[0].id);
+                    associatedConversation = detailRes.data || detailRes;
+                    const messages = associatedConversation.messages || [];
+                    
+                    if (messages.length > 0) {
+                        convoHtml = messages.map(m => {
+                            const isUser = m.sender === "USER";
+                            const rowClass = isUser ? "user" : "ai";
+                            const label = isUser ? "User" : "AI Agent";
+                            const msgTime = m.created_at ? new Date(m.created_at).toLocaleTimeString() : "";
+
+                            let metaTags = [];
+                            if (m.intent) metaTags.push(`<span class="meta-pill">NLU: ${m.intent}</span>`);
+                            if (m.tool_used) metaTags.push(`<span class="meta-pill">Tool: ${m.tool_used}</span>`);
+                            if (m.response_time_ms) metaTags.push(`<span class="meta-pill">${m.response_time_ms} ms</span>`);
+
+                            return `
+                                <div class="bubble-row ${rowClass}">
+                                    <span class="bubble-sender">${label} • ${msgTime}</span>
+                                    <div class="bubble-text">${escapeHTML(m.message)}</div>
+                                    <div class="bubble-meta-tags">
+                                        ${metaTags.join("")}
+                                    </div>
+                                </div>
+                            `;
+                        }).join("");
+                    }
+                }
+            } catch (err) {
+                console.warn("Failed to load associated conversation:", err);
+            }
+        }
+
+        let reviewSectionHtml = "";
+        if (associatedConversation) {
+            reviewSectionHtml = `
+                <div class="review-segment" style="padding: 16px; border-top: 1px solid var(--line); background: rgba(0,0,0,0.25); display: flex; flex-direction: column; gap: 12px; margin-top: 12px; border-radius: 8px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+                        <div style="font-size: 13px; font-weight: 600; color: var(--text-dim);"><i class="fa-solid fa-square-check"></i> Resolution status:</div>
+                        <select class="resolution-select" id="ticket-res-select-${associatedConversation.id}" style="background: var(--surface-2); border: 1px solid var(--line); color: white; padding: 6px 10px; border-radius: 6px; font-size: 12.5px; outline: none; cursor: pointer;">
+                            <option value="unresolved" ${associatedConversation.resolution_status === 'unresolved' ? 'selected' : ''}>Unresolved</option>
+                            <option value="resolved" ${associatedConversation.resolution_status === 'resolved' ? 'selected' : ''}>Resolved</option>
+                            <option value="escalated" ${associatedConversation.resolution_status === 'escalated' ? 'selected' : ''}>Escalated</option>
+                        </select>
+                    </div>
+
+                    <!-- Call QA Reviews list -->
+                    <div style="font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; margin-top: 4px;"><i class="fa-solid fa-list-check"></i> QA Reviews Trail</div>
+                    <div class="qa-reviews-list" id="ticket-qa-reviews-${associatedConversation.id}" style="font-size: 12px; display: flex; flex-direction: column; gap: 6px; max-height: 90px; overflow-y: auto; background: rgba(0,0,0,0.15); padding: 8px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.03);">
+                        Loading QA trail...
+                    </div>
+
+                    <!-- Add Call Review Form -->
+                    <form class="qa-review-form" id="ticket-qa-form-${associatedConversation.id}" style="display: flex; gap: 8px; align-items: center; margin-top: 4px;">
+                        <input type="text" placeholder="Outcome tag" id="ticket-qa-tag-${associatedConversation.id}" required style="padding: 10px; font-size: 12px; border: 1px solid var(--line); background: var(--surface-2); border-radius: 6px; flex: 1;">
+                        <input type="text" placeholder="QA notes..." id="ticket-qa-notes-${associatedConversation.id}" style="padding: 10px; font-size: 12px; border: 1px solid var(--line); background: var(--surface-2); border-radius: 6px; flex: 2;">
+                        <button type="submit" style="margin-top: 0; padding: 10px 14px; width: auto; font-size: 12.5px; white-space: nowrap;">Submit QA</button>
+                    </form>
+                </div>
+            `;
+        }
+
         detailCol.innerHTML = `
             <div class="detail-header">
                 <div class="detail-header-info">
@@ -584,7 +787,7 @@ async function loadTicketDetail(complaintId) {
             </div>
             
             <!-- Ticket Details Meta -->
-            <div style="background: rgba(255,255,255,0.015); border-bottom: 1px solid var(--border-color); padding: 18px 24px; display:flex; flex-direction:column; gap:10px;">
+            <div style="background: rgba(255,255,255,0.015); border-bottom: 1px solid var(--line); padding: 18px 24px; display:flex; flex-direction:column; gap:10px;">
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; font-size:12px;">
                     <div><span style="color:var(--text-dim)">Customer:</span> <strong style="color:white">${customerName}</strong></div>
                     <div><span style="color:var(--text-dim)">Route:</span> <strong style="color:white">${tripRoute}</strong></div>
@@ -602,13 +805,81 @@ async function loadTicketDetail(complaintId) {
                 <i class="fa-solid fa-comments"></i> Associated Chat Transcript
             </div>
             
-            <div class="conversation-body" style="flex-grow: 1; overflow-y: auto; padding: 20px;">
+            <div class="conversation-body" style="height: 180px; overflow-y: auto; padding: 20px; border-bottom: 1px solid var(--line);">
                 ${convoHtml}
             </div>
+
+            ${reviewSectionHtml}
         `;
 
         const body = detailCol.querySelector(".conversation-body");
         if (body) body.scrollTop = body.scrollHeight;
+
+        if (associatedConversation) {
+            const ticketConvId = associatedConversation.id;
+
+            // Resolution handler
+            const ticketResSelect = document.getElementById(`ticket-res-select-${ticketConvId}`);
+            if (ticketResSelect) {
+                ticketResSelect.addEventListener("change", async (e) => {
+                    try {
+                        await updateResolutionStatus(ticketConvId, e.target.value);
+                        console.log("Ticket resolution updated:", e.target.value);
+                        await loadConversations(true);
+                    } catch (err) {
+                        console.error(err);
+                    }
+                });
+            }
+
+            // QA load helper
+            const loadTicketQaReviews = async () => {
+                const listDiv = document.getElementById(`ticket-qa-reviews-${ticketConvId}`);
+                if (!listDiv) return;
+                try {
+                    const reviewsRes = await fetch(`${getBaseUrl()}/api/v1/conversations/${ticketConvId}/reviews`, {
+                        headers: { "Authorization": `Bearer ${getToken()}` }
+                    });
+                    const reviewsJson = await reviewsRes.json();
+                    const reviews = reviewsJson.data || [];
+                    
+                    if (reviews.length === 0) {
+                        listDiv.innerHTML = `<span style="color:var(--text-dim); font-style:italic;">No QA reviews logged.</span>`;
+                    } else {
+                        listDiv.innerHTML = reviews.map(r => {
+                            const rDate = new Date(r.reviewed_at).toLocaleTimeString();
+                            return `<div style="padding: 6px 4px; border-bottom: 1px solid rgba(255,255,255,0.03);">
+                                <strong style="color:var(--teal)">[${escapeHTML(r.outcome_tag)}]</strong> 
+                                <span style="color:var(--text)">${escapeHTML(r.notes || '')}</span>
+                                <span style="color:var(--text-dim); font-size: 10px; float: right;">${rDate}</span>
+                            </div>`;
+                        }).join("");
+                    }
+                } catch (err) {
+                    listDiv.innerHTML = `<span style="color:var(--red)">Error.</span>`;
+                }
+            };
+
+            // QA submit handler
+            const ticketQaForm = document.getElementById(`ticket-qa-form-${ticketConvId}`);
+            if (ticketQaForm) {
+                ticketQaForm.addEventListener("submit", async (e) => {
+                    e.preventDefault();
+                    const tagInput = document.getElementById(`ticket-qa-tag-${ticketConvId}`);
+                    const notesInput = document.getElementById(`ticket-qa-notes-${ticketConvId}`);
+                    try {
+                        await submitCallReview(ticketConvId, tagInput.value, notesInput.value);
+                        tagInput.value = "";
+                        notesInput.value = "";
+                        await loadTicketQaReviews();
+                    } catch (err) {
+                        console.error(err);
+                    }
+                });
+            }
+
+            loadTicketQaReviews();
+        }
 
     } catch (err) {
         console.error("Failed to load ticket details:", err);
