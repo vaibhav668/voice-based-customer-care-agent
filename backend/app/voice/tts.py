@@ -11,6 +11,10 @@ VOICE_MAP = {
     "te": "te-IN-MohanNeural",
     "ta": "ta-IN-PallaviNeural",
     "kn": "kn-IN-GaganNeural",
+    "gu": "gu-IN-DhwaniNeural",
+    "bn": "bn-IN-TanishaaNeural",
+    "ml": "ml-IN-SobhanaNeural",
+    "ur": "ur-IN-GulNeural",
 }
 
 

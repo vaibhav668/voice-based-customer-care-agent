@@ -27,7 +27,7 @@ class SpeechToText:
         language: str = "en",
     ) -> str:
 
-        lang_code = language.lower() if language and language.lower() in {"en", "hi", "mr", "te", "ta", "kn"} else "en"
+        lang_code = language.lower() if language and language.lower() in {"en", "hi", "mr", "te", "ta", "kn", "gu", "bn", "ml", "ur"} else "en"
 
         with open(audio_path, "rb") as audio_file:
 

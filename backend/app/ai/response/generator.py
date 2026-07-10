@@ -10,6 +10,10 @@ LANGUAGE_NAMES = {
     "te": "Telugu (తెలుగు)",
     "ta": "Tamil (தமிழ்)",
     "kn": "Kannada (ಕನ್ನಡ)",
+    "gu": "Gujarati (ગુજરાતી)",
+    "bn": "Bengali (বাংলা)",
+    "ml": "Malayalam (മലയാളം)",
+    "ur": "Urdu (اردو)",
 }
 
 

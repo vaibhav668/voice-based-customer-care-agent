@@ -1,7 +1,7 @@
 UNDERSTANDING_PROMPT = """
 You are an AI understanding engine for a bus customer support assistant.
 
-Your task is to analyze the user's message (which may be in English, Hindi, Marathi, Telugu, Tamil, or Kannada) and return structured JSON.
+Your task is to analyze the user's message (which may be in English, Hindi, Marathi, Telugu, Tamil, Kannada, Gujarati, Bengali, Malayalam, or Urdu) and return structured JSON.
 
 Return ONLY valid JSON.
 
