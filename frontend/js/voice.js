@@ -12,7 +12,11 @@ const OPTION_LANG_MAP = {
     "3": "te",
     "4": "ta",
     "5": "mr",
-    "6": "kn"
+    "6": "kn",
+    "7": "gu",
+    "8": "bn",
+    "9": "ml",
+    "10": "ur"
 };
 
 function getConversationElem() {
@@ -32,13 +36,17 @@ function detectLanguageChoice(transcript) {
     if (!transcript) return null;
     const lower = transcript.toLowerCase().trim();
 
-    // Check numbers 1-6
+    // Check numbers 1-10
     if (/\b(1|one|english|press 1)\b/i.test(lower)) return "en";
     if (/\b(2|two|hindi|हिन्दी|press 2)\b/i.test(lower)) return "hi";
     if (/\b(3|three|telugu|తెలుగు|press 3)\b/i.test(lower)) return "te";
     if (/\b(4|four|tamil|தமிழ்|press 4)\b/i.test(lower)) return "ta";
     if (/\b(5|five|marathi|मराठी|press 5)\b/i.test(lower)) return "mr";
     if (/\b(6|six|kannada|ಕನ್ನಡ|press 6)\b/i.test(lower)) return "kn";
+    if (/\b(7|seven|gujarati|ગુજરાતી|press 7)\b/i.test(lower)) return "gu";
+    if (/\b(8|eight|bengali|বাংলা|press 8)\b/i.test(lower)) return "bn";
+    if (/\b(9|nine|malayalam|മലയാളം|press 9)\b/i.test(lower)) return "ml";
+    if (/\b(10|ten|urdu|اردو|press 10)\b/i.test(lower)) return "ur";
 
     return null;
 }
@@ -75,6 +83,18 @@ function renderLanguagePrompt() {
                 </button>
                 <button type="button" class="keypad-btn ${currentLang === 'kn' ? 'active' : ''}" data-code="kn" data-num="6">
                     <span>6️⃣</span> ಕನ್ನಡ (Kannada)
+                </button>
+                <button type="button" class="keypad-btn ${currentLang === 'gu' ? 'active' : ''}" data-code="gu" data-num="7">
+                    <span>7️⃣</span> ગુજરાતી (Gujarati)
+                </button>
+                <button type="button" class="keypad-btn ${currentLang === 'bn' ? 'active' : ''}" data-code="bn" data-num="8">
+                    <span>8️⃣</span> বাংলা (Bengali)
+                </button>
+                <button type="button" class="keypad-btn ${currentLang === 'ml' ? 'active' : ''}" data-code="ml" data-num="9">
+                    <span>9️⃣</span> മലയാളം (Malayalam)
+                </button>
+                <button type="button" class="keypad-btn ${currentLang === 'ur' ? 'active' : ''}" data-code="ur" data-num="10">
+                    <span>🔟</span> اردو (Urdu)
                 </button>
             </div>
         </div>
