@@ -12,6 +12,8 @@ class SpeechToText:
 
     def __init__(self):
         api_key = os.getenv("GROQ_API_KEY")
+        if not api_key:
+            raise ValueError("GROQ_API_KEY is required for speech-to-text transcription.")
 
         print("Groq Key Loaded:", api_key[:10] + "...")
 
