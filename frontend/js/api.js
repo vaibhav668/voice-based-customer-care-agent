@@ -69,19 +69,27 @@ async function request(url, options = {}) {
     return data;
 }
 
-export function login(email, password) {
+export function sendOtp(phone) {
+    return request("/api/v1/auth/send-otp", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ phone }),
+    });
+}
 
+export function login(phone, otp) {
     return request("/api/v1/auth/login", {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
         },
         body: JSON.stringify({
-            email,
-            password,
+            phone,
+            otp,
         }),
     });
-
 }
 
 export function register(user) {
@@ -97,7 +105,6 @@ export function register(user) {
         },
         body: JSON.stringify(payload),
     });
-
 }
 
 export function getProfile() {

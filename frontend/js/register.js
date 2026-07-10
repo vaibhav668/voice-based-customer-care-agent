@@ -7,50 +7,24 @@ document.addEventListener("DOMContentLoaded", () => {
 
 const form = document.getElementById("register-form");
 const message = document.getElementById("message");
-const passwordInput = document.getElementById("password");
-const togglePassword = document.getElementById("toggle-password");
-
-if (togglePassword && passwordInput) {
-    togglePassword.addEventListener("click", () => {
-        const type = passwordInput.getAttribute("type") === "password" ? "text" : "password";
-        passwordInput.setAttribute("type", type);
-        togglePassword.classList.toggle("fa-eye");
-        togglePassword.classList.toggle("fa-eye-slash");
-    });
-}
 
 if (form) {
     form.onsubmit = async (e) => {
-
         e.preventDefault();
 
         try {
-
+            const cleanPhone = phone.value.replace(/\D/g, "");
             await register({
-
                 full_name: full_name.value,
-
-                email: email.value,
-
-                phone: phone.value,
-
-                password: password.value,
-
+                phone: cleanPhone,
                 preferred_language: langManager.getLanguage(),
-
             });
 
             alert(langManager.getText("register_success"));
-
             location.href = "login.html";
 
-        }
-
-        catch(err){
-
+        } catch (err) {
             message.innerText = err.message || langManager.getText("request_failed");
-
         }
-
     };
 }

@@ -1,17 +1,19 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
+
+
+class SendOTPRequest(BaseModel):
+    phone: str
 
 
 class RegisterRequest(BaseModel):
     full_name: str
-    email: EmailStr
     phone: str
-    password: str
     preferred_language: str = "en"
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
-    password: str
+    phone: str
+    otp: str
 
 
 class TokenResponse(BaseModel):
