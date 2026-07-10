@@ -21,6 +21,9 @@ class SupportAgent:
         seat_number: int | None = None,
         confirmation: str | None = None,
         user_id: str | None = None,
+        session_id: str | None = None,
+        language: str | None = None,
+        session_phone: str | None = None,
     ) -> ToolResult:
 
         # ----------------------------------------------------
@@ -186,20 +189,37 @@ class SupportAgent:
         # ----------------------------------------------------
 
         try:
-            if intent == Intent.BOOKING_CANCEL:
+            if intent == Intent.ESCALATE_TO_HUMAN:
+                data = tool.execute(
+                    session_id=session_id,
+                    user_id=user_id,
+                )
+            elif intent == Intent.PROFILE_STATUS:
+                data = tool.execute(
+                    user_id=user_id,
+                )
+            elif intent == Intent.LANGUAGE_CHANGE:
+                data = tool.execute(
+                    language=language or question,  # use question as fallback text to extract language
+                    session_id=session_id,
+                    user_id=user_id,
+                )
+            elif intent == Intent.BOOKING_CANCEL:
                 data = tool.execute(
                     booking_code=booking_code,
                     confirmation=confirmation,
                     user_id=user_id,
+                    session_phone=session_phone,
                 )
             elif intent in (Intent.BOOKING_STATUS, Intent.REFUND_STATUS, Intent.PAYMENT_ISSUE, Intent.RESCHEDULE, Intent.BUS_TRACKING, Intent.BUS_DELAY):
-                # Pass user_id for authorization checks
+                # Pass user_id and session_phone for authorization checks
                 data = tool.execute(
                     booking_code=booking_code,
                     user_id=user_id,
+                    session_phone=session_phone,
                 )
             else:
-                data = tool.execute(booking_code)
+                data = tool.execute(booking_code, user_id=user_id, session_phone=session_phone)
                 
             return ToolResult(
                 success=True,

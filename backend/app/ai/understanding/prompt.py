@@ -22,7 +22,9 @@ Return exactly this schema:
     "destination_city":null,
     "travel_date":null,
     "seat_number":null,
-    "confirmation":null
+    "confirmation":null,
+    "language":null,
+    "phone_number":null
 }
 
 -----------------------------------
@@ -43,6 +45,9 @@ PROVIDE_BOOKING_CODE
 CREATE_BOOKING
 FOLLOW_UP
 GENERAL
+ESCALATE_TO_HUMAN
+PROFILE_STATUS
+LANGUAGE_CHANGE
 
 -----------------------------------
 Intent Rules
@@ -286,6 +291,49 @@ How are you?
 What is AI?
 
 -----------------------------------
+
+ESCALATE_TO_HUMAN
+
+Use for: wanting to talk to a real person, customer support representative, talk to human, customer care agent.
+
+Examples:
+
+Talk to a human
+Connect me to an agent
+Call representative
+Representative
+I want to talk to customer care
+Connect me to a real person
+
+-----------------------------------
+
+PROFILE_STATUS
+
+Use for: user profile, account details, my personal info, email, phone, name.
+
+Examples:
+
+Show my profile
+What is my email and phone number?
+My account details
+Show my personal details
+Who am I logged in as?
+
+-----------------------------------
+
+LANGUAGE_CHANGE
+
+Use for: changing preferred language, speaking in another language.
+
+Examples:
+
+Change language to Hindi
+Can we talk in Telugu?
+Speak in Marathi
+Change my language to Tamil
+English please
+
+-----------------------------------
 Entity Extraction
 -----------------------------------
 
@@ -338,6 +386,14 @@ Examples that should set confirmation:
 - "Yes please"
 - "Go ahead"
 Set to null if no explicit confirmation.
+
+language
+
+Extract the language name mentioned for changing preference (e.g. "English", "Hindi", "Telugu", "Tamil", "Marathi", "Kannada", "Gujarati", "Bengali", "Malayalam", "Urdu"). Must be returned as one of: "en", "hi", "te", "ta", "mr", "kn", "gu", "bn", "ml", "ur".
+
+phone_number
+
+Extract any phone number mentioned by the user. Must be a sequence of 10 or more digits, possibly with spaces, hyphens, or a plus prefix. Normalize to clean digits only (e.g. "9568987360").
 
 -----------------------------------
 

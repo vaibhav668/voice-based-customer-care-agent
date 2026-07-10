@@ -33,6 +33,12 @@ class Intent(str, Enum):
 
     GENERAL = "GENERAL"
 
+    ESCALATE_TO_HUMAN = "ESCALATE_TO_HUMAN"
+
+    PROFILE_STATUS = "PROFILE_STATUS"
+
+    LANGUAGE_CHANGE = "LANGUAGE_CHANGE"
+
 
 class IntentResult(BaseModel):
 

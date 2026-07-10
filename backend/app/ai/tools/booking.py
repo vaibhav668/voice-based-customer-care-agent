@@ -13,8 +13,10 @@ class BookingTool:
         self,
         booking_code: str,
         user_id: str | None = None,
+        session_phone: str | None = None,
     ):
         return self.service.get_booking_details_secure(
             booking_code,
             user_id,
+            session_phone=session_phone,
         )

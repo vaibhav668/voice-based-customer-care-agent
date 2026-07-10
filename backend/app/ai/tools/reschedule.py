@@ -14,9 +14,10 @@ class RescheduleTool:
         self,
         booking_code: str,
         user_id: str | None = None,
+        session_phone: str | None = None,
     ):
         """Checks if a booking is eligible for rescheduling."""
-        booking_details = self.service.get_booking_details_secure(booking_code, user_id)
+        booking_details = self.service.get_booking_details_secure(booking_code, user_id, session_phone=session_phone)
         
         status = booking_details.get("booking_status")
         if status in ["CANCELLED", "COMPLETED"]:

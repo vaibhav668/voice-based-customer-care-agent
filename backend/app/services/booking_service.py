@@ -60,6 +60,7 @@ class BookingService:
         self,
         booking_code: str,
         user_id=None,
+        session_phone: str | None = None,
     ):
         """
         Secure version: verifies that the booking belongs to the authenticated user.
@@ -71,18 +72,31 @@ class BookingService:
         if booking is None:
             raise NotFoundException("No booking found with that code.")
 
-        # Authorization check: if booking has a user_id and a user is authenticated,
-        # verify ownership. Guest bookings (user_id=None) are accessible by anyone with the code.
-        if user_id and booking.user_id:
-            try:
-                uid = _uuid.UUID(str(user_id))
-                booking_uid = _uuid.UUID(str(booking.user_id))
-                if uid != booking_uid:
-                    raise NotFoundException(
-                        "This booking does not belong to your account."
-                    )
-            except (ValueError, AttributeError):
-                pass
+        # Authorization check: if booking has a user_id, check ownership or phone number match.
+        if booking.user_id:
+            authorized = False
+            # 1. Check logged-in user matching
+            if user_id:
+                try:
+                    uid = _uuid.UUID(str(user_id))
+                    booking_uid = _uuid.UUID(str(booking.user_id))
+                    if uid == booking_uid:
+                        authorized = True
+                except (ValueError, AttributeError):
+                    pass
+            
+            # 2. Check phone verification if they are not the authenticated user
+            if not authorized and session_phone and booking.user:
+                clean_session_phone = "".join(filter(str.isdigit, str(session_phone)))
+                clean_owner_phone = "".join(filter(str.isdigit, str(booking.user.phone)))
+                if clean_session_phone and clean_owner_phone:
+                    if clean_session_phone[-10:] == clean_owner_phone[-10:]:
+                        authorized = True
+
+            if not authorized:
+                raise NotFoundException(
+                    "You do not have permission to view this booking. Please verify your phone number first."
+                )
 
         trip = booking.trip
         route = trip.route if trip else None

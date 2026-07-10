@@ -11,6 +11,9 @@ from app.ai.tools.tracking import TrackingTool
 from app.ai.tools.payment import PaymentTool
 from app.ai.tools.reschedule import RescheduleTool
 from app.ai.tools.list_bookings import ListBookingsTool
+from app.ai.tools.escalate import EscalateTool
+from app.ai.tools.profile import ProfileTool
+from app.ai.tools.language_tool import LanguageTool
 
 
 class ToolRegistry:
@@ -29,6 +32,9 @@ class ToolRegistry:
             "PAYMENT_ISSUE": PaymentTool(db),
             "RESCHEDULE": RescheduleTool(db),
             "LIST_BOOKINGS": ListBookingsTool(db),
+            "ESCALATE_TO_HUMAN": EscalateTool(db),
+            "PROFILE_STATUS": ProfileTool(db),
+            "LANGUAGE_CHANGE": LanguageTool(db),
         }
 
     def get(self, intent: str):

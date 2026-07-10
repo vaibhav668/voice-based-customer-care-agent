@@ -18,8 +18,9 @@ class TrackingTool:
         self,
         booking_code: str,
         user_id: str | None = None,
+        session_phone: str | None = None,
     ):
         # Securely verify ownership first
-        self.booking_service.get_booking_details_secure(booking_code, user_id)
+        self.booking_service.get_booking_details_secure(booking_code, user_id, session_phone=session_phone)
         
         return self.trip_service.get_bus_tracking(booking_code)

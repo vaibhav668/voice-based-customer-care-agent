@@ -14,13 +14,14 @@ class CancellationTool:
         booking_code: str,
         confirmation: str | None = None,
         user_id: str | None = None,
+        session_phone: str | None = None,
     ):
         """
         Executes cancellation if explicitly confirmed.
         Otherwise, returns a preview and signals that confirmation is needed.
         """
         # First ensure ownership securely
-        booking_preview = self.service.get_booking_details_secure(booking_code, user_id)
+        booking_preview = self.service.get_booking_details_secure(booking_code, user_id, session_phone=session_phone)
         
         if booking_preview.get("booking_status") == "CANCELLED":
             return {

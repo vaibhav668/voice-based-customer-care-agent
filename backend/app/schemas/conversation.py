@@ -33,6 +33,10 @@ class ConversationSchema(BaseModel):
     id: UUID | str
     session_id: str
     user_id: UUID | str | None = None
+    booking_id: UUID | str | None = None
+    campaign_id: UUID | str | None = None
+    resolution_status: str | None = None
+    recording_url: str | None = None
     started_at: datetime | None = None
     ended_at: datetime | None = None
     status: str
@@ -48,7 +52,7 @@ class ConversationSchema(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    @field_validator("id", "user_id", mode="before")
+    @field_validator("id", "user_id", "booking_id", "campaign_id", mode="before")
     @classmethod
     def stringify_uuids(cls, v):
         if v is not None:

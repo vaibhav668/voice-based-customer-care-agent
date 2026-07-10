@@ -407,6 +407,22 @@ def auto_seed_database():
             db.add(b105)
             db.commit()
 
+        # Seed Campaigns
+        from app.database.models.campaign import Campaign
+        from datetime import date
+        existing_campaign = db.query(Campaign).filter_by(name="Outbound Support July").first()
+        if not existing_campaign:
+            c1 = Campaign(
+                id=uuid.uuid4(),
+                name="Outbound Support July",
+                type="OUTBOUND",
+                start_date=date(2026, 7, 1),
+                end_date=date(2026, 7, 31),
+            )
+            db.add(c1)
+            db.commit()
+            logger.info("Seeded default campaign: Outbound Support July")
+
         logger.info("✅ Database seeded with all customer support test scenarios.")
     except Exception as e:
         logger.warning(f"Auto-seed warning: {e}")
@@ -422,6 +438,12 @@ async def lifespan(app):
         # Create all database tables automatically if missing
         Base.metadata.create_all(bind=engine)
         logger.info("Database tables verified/created successfully.")
+
+        try:
+            from migrate import run_migrations
+            run_migrations()
+        except Exception as e:
+            logger.warning(f"Auto-migration warning: {e}")
 
         auto_seed_database()
 

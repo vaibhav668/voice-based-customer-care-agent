@@ -28,3 +28,5 @@ class UnderstandingResult(BaseModel):
     # Captures explicit confirmation phrases like "YES", "YES CANCEL", "CONFIRM"
     # Used for the cancellation/reschedule confirmation gate
     confirmation: str | None = None
+    language: str | None = None
+    phone_number: str | None = None

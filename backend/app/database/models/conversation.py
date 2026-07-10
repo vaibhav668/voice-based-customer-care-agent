@@ -87,6 +87,29 @@ class Conversation(UUIDMixin, TimestampMixin, Base):
         nullable=True,
     )
 
+    booking_id = mapped_column(
+        ForeignKey("bookings.id"),
+        nullable=True,
+        index=True,
+    )
+
+    campaign_id = mapped_column(
+        ForeignKey("campaigns.id"),
+        nullable=True,
+        index=True,
+    )
+
+    resolution_status: Mapped[str] = mapped_column(
+        String(50),
+        default="unresolved",
+        nullable=False,
+    )
+
+    recording_url: Mapped[str] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+
     is_deleted: Mapped[bool] = mapped_column(
         Boolean,
         default=False,
@@ -94,6 +117,8 @@ class Conversation(UUIDMixin, TimestampMixin, Base):
     )
 
     user = relationship("User", backref="conversations")
+    booking = relationship("Booking", backref="conversations")
+    campaign = relationship("Campaign", backref="conversations")
 
     messages = relationship(
         "ConversationMessage",

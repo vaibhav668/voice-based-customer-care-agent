@@ -25,6 +25,10 @@ def understand(message: str) -> UnderstandingResult:
 
         data = parse_json(response)
 
+        intent_val = data.get("intent")
+        if not intent_val or intent_val not in [i.value for i in Intent]:
+            data["intent"] = Intent.GENERAL.value
+
         return UnderstandingResult(**data)
 
     except Exception as e:

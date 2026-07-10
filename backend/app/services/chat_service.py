@@ -81,6 +81,28 @@ class ChatService:
         understanding = understand(request.message)
 
         # ----------------------------------------
+        # Save Extracted Entities to Session
+        # ----------------------------------------
+        if understanding.booking_code:
+            session.entities["booking_code"] = understanding.booking_code
+        if understanding.passenger_name:
+            session.entities["passenger_name"] = understanding.passenger_name
+        if understanding.complaint:
+            session.entities["complaint"] = understanding.complaint
+        if understanding.bus_number:
+            session.entities["bus_number"] = understanding.bus_number
+        if understanding.source_city:
+            session.entities["source_city"] = understanding.source_city
+        if understanding.destination_city:
+            session.entities["destination_city"] = understanding.destination_city
+        if understanding.travel_date:
+            session.entities["travel_date"] = understanding.travel_date
+        if understanding.seat_number:
+            session.entities["seat_number"] = understanding.seat_number
+        if understanding.phone_number:
+            session.entities["phone_number"] = understanding.phone_number
+
+        # ----------------------------------------
         # Context Follow-up
         # ----------------------------------------
 
@@ -206,6 +228,9 @@ class ChatService:
         if understanding.seat_number:
             session.entities["seat_number"] = understanding.seat_number
 
+        if understanding.phone_number:
+            session.entities["phone_number"] = understanding.phone_number
+
         source_city = understanding.source_city or session.entities.get("source_city")
         destination_city = understanding.destination_city or session.entities.get("destination_city")
         travel_date = understanding.travel_date or session.entities.get("travel_date")
@@ -237,6 +262,8 @@ class ChatService:
         # Execute Agent
         # ----------------------------------------
 
+        session_phone = understanding.phone_number or session.entities.get("phone_number")
+
         result = self.agent.execute(
             intent=understanding.intent,
             booking_code=booking_code,
@@ -247,6 +274,9 @@ class ChatService:
             seat_number=seat_number,
             confirmation=confirmation,
             user_id=user_id,
+            session_id=session_id,
+            language=understanding.language or language,
+            session_phone=session_phone,
         )
 
         print("=" * 60)
@@ -349,6 +379,10 @@ class ChatService:
             booking_code=booking_code,
         )
 
+        if result.success and isinstance(result.data, dict) and "language" in result.data:
+            language = result.data["language"]
+            session.language = language
+
         self.conv_repo.update_state(
             db_conv.id,
             current_intent=str(understanding.intent),
@@ -366,6 +400,28 @@ class ChatService:
         session.last_response = response
 
         session.entities["last_response"] = response
+
+        # ----------------------------------------
+        # DB Association and Resolution Status Sync
+        # ----------------------------------------
+        if db_conv:
+            if booking_code:
+                try:
+                    from app.repositories.booking_repository import BookingRepository
+                    booking_repo = BookingRepository(self.db)
+                    booking = booking_repo.get_by_booking_code(booking_code)
+                    if booking:
+                        db_conv.booking_id = booking.id
+                except Exception as e:
+                    print("Booking linking notice:", e)
+
+            # Resolution status logic
+            if result.tool == "escalate":
+                db_conv.resolution_status = "escalated"
+            elif result.success and result.tool in ("booking", "cancellation", "reschedule", "complaint", "refund"):
+                db_conv.resolution_status = "resolved"
+
+            self.db.commit()
 
         return {
             "session_id": session_id,
