@@ -14,8 +14,8 @@ class Settings(BaseSettings):
     debug: bool
     llm_provider: str
 
-    groq_api_key: str
-    groq_model: str
+    groq_api_key: str = ""
+    groq_model: str = "llama-3.1-8b-instant"
 
     openrouter_api_key: str = ""
     openrouter_model: str = "openrouter/free"
