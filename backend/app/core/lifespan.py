@@ -474,7 +474,7 @@ async def lifespan(app):
                     conn.execute(text("ALTER TABLE trips ADD COLUMN current_location VARCHAR(200)"))
                 if "updated_eta" not in trip_cols:
                     logger.info("Adding updated_eta column to trips table...")
-                    conn.execute(text("ALTER TABLE trips ADD COLUMN updated_eta DATETIME"))
+                    conn.execute(text("ALTER TABLE trips ADD COLUMN updated_eta TIMESTAMP"))
     except Exception as e:
         logger.warning(f"Database table/column sync warning: {e}")
     yield
