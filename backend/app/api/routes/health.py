@@ -13,6 +13,8 @@ router = APIRouter(
 async def health_check(db: Session = Depends(get_db)):
     db_type = "unknown"
     try:
+        from sqlalchemy import text
+        db.execute(text("SELECT 1"))
         db_type = db.bind.dialect.name
     except Exception as e:
         db_type = f"error: {e}"
