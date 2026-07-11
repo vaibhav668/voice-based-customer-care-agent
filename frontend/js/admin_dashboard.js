@@ -25,7 +25,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     // 1. Authenticate Admin
     const token = getToken();
     if (!token) {
-        location.href = "login.html";
+        location.href = "index.html";
         return;
     }
 
@@ -47,7 +47,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     } catch (err) {
         console.error("Auth check failed:", err);
         clearAll();
-        location.href = "login.html";
+        location.href = "index.html";
         return;
     }
 
@@ -78,7 +78,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (logoutBtn) {
         logoutBtn.addEventListener("click", () => {
             clearAll();
-            location.href = "login.html";
+            location.href = "index.html";
         });
     }
 

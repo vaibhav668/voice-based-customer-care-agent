@@ -8,6 +8,7 @@ class SendOTPRequest(BaseModel):
 class RegisterRequest(BaseModel):
     full_name: str
     phone: str
+    otp: str
     preferred_language: str = "en"
 
 

@@ -15,7 +15,7 @@ const logout = document.getElementById("logout");
 if (logout) {
     logout.onclick = () => {
         clearAll(); // Clears both access_token AND chat_session
-        location.href = "login.html";
+        location.href = "index.html";
     };
 }
 

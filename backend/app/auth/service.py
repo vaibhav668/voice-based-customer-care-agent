@@ -41,6 +41,10 @@ class AuthService:
         if not clean_phone:
             raise ConflictException("Invalid phone number")
 
+        # Verify OTP
+        if not verify_otp(clean_phone, request.otp):
+            raise UnauthorizedException("Invalid OTP")
+
         if self.repository.get_by_phone(clean_phone):
             raise ConflictException("Phone number already registered")
 

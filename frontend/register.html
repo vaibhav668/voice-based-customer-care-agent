@@ -49,12 +49,29 @@
                 required>
         </div>
 
+        <div class="field" style="gap: 8px;">
+            <div style="position: relative; flex: 1; display: flex; align-items: center;">
+                <i class="fa-solid fa-phone"></i>
+                <input
+                    id="phone"
+                    placeholder="Phone Number"
+                    data-i18n-placeholder="phone_placeholder"
+                    required>
+            </div>
+            <button
+                id="send-otp-btn"
+                type="button"
+                style="margin-top: 0; width: auto; white-space: nowrap; padding: 12px 16px; font-size: 13.5px;">
+                Send OTP
+            </button>
+        </div>
+
         <div class="field">
-            <i class="fa-solid fa-phone"></i>
+            <i class="fa-solid fa-key"></i>
             <input
-                id="phone"
-                placeholder="Phone Number"
-                data-i18n-placeholder="phone_placeholder"
+                id="otp"
+                placeholder="OTP"
+                data-i18n-placeholder="otp_placeholder"
                 required>
         </div>
 
@@ -70,7 +87,7 @@
 
         <span data-i18n="has_account">Already have an account?</span>
 
-        <a href="login.html" data-i18n="login_link">
+        <a href="index.html" data-i18n="login_link">
 
             Login
 

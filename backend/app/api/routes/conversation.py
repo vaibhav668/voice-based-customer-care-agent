@@ -148,6 +148,8 @@ def list_admin_enriched_conversations(
             if user:
                 conv.user_id = user.id
                 db.commit()
+                user_name = user.full_name
+                user_phone = user.phone
 
         # If phone still not resolved, show as Unknown but still include in CRM
         if not user_phone:

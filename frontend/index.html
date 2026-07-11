@@ -269,33 +269,35 @@
 
         <form id="login-form">
 
-            <div class="input-group">
-
-                <i class="fa-solid fa-envelope"></i>
-
-                <input
-                    id="email"
-                    type="email"
-                    placeholder="Email"
-                    data-i18n-placeholder="email_placeholder"
-                    required>
-
+            <div class="input-group" style="display: flex; gap: 8px;">
+                <div style="position: relative; flex: 1; display: flex; align-items: center;">
+                    <i class="fa-solid fa-phone" style="position: absolute; left: 15px;"></i>
+                    <input
+                        id="phone"
+                        type="tel"
+                        placeholder="Phone Number"
+                        data-i18n-placeholder="phone_placeholder"
+                        style="padding-left: 40px; width: 100%;"
+                        required>
+                </div>
+                <button
+                    id="send-otp-btn"
+                    type="button"
+                    style="margin-top: 0; width: auto; white-space: nowrap; padding: 0 16px; font-size: 13.5px; background: linear-gradient(135deg, var(--teal), var(--blue)); border: none; color: white; border-radius: 8px; cursor: pointer;">
+                    Send OTP
+                </button>
             </div>
 
             <div class="input-group">
 
-                <i class="fa-solid fa-lock"></i>
+                <i class="fa-solid fa-key"></i>
 
                 <input
-                    id="password"
-                    type="password"
-                    placeholder="Password"
-                    data-i18n-placeholder="password_placeholder"
+                    id="otp"
+                    type="text"
+                    placeholder="OTP"
+                    data-i18n-placeholder="otp_placeholder"
                     required>
-
-                <i
-                    id="toggle-password"
-                    class="fa-solid fa-eye"></i>
 
             </div>
 

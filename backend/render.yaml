@@ -19,7 +19,9 @@ services:
       - key: PORT
         value: "8000"
       - key: DATABASE_URL
-        value: sqlite:///./supportai.db
+        fromDatabase:
+          name: support-ai-db
+          property: connectionString
       - key: API_PREFIX
         value: /api/v1
       - key: LOG_LEVEL
@@ -42,3 +44,7 @@ services:
         sync: false
       - key: SECRET_KEY
         generateValue: true
+
+databases:
+  - name: support-ai-db
+    plan: free

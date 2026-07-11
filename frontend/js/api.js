@@ -55,8 +55,8 @@ async function request(url, options = {}) {
     if (response.status === 401) {
         removeToken();
         const path = window.location.pathname;
-        if (!path.includes("login.html") && !path.includes("register.html") && path !== "/" && !path.endsWith("/index.html")) {
-            window.location.href = path.includes("/pages/") ? "../login.html" : "login.html";
+        if (!path.includes("index.html") && !path.includes("register.html") && path !== "/" && !path.endsWith("/index.html")) {
+            window.location.href = path.includes("/pages/") ? "../index.html" : "index.html";
         }
     }
 
