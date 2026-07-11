@@ -73,10 +73,10 @@ class User(UUIDMixin, TimestampMixin, Base):
     def full_name(self, value: str):
         self.name_encrypted = value
 
-    email: Mapped[str] = mapped_column(
+    email: Mapped[str | None] = mapped_column(
         String(255),
         unique=True,
-        nullable=False,
+        nullable=True,
         index=True,
     )
 
@@ -87,9 +87,9 @@ class User(UUIDMixin, TimestampMixin, Base):
         index=True,
     )
 
-    password_hash: Mapped[str] = mapped_column(
+    password_hash: Mapped[str | None] = mapped_column(
         String(255),
-        nullable=False,
+        nullable=True,
     )
     
 
