@@ -18,7 +18,7 @@ const bookingCode = new URLSearchParams(
 ).get("code");
 
 async function loadBooking() {
-
+    if (!token) return;
     try {
 
         const booking = await getBooking(bookingCode);

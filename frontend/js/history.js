@@ -19,6 +19,7 @@ let currentSearchQuery = "";
 let activeConversationId = null;
 
 function initHistoryPage() {
+    if (!token) return;
     const searchInput = document.getElementById("history-search");
     const tabBtns = document.querySelectorAll(".tab-btn");
 
@@ -59,6 +60,7 @@ async function fetchAPI(endpoint) {
 }
 
 async function loadConversations() {
+    if (!token) return;
     const convList = document.getElementById("conv-list");
     convList.innerHTML = `<div class="empty-state"><p>Loading conversations...</p></div>`;
 

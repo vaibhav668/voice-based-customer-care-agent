@@ -20,7 +20,7 @@ window.location.search
 ).get("code");
 
 async function loadTrip(){
-
+    if (!token) return;
     try{
 
         const trip =

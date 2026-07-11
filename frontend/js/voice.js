@@ -220,6 +220,7 @@ async function processVoice(audio) {
 }
 
 function initVoice() {
+    if (!token) return;
     langManager.init("lang-selector-container");
     renderLanguagePrompt();
 

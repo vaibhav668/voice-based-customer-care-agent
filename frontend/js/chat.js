@@ -78,6 +78,7 @@ async function handleSend() {
 }
 
 function initChat() {
+    if (!token) return;
     langManager.init("lang-selector-container");
 
     const sendBtn = getSendBtn();

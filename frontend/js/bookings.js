@@ -14,7 +14,7 @@ document.addEventListener("DOMContentLoaded", () => {
 const container = document.getElementById("booking-list");
 
 async function loadBookings() {
-
+    if (!token) return;
     try {
 
         const response = await getBookings();

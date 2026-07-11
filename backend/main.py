@@ -44,32 +44,7 @@ origins = [
     "http://127.0.0.1:5173",
 ]
 
-raw_origins = getattr(settings, "allowed_origins", "") or ""
-if raw_origins:
-    if raw_origins.strip() == "*":
-        origins = ["*"]
-    else:
-        for o in raw_origins.split(","):
-            if o.strip() and o.strip() not in origins:
-                origins.append(o.strip())
 
-if origins == ["*"]:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=False,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-else:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=origins,
-        allow_origin_regex=r"https://.*\.vercel\.app",
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
 
 from pathlib import Path
 
@@ -116,6 +91,33 @@ app.include_router(websocket_router)
 register_exception_handlers(app)
 app.include_router(health_router)
 app.add_middleware(RequestIDMiddleware)
+
+raw_origins = getattr(settings, "allowed_origins", "") or ""
+if raw_origins:
+    if raw_origins.strip() == "*":
+        origins = ["*"]
+    else:
+        for o in raw_origins.split(","):
+            if o.strip() and o.strip() not in origins:
+                origins.append(o.strip())
+
+if origins == ["*"]:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_origin_regex=r"https://.*\.vercel\.app",
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 @app.get("/")
 async def root():
     return {

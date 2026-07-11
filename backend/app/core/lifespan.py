@@ -456,6 +456,18 @@ def auto_seed_database():
             db.commit()
             logger.info("Seeded default campaign: Outbound Support July")
 
+        # Ensure all existing bookings are linked to a test user if user_id is null
+        null_user_bookings = db.query(Booking).filter(Booking.user_id == None).all()
+        if null_user_bookings:
+            default_user = db.query(User).filter_by(role=UserRole.CUSTOMER).first()
+            if not default_user:
+                default_user = db.query(User).first()
+            if default_user:
+                for bk in null_user_bookings:
+                    bk.user_id = default_user.id
+                db.commit()
+                logger.info(f"Synced {len(null_user_bookings)} bookings to user {default_user.email}")
+
         logger.info("✅ Database seeded with all customer support test scenarios.")
     except Exception as e:
         logger.warning(f"Auto-seed warning: {e}")

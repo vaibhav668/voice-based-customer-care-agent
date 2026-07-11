@@ -76,11 +76,9 @@ def list_admin_enriched_conversations(
         )
 
         # 1. Look up registered user info directly linked to conversation
-        if conv.user_id:
-            user = db.get(User, conv.user_id)
-            if user:
-                user_phone = user.phone
-                user_name = user.full_name
+        if conv.user:
+            user_phone = conv.user.phone
+            user_name = conv.user.full_name
 
         # Try to get booking code from messages
         msg_with_booking = None
@@ -89,18 +87,16 @@ def list_admin_enriched_conversations(
                 booking_code = m.booking_code
                 break
 
-        # Alternatively try from conv.booking_id
-        if not booking_code and conv.booking_id:
-            bk = db.get(Booking, conv.booking_id)
-            if bk:
-                booking_code = bk.booking_code
+        # Alternatively try from conv.booking
+        if not booking_code and conv.booking:
+            booking_code = conv.booking.booking_code
 
         # Fetch booking details if code found
         if booking_code:
-            bk = db.query(Booking).filter_by(booking_code=booking_code).first()
+            bk = conv.booking if (conv.booking and conv.booking.booking_code == booking_code) else db.query(Booking).filter_by(booking_code=booking_code).first()
             if bk:
-                trip = db.get(Trip, bk.trip_id) if bk.trip_id else None
-                route = db.get(Route, trip.route_id) if (trip and trip.route_id) else None
+                trip = bk.trip
+                route = trip.route if trip else None
                 booking_details = {
                     "booking_code": booking_code,
                     "seat_number": bk.seat_number,
@@ -112,11 +108,9 @@ def list_admin_enriched_conversations(
                     "destination": route.destination_city if route else None,
                 }
                 # 2. Fallback to booking owner if conversation itself is guest
-                if not user_phone and bk.user_id:
-                    user = db.get(User, bk.user_id)
-                    if user:
-                        user_phone = user.phone
-                        user_name = user.full_name
+                if not user_phone and bk.user:
+                    user_phone = bk.user.phone
+                    user_name = bk.user.full_name
 
         # 3. Check if session_id is a phone number (e.g. voice call)
         if not user_phone and conv.session_id and conv.session_id.isdigit() and len(conv.session_id) >= 10:
