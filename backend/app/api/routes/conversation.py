@@ -149,9 +149,11 @@ def list_admin_enriched_conversations(
                 conv.user_id = user.id
                 db.commit()
 
-        # Filter: Skip conversations with no phone number resolved
+        # If phone still not resolved, show as Unknown but still include in CRM
         if not user_phone:
-            continue
+            user_phone = "Unknown"
+        if not user_name:
+            user_name = "Guest"
 
         user_messages = [m.message for m in msgs if m.sender == "USER"]
         ai_messages = [m.message for m in msgs if m.sender == "AI"]
@@ -172,9 +174,9 @@ def list_admin_enriched_conversations(
             "user_id": str(conv.user_id) if conv.user_id else None,
             "user_phone": user_phone,
             "user_name": user_name,
-            "channel": conv.channel,
+            "channel": conv.channel.value if hasattr(conv.channel, "value") else str(conv.channel),
             "language": conv.language,
-            "status": conv.status,
+            "status": conv.status.value if hasattr(conv.status, "value") else str(conv.status),
             "resolution_status": conv.resolution_status or "unresolved",
             "current_intent": conv.current_intent,
             "message_count": conv.message_count or 0,

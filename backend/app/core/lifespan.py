@@ -9,6 +9,29 @@ from app.database.base import Base
 import app.database.models  # Ensures all ORM models are registered with Base.metadata
 
 
+def ensure_admin_roles():
+    """Guarantees that all designated admin accounts have the ADMIN role.
+    This runs separately from seeding so it always executes even if DB is pre-seeded."""
+    from app.database.session import SessionLocal
+    from app.database.models.user import User, UserRole
+
+    db = SessionLocal()
+    try:
+        # List of emails that MUST be ADMIN
+        admin_emails = ["admin@gmail.com", "admin@example.com"]
+        for email in admin_emails:
+            user = db.query(User).filter_by(email=email).first()
+            if user and user.role != UserRole.ADMIN:
+                user.role = UserRole.ADMIN
+                db.commit()
+                logger.info(f"Enforced ADMIN role on {email}")
+    except Exception as e:
+        logger.warning(f"ensure_admin_roles warning: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+
 def auto_seed_database():
     from app.database.session import SessionLocal
     from app.database.models.booking import Booking, BookingStatus, PaymentStatus
@@ -23,9 +46,11 @@ def auto_seed_database():
     db = SessionLocal()
     try:
         # 1. Create and verify all test users
+        # IMPORTANT: Use phone numbers that don't conflict with existing DB entries.
+        # These are the authoritative phone numbers for seeded accounts.
         test_users_data = [
             {"email": "vaibhav@gmail.com", "name": "Vaibhav Pokhriyal", "pw": "vaibhav123", "phone": "9568987360", "role": UserRole.CUSTOMER},
-            {"email": "admin@gmail.com", "name": "admin", "pw": "admin123", "phone": "9568987369", "role": UserRole.ADMIN},
+            {"email": "admin@gmail.com", "name": "Admin User", "pw": "admin123", "phone": "9568987369", "role": UserRole.ADMIN},
             {"email": "mnc@gmail.com", "name": "mnc", "pw": "mnc123", "phone": "9568987361", "role": UserRole.CUSTOMER},
             {"email": "vpokhriyal35@gmail.com", "name": "vaibhav", "pw": "vpokhriyal35123", "phone": "9568987362", "role": UserRole.CUSTOMER},
             {"email": "vaibhav100@example.com", "name": "Vaibhav", "pw": "vaibhav100123", "phone": "9568987363", "role": UserRole.CUSTOMER},
@@ -41,6 +66,12 @@ def auto_seed_database():
             hashed_pw = hash_password(ud["pw"])
             role_val = ud.get("role", UserRole.CUSTOMER)
             if not user:
+                # Check if phone already taken by another user before creating
+                existing_phone = db.query(User).filter_by(phone=ud["phone"]).first()
+                if existing_phone:
+                    logger.warning(f"Phone {ud['phone']} already in use by {existing_phone.email}, skipping create for {ud['email']}")
+                    users_dict[ud["email"]] = existing_phone
+                    continue
                 user = User(
                     id=uuid.uuid4(),
                     full_name=ud["name"],
@@ -57,19 +88,21 @@ def auto_seed_database():
                 db.refresh(user)
                 logger.info(f"Created test user: {ud['email']}")
             else:
-                # Ensure the password hash and role are correctly synced/reset to the known value
+                # Always sync password hash and role to the authoritative values
                 user.password_hash = hashed_pw
                 user.role = role_val
                 db.commit()
                 db.refresh(user)
             users_dict[ud["email"]] = user
 
-        user = users_dict["vaibhav@gmail.com"]  # Primary user for booking scenarios
-        other_user = users_dict["other@example.com"]
+        # Primary user for booking scenarios — use whichever vaibhav user exists
+        user = users_dict.get("vaibhav@gmail.com") or db.query(User).filter(User.role == UserRole.CUSTOMER).first()
+        other_user = users_dict.get("other@example.com") or user
 
-        # Check if already seeded to avoid duplicates
+        # Check if already seeded to avoid duplicates — note: role sync above already ran
         existing = db.query(Booking).filter(Booking.booking_code == "BK-1234").first()
         if existing:
+            logger.info("Database already seeded, skipping booking/route creation.")
             return
 
         logger.info("🌱 Seeding database with customer support test scenarios (BK-1234, BK-5678, etc.)...")
@@ -475,6 +508,7 @@ async def lifespan(app):
             logger.warning(f"Auto-migration warning: {e}")
 
         auto_seed_database()
+        ensure_admin_roles()  # Always enforce admin roles after seed (handles pre-seeded DBs)
 
         # Automatically ingest RAG knowledge files at startup
         try:
