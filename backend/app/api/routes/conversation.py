@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import select
 
 from app.auth.dependencies import get_optional_current_user
 from app.database.session import get_db
@@ -15,6 +16,135 @@ router = APIRouter(
     prefix="/api/v1/conversations",
     tags=["Conversations"],
 )
+
+
+@router.get("/admin/enriched", response_model=dict)
+def list_admin_enriched_conversations(
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    current_user=Depends(get_optional_current_user),
+    db: Session = Depends(get_db),
+):
+    """Admin-only endpoint: returns all conversations enriched with user phone, name, and booking details."""
+    role = current_user.get("role") if current_user else None
+    if role != "ADMIN":
+        from app.exceptions.common import UnauthorizedException
+        raise UnauthorizedException("Access restricted to administrators")
+
+    from app.database.models.conversation import Conversation
+    from app.database.models.user import User
+    from app.database.models.booking import Booking
+    from app.database.models.trip import Trip
+    from app.database.models.route import Route
+    from app.database.models.conversation_message import ConversationMessage
+    import json
+
+    stmt = (
+        select(Conversation)
+        .where(Conversation.is_deleted == False)
+        .order_by(Conversation.updated_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    conversations = db.scalars(stmt).all()
+
+    enriched = []
+    for conv in conversations:
+        user_phone = None
+        user_name = None
+        booking_code = None
+        booking_details = None
+
+        # Get user info
+        if conv.user_id:
+            user = db.get(User, conv.user_id)
+            if user:
+                user_phone = user.phone
+                user_name = user.full_name
+
+        # Try to get booking code from messages
+        msg_with_booking = (
+            db.query(ConversationMessage)
+            .filter(
+                ConversationMessage.conversation_id == conv.id,
+                ConversationMessage.booking_code != None,
+            )
+            .first()
+        )
+        if msg_with_booking:
+            booking_code = msg_with_booking.booking_code
+
+        # Alternatively try from conv.booking_id
+        if not booking_code and conv.booking_id:
+            bk = db.get(Booking, conv.booking_id)
+            if bk:
+                booking_code = bk.booking_code
+
+        # Fetch booking details if code found
+        if booking_code:
+            bk = db.query(Booking).filter_by(booking_code=booking_code).first()
+            if bk:
+                trip = db.get(Trip, bk.trip_id) if bk.trip_id else None
+                route = db.get(Route, trip.route_id) if (trip and trip.route_id) else None
+                booking_details = {
+                    "booking_code": booking_code,
+                    "seat_number": bk.seat_number,
+                    "booking_status": bk.booking_status.value if hasattr(bk.booking_status, "value") else str(bk.booking_status),
+                    "payment_status": bk.payment_status.value if hasattr(bk.payment_status, "value") else str(bk.payment_status),
+                    "departure_time": trip.departure_time.isoformat() if (trip and trip.departure_time) else None,
+                    "arrival_time": trip.arrival_time.isoformat() if (trip and trip.arrival_time) else None,
+                    "source": route.source_city if route else None,
+                    "destination": route.destination_city if route else None,
+                }
+
+        # Build AI analysis summary from messages
+        msgs = (
+            db.query(ConversationMessage)
+            .filter(ConversationMessage.conversation_id == conv.id)
+            .order_by(ConversationMessage.created_at)
+            .all()
+        )
+        user_messages = [m.message for m in msgs if m.sender == "USER"]
+        ai_messages = [m.message for m in msgs if m.sender == "AI"]
+        intents = list({m.intent for m in msgs if m.intent})
+        tools = list({m.tool_used for m in msgs if m.tool_used})
+
+        # Infer possible problem from last user message and resolution status
+        last_user_msg = user_messages[-1] if user_messages else None
+        possible_problem = last_user_msg if last_user_msg else "No user input recorded"
+        if conv.resolution_status == "escalated":
+            possible_problem = f"⚠️ Escalated — {possible_problem}"
+        elif conv.resolution_status == "unresolved":
+            possible_problem = f"🔴 Unresolved — {possible_problem}"
+
+        enriched.append({
+            "id": str(conv.id),
+            "session_id": conv.session_id,
+            "user_id": str(conv.user_id) if conv.user_id else None,
+            "user_phone": user_phone,
+            "user_name": user_name,
+            "channel": conv.channel,
+            "language": conv.language,
+            "status": conv.status,
+            "resolution_status": conv.resolution_status or "unresolved",
+            "current_intent": conv.current_intent,
+            "message_count": conv.message_count or 0,
+            "sentiment": conv.sentiment,
+            "summary": conv.summary,
+            "booking_code": booking_code,
+            "booking_details": booking_details,
+            "intents_detected": intents,
+            "tools_used": tools,
+            "possible_problem": possible_problem,
+            "started_at": conv.started_at.isoformat() if conv.started_at else None,
+            "updated_at": conv.updated_at.isoformat() if conv.updated_at else None,
+        })
+
+    return success_response(
+        data={"conversations": enriched, "total": len(enriched)},
+        message="Admin enriched conversations fetched",
+    )
+
 
 
 @router.get("", response_model=dict)

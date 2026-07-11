@@ -7,9 +7,11 @@ import {
     getConversationDetail,
     getAnalyticsBookings,
     updateResolutionStatus,
-    submitCallReview
+    submitCallReview,
+    getAdminEnrichedConversations
 } from "./api.js";
 import { clearAll, getToken } from "./storage.js";
+
 
 // Global state
 let adminProfile = null;
@@ -146,7 +148,6 @@ async function loadBookings(silent = false) {
             return;
         }
 
-        // Render Bookings into Table
         tbody.innerHTML = bookingsList.map(b => {
             const bStatusClass = b.booking_status === "CONFIRMED" ? "confirmed" : (b.booking_status === "CANCELLED" ? "cancelled" : "pending");
             const pStatusClass = b.payment_status === "PAID" ? "paid" : "pending";
@@ -163,7 +164,6 @@ async function loadBookings(silent = false) {
                 </tr>
             `;
         }).join("");
-
     } catch (err) {
         console.error("Failed to load bookings list:", err);
         if (!silent) {
@@ -171,6 +171,9 @@ async function loadBookings(silent = false) {
         }
     }
 }
+
+// Master enriched conversations store
+let allEnrichedConvs = [];
 
 async function loadConversations(silent = false) {
     const listContainer = document.getElementById("live-conversations-list");
@@ -181,106 +184,94 @@ async function loadConversations(silent = false) {
     }
 
     try {
-        const response = await getConversations();
-        const conversations = response.data.conversations || [];
+        const response = await getAdminEnrichedConversations(100);
+        const conversations = response.data?.conversations || [];
+        allEnrichedConvs = conversations;
 
-        // Dynamic Real-time Calculations
+        // Stats
         const totalCalls = conversations.length;
         const activeCalls = conversations.filter(c => c.status === "ACTIVE").length;
         const resolvedCalls = conversations.filter(c => c.resolution_status === "resolved").length;
         const escalatedCalls = conversations.filter(c => c.resolution_status === "escalated").length;
+        const resRate = totalCalls > 0 ? ((resolvedCalls / totalCalls) * 100).toFixed(1) : "0.0";
+        const escRate = totalCalls > 0 ? ((escalatedCalls / totalCalls) * 100).toFixed(1) : "0.0";
 
-        const resRate = totalCalls > 0 ? ((resolvedCalls / totalCalls) * 100).toFixed(1) : "94.0";
-        const escRate = totalCalls > 0 ? ((escalatedCalls / totalCalls) * 100).toFixed(1) : "2.0";
-
-        // Update statistics cards
-        const callsCountEl = document.getElementById("stat-todays-calls");
-        if (callsCountEl) callsCountEl.textContent = totalCalls;
-
-        const activeCallsEl = document.getElementById("stat-active-calls");
-        if (activeCallsEl) activeCallsEl.textContent = activeCalls;
-
-        const resRateEl = document.getElementById("stat-resolution-rate");
-        if (resRateEl) {
-            resRateEl.textContent = `${resRate}%`;
-            const progressFill = document.querySelector(".stat-card .progress-fill");
-            if (progressFill) progressFill.style.width = `${resRate}%`;
+        const el = id => document.getElementById(id);
+        if (el("stat-todays-calls")) el("stat-todays-calls").textContent = totalCalls;
+        if (el("stat-active-calls")) el("stat-active-calls").textContent = activeCalls;
+        if (el("stat-resolution-rate")) {
+            el("stat-resolution-rate").textContent = `${resRate}%`;
+            const pf = document.querySelector(".stat-card .progress-fill");
+            if (pf) pf.style.width = `${resRate}%`;
         }
-
-        const escRateEl = document.getElementById("stat-transfer-rate");
-        if (escRateEl) escRateEl.textContent = `${escRate}%`;
-
-        const liveCountEl = document.getElementById("live-calls-count");
-        if (liveCountEl) liveCountEl.textContent = activeCalls;
+        if (el("stat-transfer-rate")) el("stat-transfer-rate").textContent = `${escRate}%`;
+        if (el("live-calls-count")) el("live-calls-count").textContent = activeCalls;
 
         if (conversations.length === 0) {
-            listContainer.innerHTML = `<div style="text-align:center; padding: 20px; color:var(--text-dim)">No active customer sessions found.</div>`;
+            listContainer.innerHTML = `<div style="text-align:center; padding: 20px; color:var(--text-dim)">No customer sessions found in database.</div>`;
         } else {
-            // Find currently highlighted item to keep class selected
             const activeItem = listContainer.querySelector(".list-item.active");
             const activeId = activeItem ? activeItem.dataset.convId : null;
 
             listContainer.innerHTML = conversations.map((c, idx) => {
                 const channelIcon = c.channel === "VOICE" ? "fa-microphone-lines" : "fa-comments";
-                const badgeClass = c.channel === "VOICE" ? "style='color: var(--purple)'" : "style='color: var(--cyan)'";
+                const channelColor = c.channel === "VOICE" ? "var(--purple)" : "var(--cyan)";
                 const dateStr = c.updated_at ? new Date(c.updated_at).toLocaleTimeString() : "";
                 const isSelected = activeId ? (c.id === activeId) : (idx === 0);
+                const phone = c.user_phone || "Unknown";
+                const name = c.user_name || "Guest";
+                const resClass = c.resolution_status === "resolved" ? "badge-resolved" : (c.resolution_status === "escalated" ? "badge-escalated" : "badge-frustration");
 
                 return `
                     <div class="list-item ${isSelected ? 'active' : ''}" data-conv-id="${c.id}">
                         <div class="item-meta">
-                            <span class="channel"><i class="fa-solid ${channelIcon}" ${badgeClass}></i> ${c.channel}</span>
+                            <span class="channel"><i class="fa-solid ${channelIcon}" style="color:${channelColor}"></i> ${c.channel}</span>
                             <span>${dateStr}</span>
                         </div>
-                        <div class="item-title">${c.current_intent || 'General Support'}</div>
-                        <div class="item-subtitle">Lang: ${(c.language || 'en').toUpperCase()} | Msg: ${c.message_count || 0} | Res: ${(c.resolution_status || 'unresolved').toUpperCase()}</div>
+                        <div class="item-title">
+                            <i class="fa-solid fa-phone" style="color:var(--teal); font-size:11px;"></i>
+                            <strong style="font-family:var(--font-mono); color:white; font-size:13.5px;">${phone}</strong>
+                            <span style="color:var(--text-dim); font-size:11px; margin-left:6px;">${name}</span>
+                        </div>
+                        <div class="item-subtitle">
+                            ${c.booking_code ? `<i class="fa-solid fa-ticket" style="color:var(--teal)"></i> ${c.booking_code} | ` : ""}
+                            Msgs: ${c.message_count} | <span class="badge ${resClass}" style="font-size:9px; padding: 2px 6px;">${c.resolution_status.toUpperCase()}</span>
+                        </div>
                     </div>
                 `;
             }).join("");
 
-            // Click handlers
             const items = listContainer.querySelectorAll(".list-item");
             items.forEach(item => {
                 item.addEventListener("click", () => {
                     items.forEach(i => i.classList.remove("active"));
                     item.classList.add("active");
-                    loadConversationDetail(item.dataset.convId);
+                    loadEnrichedConversationDetail(item.dataset.convId);
                 });
             });
+
+            // Auto-load first conversation detail
+            const currentlyActive = listContainer.querySelector(".list-item.active");
+            if (currentlyActive && !silent) {
+                loadEnrichedConversationDetail(currentlyActive.dataset.convId);
+            }
         }
 
-        // Fetch Complaints (Tickets)
-        await loadComplaints();
+        // Populate Support Interceptions panel on dashboard
+        renderInterceptionsFromEnriched(conversations);
 
-        // Load detail if nothing is highlighted
-        const currentlyActive = listContainer.querySelector(".list-item.active");
-        if (currentlyActive && !silent) {
-            loadConversationDetail(currentlyActive.dataset.convId);
-        } else if (conversations.length > 0 && !silent) {
-            loadConversationDetail(conversations[0].id);
-        }
+        // Populate Tickets tab
+        renderTicketsFromEnriched(conversations);
 
     } catch (err) {
-        console.error("Failed to load conversations list:", err);
+        console.error("Failed to load enriched conversations:", err);
         if (!silent) {
-            listContainer.innerHTML = `<div style="text-align:center; padding: 20px; color:var(--red)">Failed to load.</div>`;
+            listContainer.innerHTML = `<div style="text-align:center; padding: 20px; color:var(--red)">Failed to load. Check backend connection.</div>`;
         }
     }
 }
 
-async function loadComplaints() {
-    try {
-        const response = await getComplaints();
-        const complaints = response.data || response;
-        
-        renderInterceptions(complaints);
-        renderTickets(complaints);
-    } catch (err) {
-        console.error("Failed to load complaints:", err);
-        renderInterceptions([]);
-        renderTickets([]);
-    }
-}
+
 
 async function selectAndLoadConversation(convId) {
     // 1. Switch active view to Live Calls tab
@@ -404,7 +395,407 @@ function formatRelativeTime(isoString) {
     }
 }
 
+/* ---- ENRICHED: Support Interceptions (right panel on Dashboard) ---- */
+function renderInterceptionsFromEnriched(conversations) {
+    const feed = document.getElementById("dashboard-interceptions");
+    if (!feed) return;
+
+    if (!conversations || conversations.length === 0) {
+        feed.innerHTML = `<div style="text-align:center; padding: 20px; color:var(--text-dim)">No active conversations in database.</div>`;
+        return;
+    }
+
+    // Show top 6, prioritizing unresolved/escalated
+    const prioritized = [...conversations].sort((a, b) => {
+        const score = s => s === "escalated" ? 2 : s === "unresolved" ? 1 : 0;
+        return score(b.resolution_status) - score(a.resolution_status);
+    }).slice(0, 6);
+
+    feed.innerHTML = prioritized.map(c => {
+        const dateStr = c.updated_at ? formatRelativeTime(c.updated_at) : "recently";
+        const resStatus = c.resolution_status || "unresolved";
+        const badgeClass = resStatus === "resolved" ? "badge-resolved" : (resStatus === "escalated" ? "badge-escalated" : "badge-frustration");
+        const phone = c.user_phone || "Unknown";
+        const name = c.user_name || "Guest";
+        const booking = c.booking_details;
+        const route = booking ? `${booking.source || "?"} → ${booking.destination || "?"}` : (c.booking_code || "No booking");
+        const problem = escapeHTML((c.possible_problem || "").substring(0, 120));
+        const intents = (c.intents_detected || []).join(", ") || "—";
+
+        return `
+            <div class="interception-item clickable-card" data-conv-id="${c.id}" style="cursor: pointer;">
+                <div class="item-header">
+                    <span class="ticket-code">
+                        <i class="fa-solid fa-phone" style="color:var(--teal)"></i>
+                        <strong style="font-family:var(--font-mono); color:white;">${phone}</strong>
+                        <span style="color:var(--text-dim); font-size:11px; margin-left:4px;">${name}</span>
+                    </span>
+                    <span class="time-stamp">${dateStr}</span>
+                </div>
+                <p class="item-body" style="margin: 6px 0; color: var(--text-dim); font-size: 12px; line-height:1.5;">
+                    ${problem || "No user message recorded."}
+                </p>
+                <div style="font-size: 10.5px; color: var(--cyan); margin-bottom: 6px;">
+                    <i class="fa-solid fa-route"></i> ${route} &nbsp;|&nbsp;
+                    <i class="fa-solid fa-brain"></i> ${intents}
+                </div>
+                <div class="item-footer">
+                    <span class="badge ${badgeClass}">${resStatus.toUpperCase()}</span>
+                    <button class="btn-transcript-view" data-conv-id="${c.id}">View Convo</button>
+                </div>
+            </div>
+        `;
+    }).join("");
+
+    feed.querySelectorAll(".interception-item, .btn-transcript-view").forEach(el => {
+        el.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const convId = el.dataset.convId;
+            if (convId) {
+                switchToTab("live-calls");
+                loadEnrichedConversationDetail(convId);
+                // highlight in list
+                const items = document.querySelectorAll("#live-conversations-list .list-item");
+                items.forEach(item => {
+                    item.classList.toggle("active", item.dataset.convId === convId);
+                });
+            }
+        });
+    });
+}
+
+/* ---- ENRICHED: Tickets tab populated from conversations ---- */
+function renderTicketsFromEnriched(conversations) {
+    const listContainer = document.getElementById("tickets-list");
+    if (!listContainer) return;
+
+    if (!conversations || conversations.length === 0) {
+        listContainer.innerHTML = `<div style="text-align:center; padding: 20px; color:var(--text-dim)">No ticket/conversation records found.</div>`;
+        return;
+    }
+
+    listContainer.innerHTML = conversations.map((c, idx) => {
+        const dateStr = c.updated_at ? formatRelativeTime(c.updated_at) : "recently";
+        const phone = c.user_phone || "Unknown";
+        const name = c.user_name || "Guest";
+        const resStatus = c.resolution_status || "unresolved";
+        const resClass = resStatus === "resolved" ? "badge-resolved" : (resStatus === "escalated" ? "badge-escalated" : "badge-frustration");
+        const booking = c.booking_code || "N/A";
+
+        return `
+            <div class="list-item ${idx === 0 ? 'active' : ''}" data-conv-id="${c.id}">
+                <div class="item-meta">
+                    <span style="font-family:var(--font-mono); color:white; font-size:12.5px;"><i class="fa-solid fa-phone" style="color:var(--teal)"></i> ${phone}</span>
+                    <span>${dateStr}</span>
+                </div>
+                <div class="item-title">${name} &mdash; ${c.channel}</div>
+                <div class="item-subtitle">
+                    Booking: ${booking} | Msgs: ${c.message_count}
+                    <span class="badge ${resClass}" style="font-size:9px; padding:2px 6px; margin-left:4px;">${resStatus.toUpperCase()}</span>
+                </div>
+            </div>
+        `;
+    }).join("");
+
+    const items = listContainer.querySelectorAll(".list-item");
+    items.forEach(item => {
+        item.addEventListener("click", () => {
+            items.forEach(i => i.classList.remove("active"));
+            item.classList.add("active");
+            loadEnrichedTicketDetail(item.dataset.convId);
+        });
+    });
+
+    if (conversations.length > 0) {
+        loadEnrichedTicketDetail(conversations[0].id);
+    }
+}
+
+/* ---- ENRICHED: Ticket detail panel ---- */
+async function loadEnrichedTicketDetail(convId) {
+    const detailCol = document.getElementById("ticket-detail");
+    if (!detailCol) return;
+
+    detailCol.innerHTML = `<div class="empty-state-panel"><i class="fa-solid fa-spinner fa-spin fa-2x"></i></div>`;
+
+    const conv = allEnrichedConvs.find(c => c.id === convId);
+    if (!conv) {
+        detailCol.innerHTML = `<div class="empty-state-panel"><h3>Ticket not found</h3></div>`;
+        return;
+    }
+
+    const phone = conv.user_phone || "Unknown";
+    const name = conv.user_name || "Guest";
+    const bk = conv.booking_details;
+    const resStatus = conv.resolution_status || "unresolved";
+    const resClass = resStatus === "resolved" ? "badge-resolved" : (resStatus === "escalated" ? "badge-escalated" : "badge-frustration");
+
+    // Fetch full conversation messages
+    let messagesHtml = `<div style="text-align:center; color:var(--text-dim); padding:20px;">No messages recorded.</div>`;
+    try {
+        const detailRes = await getConversationDetail(convId);
+        const detail = detailRes.data || detailRes;
+        const msgs = detail.messages || [];
+        if (msgs.length > 0) {
+            messagesHtml = msgs.map(m => {
+                const isUser = m.sender === "USER";
+                const rowClass = isUser ? "user" : "ai";
+                const label = isUser ? `📱 ${phone}` : "🤖 AI Agent";
+                const msgTime = m.created_at ? new Date(m.created_at).toLocaleTimeString() : "";
+                let tags = [];
+                if (m.intent) tags.push(`<span class="meta-pill">Intent: ${m.intent}</span>`);
+                if (m.tool_used) tags.push(`<span class="meta-pill">Tool: ${m.tool_used}</span>`);
+                if (m.booking_code) tags.push(`<span class="meta-pill" style="color:var(--teal)">Booking: ${m.booking_code}</span>`);
+                return `
+                    <div class="bubble-row ${rowClass}">
+                        <span class="bubble-sender">${label} • ${msgTime}</span>
+                        <div class="bubble-text">${escapeHTML(m.message)}</div>
+                        <div class="bubble-meta-tags">${tags.join("")}</div>
+                    </div>`;
+            }).join("");
+        }
+    } catch(e) {
+        messagesHtml = `<div style="text-align:center; color:var(--red);">Failed to load transcript.</div>`;
+    }
+
+    detailCol.innerHTML = `
+        <div class="detail-header">
+            <div class="detail-header-info">
+                <h3><i class="fa-solid fa-phone" style="color:var(--teal)"></i> ${phone} &mdash; ${name}</h3>
+                <p>Channel: ${conv.channel} | Lang: ${(conv.language || 'en').toUpperCase()} | Msgs: ${conv.message_count}</p>
+            </div>
+            <div class="detail-actions">
+                <span class="badge ${resClass}">${resStatus.toUpperCase()}</span>
+            </div>
+        </div>
+
+        ${bk ? `
+        <div style="padding:12px 16px; background:rgba(0,200,150,0.06); border-bottom:1px solid var(--line); display:flex; gap:24px; font-size:12px; flex-wrap:wrap;">
+            <span><i class="fa-solid fa-ticket" style="color:var(--teal)"></i> <strong>${bk.booking_code}</strong></span>
+            <span><i class="fa-solid fa-route" style="color:var(--blue)"></i> ${bk.source || "?"} → ${bk.destination || "?"}</span>
+            <span><i class="fa-solid fa-chair" style="color:var(--purple)"></i> Seat ${bk.seat_number || "?"}</span>
+            <span class="badge-status ${bk.booking_status === 'CONFIRMED' ? 'confirmed' : 'cancelled'}">${bk.booking_status}</span>
+            <span class="badge-status ${bk.payment_status === 'PAID' ? 'paid' : 'pending'}">${bk.payment_status}</span>
+        </div>` : ""}
+
+        ${conv.possible_problem ? `
+        <div style="padding: 10px 16px; background: rgba(255,80,80,0.06); border-bottom: 1px solid var(--line); font-size: 12px; color: var(--text-dim);">
+            <i class="fa-solid fa-triangle-exclamation" style="color:var(--red)"></i>
+            <strong style="color:var(--text)"> Possible Issue:</strong> ${escapeHTML(conv.possible_problem)}
+        </div>` : ""}
+
+        <div class="conversation-body" style="flex-grow:1; overflow-y:auto; padding: 12px 16px;">
+            ${messagesHtml}
+        </div>
+
+        <div class="review-segment" style="padding:12px 16px; border-top:1px solid var(--line); background:rgba(0,0,0,0.2);">
+            <div style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
+                <span style="font-size:13px; font-weight:600; color:var(--text-dim)">Resolution:</span>
+                <select id="ticket-res-select-${convId}" style="background:var(--surface-2); border:1px solid var(--line); color:white; padding:6px 10px; border-radius:6px; font-size:12.5px;">
+                    <option value="unresolved" ${resStatus === 'unresolved' ? 'selected' : ''}>Unresolved</option>
+                    <option value="resolved" ${resStatus === 'resolved' ? 'selected' : ''}>Resolved</option>
+                    <option value="escalated" ${resStatus === 'escalated' ? 'selected' : ''}>Escalated</option>
+                </select>
+            </div>
+        </div>
+    `;
+
+    const resSelect = document.getElementById(`ticket-res-select-${convId}`);
+    if (resSelect) {
+        resSelect.addEventListener("change", async (e) => {
+            try {
+                await updateResolutionStatus(convId, e.target.value);
+                await loadConversations(true);
+            } catch (err) {
+                console.error("Failed to update resolution:", err);
+            }
+        });
+    }
+    const body = detailCol.querySelector(".conversation-body");
+    if (body) body.scrollTop = body.scrollHeight;
+}
+
+/* ---- ENRICHED: Live call detail panel ---- */
+async function loadEnrichedConversationDetail(convId) {
+    const detailCol = document.getElementById("live-call-detail");
+    if (!detailCol) return;
+
+    detailCol.innerHTML = `<div class="empty-state-panel"><i class="fa-solid fa-spinner fa-spin fa-2x"></i></div>`;
+
+    const enriched = allEnrichedConvs.find(c => c.id === convId);
+    const phone = enriched?.user_phone || "Unknown";
+    const name = enriched?.user_name || "Guest";
+
+    try {
+        const response = await getConversationDetail(convId);
+        const c = response.data || response;
+
+        if (!c) {
+            detailCol.innerHTML = `<div class="empty-state-panel"><h3>Conversation not found</h3></div>`;
+            return;
+        }
+
+        const dateStr = c.updated_at ? new Date(c.updated_at).toLocaleString() : "";
+        const messages = c.messages || [];
+        const bk = enriched?.booking_details;
+
+        let messagesHtml = `<div class="empty-state-panel"><p>No messages recorded.</p></div>`;
+        if (messages.length > 0) {
+            messagesHtml = messages.map(m => {
+                const isUser = m.sender === "USER";
+                const rowClass = isUser ? "user" : "ai";
+                const label = isUser ? `📱 ${phone}` : "🤖 AI Agent";
+                const msgTime = m.created_at ? new Date(m.created_at).toLocaleTimeString() : "";
+                let metaTags = [];
+                if (m.intent) metaTags.push(`<span class="meta-pill">NLU: ${m.intent}</span>`);
+                if (m.tool_used) metaTags.push(`<span class="meta-pill">Tool: ${m.tool_used}</span>`);
+                if (m.booking_code) metaTags.push(`<span class="meta-pill" style="border-color:var(--teal);color:var(--teal)">Booking: ${m.booking_code}</span>`);
+                if (m.response_time_ms) metaTags.push(`<span class="meta-pill">${m.response_time_ms}ms</span>`);
+                let audioWidget = "";
+                if (m.audio_path) {
+                    let cleanPath = m.audio_path.replace(/\\/g, "/");
+                    if (!cleanPath.startsWith("http")) {
+                        const tempIdx = cleanPath.indexOf("temp/");
+                        const genIdx = cleanPath.indexOf("generated_audio/");
+                        if (tempIdx !== -1) cleanPath = cleanPath.substring(tempIdx);
+                        else if (genIdx !== -1) cleanPath = cleanPath.substring(genIdx);
+                        else cleanPath = `generated_audio/${cleanPath}`;
+                    }
+                    const audioUrl = cleanPath.startsWith("http") ? cleanPath : `${getBaseUrl()}/${cleanPath}`;
+                    audioWidget = `<div style="margin-top:8px;"><audio controls style="width:100%;max-width:280px;height:32px;"><source src="${audioUrl}" type="audio/webm"></audio></div>`;
+                }
+                return `
+                    <div class="bubble-row ${rowClass}">
+                        <span class="bubble-sender">${label} • ${msgTime}</span>
+                        <div class="bubble-text">${escapeHTML(m.message)} ${audioWidget}</div>
+                        <div class="bubble-meta-tags">${metaTags.join("")}</div>
+                    </div>`;
+            }).join("");
+        }
+
+        const resStatus = c.resolution_status || "unresolved";
+
+        detailCol.innerHTML = `
+            <div class="detail-header">
+                <div class="detail-header-info">
+                    <h3>
+                        <i class="fa-solid fa-phone" style="color:var(--teal)"></i>
+                        <span style="font-family:var(--font-mono); color:white;">${phone}</span>
+                        <span style="font-size:14px; color:var(--text-dim); margin-left:8px;">${name}</span>
+                    </h3>
+                    <p>Channel: ${c.channel} | Lang: ${(c.language||'en').toUpperCase()} | Last Updated: ${dateStr}</p>
+                </div>
+                <div class="detail-actions">
+                    <span class="live-badge" style="background:rgba(53,216,182,0.1); color:var(--teal); border:1px solid var(--teal);">${c.status}</span>
+                </div>
+            </div>
+
+            ${bk ? `
+            <div style="padding:10px 16px; background:rgba(0,200,150,0.06); border-bottom:1px solid var(--line); display:flex; gap:20px; font-size:12px; flex-wrap:wrap; align-items:center;">
+                <span><i class="fa-solid fa-ticket" style="color:var(--teal)"></i> <strong>${bk.booking_code}</strong></span>
+                <span><i class="fa-solid fa-route" style="color:var(--blue)"></i> ${bk.source||"?"} → ${bk.destination||"?"}</span>
+                <span><i class="fa-solid fa-chair" style="color:var(--purple)"></i> Seat ${bk.seat_number||"?"}</span>
+                <span class="badge-status ${bk.booking_status==='CONFIRMED'?'confirmed':'cancelled'}">${bk.booking_status}</span>
+                <span class="badge-status ${bk.payment_status==='PAID'?'paid':'pending'}">${bk.payment_status}</span>
+                ${bk.departure_time ? `<span style="color:var(--text-dim)"><i class="fa-solid fa-clock"></i> ${new Date(bk.departure_time).toLocaleString()}</span>` : ""}
+            </div>` : ""}
+
+            ${enriched?.possible_problem ? `
+            <div style="padding:8px 16px; background:rgba(255,80,80,0.05); border-bottom:1px solid var(--line); font-size:12px; color:var(--text-dim);">
+                <i class="fa-solid fa-triangle-exclamation" style="color:var(--red)"></i>
+                <strong style="color:var(--text)"> Possible Issue:</strong> ${escapeHTML(enriched.possible_problem)}
+            </div>` : ""}
+
+            <div class="conversation-body" style="flex-grow:1; overflow-y:auto;">
+                ${messagesHtml}
+            </div>
+
+            <div class="review-segment" style="padding:16px; border-top:1px solid var(--line); background:rgba(0,0,0,0.25); display:flex; flex-direction:column; gap:12px;">
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+                    <div style="font-size:13px; font-weight:600; color:var(--text-dim);"><i class="fa-solid fa-square-check"></i> Resolution status:</div>
+                    <select class="resolution-select" id="res-select-${c.id}" style="background:var(--surface-2); border:1px solid var(--line); color:white; padding:6px 10px; border-radius:6px; font-size:12.5px;">
+                        <option value="unresolved" ${resStatus==='unresolved'?'selected':''}>Unresolved</option>
+                        <option value="resolved" ${resStatus==='resolved'?'selected':''}>Resolved</option>
+                        <option value="escalated" ${resStatus==='escalated'?'selected':''}>Escalated</option>
+                    </select>
+                </div>
+                <div style="font-size:11px; font-weight:700; color:var(--text-dim); text-transform:uppercase;"><i class="fa-solid fa-list-check"></i> QA Reviews Trail</div>
+                <div class="qa-reviews-list" id="qa-reviews-${c.id}" style="font-size:12px; display:flex; flex-direction:column; gap:6px; max-height:90px; overflow-y:auto; background:rgba(0,0,0,0.15); padding:8px; border-radius:6px; border:1px solid rgba(255,255,255,0.03);">Loading QA trail...</div>
+                <form class="qa-review-form" id="qa-form-${c.id}" style="display:flex; gap:8px; align-items:center;">
+                    <input type="text" placeholder="Outcome tag (e.g. Helpful)" id="qa-tag-${c.id}" required style="padding:10px; font-size:12px; border:1px solid var(--line); background:var(--surface-2); border-radius:6px; flex:1;">
+                    <input type="text" placeholder="QA review notes..." id="qa-notes-${c.id}" style="padding:10px; font-size:12px; border:1px solid var(--line); background:var(--surface-2); border-radius:6px; flex:2;">
+                    <button type="submit" style="margin-top:0; padding:10px 14px; width:auto; font-size:12.5px; white-space:nowrap;">Submit QA</button>
+                </form>
+            </div>
+        `;
+
+        const body = detailCol.querySelector(".conversation-body");
+        if (body) body.scrollTop = body.scrollHeight;
+
+        const resSelect = document.getElementById(`res-select-${c.id}`);
+        if (resSelect) {
+            resSelect.addEventListener("change", async (e) => {
+                try {
+                    await updateResolutionStatus(c.id, e.target.value);
+                    await loadConversations(true);
+                } catch (err) { console.error("Failed to update resolution:", err); }
+            });
+        }
+
+        const loadQaReviews = async () => {
+            const listDiv = document.getElementById(`qa-reviews-${c.id}`);
+            if (!listDiv) return;
+            try {
+                const reviewsRes = await fetch(`${getBaseUrl()}/api/v1/conversations/${c.id}/reviews`, {
+                    headers: { "Authorization": `Bearer ${getToken()}` }
+                });
+                const reviewsJson = await reviewsRes.json();
+                const reviews = reviewsJson.data || [];
+                if (reviews.length === 0) {
+                    listDiv.innerHTML = `<span style="color:var(--text-dim); font-style:italic;">No QA reviews logged.</span>`;
+                } else {
+                    listDiv.innerHTML = reviews.map(r => {
+                        const rDate = new Date(r.reviewed_at).toLocaleTimeString();
+                        return `<div style="padding:6px 4px; border-bottom:1px solid rgba(255,255,255,0.03); line-height:1.4;">
+                            <strong style="color:var(--teal)">[${escapeHTML(r.outcome_tag)}]</strong>
+                            <span style="color:var(--text)">${escapeHTML(r.notes||'')}</span>
+                            <span style="color:var(--text-dim); font-size:10px; float:right;">${rDate}</span>
+                        </div>`;
+                    }).join("");
+                }
+            } catch (err) {
+                listDiv.innerHTML = `<span style="color:var(--red)">Failed to load QA trail.</span>`;
+            }
+        };
+
+        const qaForm = document.getElementById(`qa-form-${c.id}`);
+        if (qaForm) {
+            qaForm.addEventListener("submit", async (e) => {
+                e.preventDefault();
+                const tagInput = document.getElementById(`qa-tag-${c.id}`);
+                const notesInput = document.getElementById(`qa-notes-${c.id}`);
+                if (!tagInput) return;
+                try {
+                    await submitCallReview(c.id, tagInput.value, notesInput?.value || "");
+                    tagInput.value = "";
+                    if (notesInput) notesInput.value = "";
+                    await loadQaReviews();
+                } catch (err) {
+                    console.error("Failed to submit QA review:", err);
+                    alert("Error: " + err.message);
+                }
+            });
+        }
+        loadQaReviews();
+
+    } catch (err) {
+        console.error("Failed to load conversation details:", err);
+        detailCol.innerHTML = `<div class="empty-state-panel"><p style="color:var(--red)">Failed to load details.</p></div>`;
+    }
+}
+
 async function loadConversationDetail(convId) {
+
     const detailCol = document.getElementById("live-call-detail");
     if (!detailCol) return;
 
