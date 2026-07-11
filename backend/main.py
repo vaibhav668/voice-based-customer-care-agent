@@ -118,6 +118,23 @@ else:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+@app.get("/api/v1/debug-users")
+def debug_users():
+    from app.database.session import SessionLocal
+    from app.database.models.user import User
+    db = SessionLocal()
+    try:
+        users = db.query(User).all()
+        return [{
+            "id": str(u.id),
+            "email": u.email,
+            "phone": u.phone,
+            "full_name": u.full_name,
+            "role": u.role.value
+        } for u in users]
+    finally:
+        db.close()
+
 @app.get("/")
 async def root():
     return {
