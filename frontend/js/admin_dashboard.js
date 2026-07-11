@@ -176,11 +176,13 @@ async function loadBookings(silent = false) {
 let allEnrichedConvs = [];
 
 async function loadConversations(silent = false) {
-    const listContainer = document.getElementById("live-conversations-list");
-    if (!listContainer) return;
+    const chatListContainer = document.getElementById("chat-conversations-list");
+    const callListContainer = document.getElementById("call-conversations-list");
+    if (!chatListContainer && !callListContainer) return;
 
     if (!silent) {
-        listContainer.innerHTML = `<div style="text-align:center; padding: 20px;"><i class="fa-solid fa-spinner fa-spin"></i> Fetching active logs...</div>`;
+        if (chatListContainer) chatListContainer.innerHTML = `<div style="text-align:center; padding: 20px;"><i class="fa-solid fa-spinner fa-spin"></i> Fetching active chats...</div>`;
+        if (callListContainer) callListContainer.innerHTML = `<div style="text-align:center; padding: 20px;"><i class="fa-solid fa-spinner fa-spin"></i> Fetching active calls...</div>`;
     }
 
     try {
@@ -205,15 +207,28 @@ async function loadConversations(silent = false) {
             if (pf) pf.style.width = `${resRate}%`;
         }
         if (el("stat-transfer-rate")) el("stat-transfer-rate").textContent = `${escRate}%`;
-        if (el("live-calls-count")) el("live-calls-count").textContent = activeCalls;
 
-        if (conversations.length === 0) {
-            listContainer.innerHTML = `<div style="text-align:center; padding: 20px; color:var(--text-dim)">No customer sessions found in database.</div>`;
-        } else {
-            const activeItem = listContainer.querySelector(".list-item.active");
+        // Split lists
+        const chatConversations = conversations.filter(c => c.channel === "CHAT");
+        const callConversations = conversations.filter(c => c.channel === "VOICE");
+
+        // Active counts for the subtabs:
+        const activeChatsCount = chatConversations.filter(c => c.status === "ACTIVE").length;
+        const activeCallsCount = callConversations.filter(c => c.status === "ACTIVE").length;
+        if (el("live-chats-count")) el("live-chats-count").textContent = activeChatsCount;
+        if (el("live-calls-count")) el("live-calls-count").textContent = activeCallsCount;
+
+        const renderList = (convList, container) => {
+            if (!container) return;
+            if (convList.length === 0) {
+                container.innerHTML = `<div style="text-align:center; padding: 20px; color:var(--text-dim)">No sessions found.</div>`;
+                return;
+            }
+
+            const activeItem = container.querySelector(".list-item.active");
             const activeId = activeItem ? activeItem.dataset.convId : null;
 
-            listContainer.innerHTML = conversations.map((c, idx) => {
+            container.innerHTML = convList.map((c, idx) => {
                 const channelIcon = c.channel === "VOICE" ? "fa-microphone-lines" : "fa-comments";
                 const channelColor = c.channel === "VOICE" ? "var(--purple)" : "var(--cyan)";
                 const dateStr = c.updated_at ? new Date(c.updated_at).toLocaleTimeString() : "";
@@ -241,7 +256,7 @@ async function loadConversations(silent = false) {
                 `;
             }).join("");
 
-            const items = listContainer.querySelectorAll(".list-item");
+            const items = container.querySelectorAll(".list-item");
             items.forEach(item => {
                 item.addEventListener("click", () => {
                     items.forEach(i => i.classList.remove("active"));
@@ -249,11 +264,24 @@ async function loadConversations(silent = false) {
                     loadEnrichedConversationDetail(item.dataset.convId);
                 });
             });
+        };
 
-            // Auto-load first conversation detail
-            const currentlyActive = listContainer.querySelector(".list-item.active");
-            if (currentlyActive && !silent) {
-                loadEnrichedConversationDetail(currentlyActive.dataset.convId);
+        renderList(chatConversations, chatListContainer);
+        renderList(callConversations, callListContainer);
+
+        // Auto-load first conversation detail for both if not silent
+        if (!silent) {
+            if (chatListContainer) {
+                const currentlyActiveChat = chatListContainer.querySelector(".list-item.active");
+                if (currentlyActiveChat) {
+                    loadEnrichedConversationDetail(currentlyActiveChat.dataset.convId);
+                }
+            }
+            if (callListContainer) {
+                const currentlyActiveCall = callListContainer.querySelector(".list-item.active");
+                if (currentlyActiveCall) {
+                    loadEnrichedConversationDetail(currentlyActiveCall.dataset.convId);
+                }
             }
         }
 
@@ -266,19 +294,22 @@ async function loadConversations(silent = false) {
     } catch (err) {
         console.error("Failed to load enriched conversations:", err);
         if (!silent) {
-            listContainer.innerHTML = `<div style="text-align:center; padding: 20px; color:var(--red)">Failed to load. Check backend connection.</div>`;
+            if (chatListContainer) chatListContainer.innerHTML = `<div style="text-align:center; padding: 20px; color:var(--red)">Failed to load. Check backend connection.</div>`;
+            if (callListContainer) callListContainer.innerHTML = `<div style="text-align:center; padding: 20px; color:var(--red)">Failed to load. Check backend connection.</div>`;
         }
     }
 }
 
-
-
 async function selectAndLoadConversation(convId) {
-    // 1. Switch active view to Live Calls tab
-    switchToTab("live-calls");
+    const conv = allEnrichedConvs.find(c => c.id === convId);
+    const targetTab = (conv && conv.channel === "CHAT") ? "chat-support" : "call-support";
+
+    // 1. Switch active view to correct tab
+    switchToTab(targetTab);
 
     // 2. Select and highlight list item
-    const items = document.querySelectorAll("#live-conversations-list .list-item");
+    const listId = targetTab === "chat-support" ? "chat-conversations-list" : "call-conversations-list";
+    const items = document.querySelectorAll(`#${listId} .list-item`);
     items.forEach(item => {
         item.classList.remove("active");
         if (item.dataset.convId === convId) {
@@ -288,12 +319,12 @@ async function selectAndLoadConversation(convId) {
     });
 
     // 3. Load detail messages
-    await loadConversationDetail(convId);
+    await loadEnrichedConversationDetail(convId);
 }
 
 async function selectAndLoadConversationByBooking(bookingCode) {
     if (!bookingCode) {
-        switchToTab("live-calls");
+        switchToTab("chat-support");
         return;
     }
 
@@ -306,12 +337,12 @@ async function selectAndLoadConversationByBooking(bookingCode) {
             const matchedConv = results[0];
             await selectAndLoadConversation(matchedConv.id);
         } else {
-            switchToTab("live-calls");
+            switchToTab("chat-support");
             console.log(`No active conversation logs found for booking: ${bookingCode}`);
         }
     } catch (err) {
         console.error("Error searching conversation by booking code:", err);
-        switchToTab("live-calls");
+        switchToTab("chat-support");
     }
 }
 
@@ -452,10 +483,14 @@ function renderInterceptionsFromEnriched(conversations) {
             e.stopPropagation();
             const convId = el.dataset.convId;
             if (convId) {
-                switchToTab("live-calls");
+                const conv = allEnrichedConvs.find(c => c.id === convId);
+                const targetTab = (conv && conv.channel === "CHAT") ? "chat-support" : "call-support";
+                switchToTab(targetTab);
                 loadEnrichedConversationDetail(convId);
+                
                 // highlight in list
-                const items = document.querySelectorAll("#live-conversations-list .list-item");
+                const listId = targetTab === "chat-support" ? "chat-conversations-list" : "call-conversations-list";
+                const items = document.querySelectorAll(`#${listId} .list-item`);
                 items.forEach(item => {
                     item.classList.toggle("active", item.dataset.convId === convId);
                 });
@@ -617,12 +652,14 @@ async function loadEnrichedTicketDetail(convId) {
 
 /* ---- ENRICHED: Live call detail panel ---- */
 async function loadEnrichedConversationDetail(convId) {
-    const detailCol = document.getElementById("live-call-detail");
+    const enriched = allEnrichedConvs.find(c => c.id === convId);
+    const channel = enriched?.channel || "VOICE";
+    const detailContainerId = channel === "CHAT" ? "chat-support-detail" : "call-support-detail";
+    const detailCol = document.getElementById(detailContainerId);
     if (!detailCol) return;
 
     detailCol.innerHTML = `<div class="empty-state-panel"><i class="fa-solid fa-spinner fa-spin fa-2x"></i></div>`;
 
-    const enriched = allEnrichedConvs.find(c => c.id === convId);
     const phone = enriched?.user_phone || "Unknown";
     const name = enriched?.user_name || "Guest";
 
@@ -675,11 +712,12 @@ async function loadEnrichedConversationDetail(convId) {
 
         const resStatus = c.resolution_status || "unresolved";
 
+        // Setup Layout with Tabs
         detailCol.innerHTML = `
             <div class="detail-header">
                 <div class="detail-header-info">
                     <h3>
-                        <i class="fa-solid fa-phone" style="color:var(--teal)"></i>
+                        <i class="fa-solid ${channel === 'CHAT' ? 'fa-comments' : 'fa-phone'}" style="color:var(--teal)"></i>
                         <span style="font-family:var(--font-mono); color:white;">${phone}</span>
                         <span style="font-size:14px; color:var(--text-dim); margin-left:8px;">${name}</span>
                     </h3>
@@ -690,41 +728,62 @@ async function loadEnrichedConversationDetail(convId) {
                 </div>
             </div>
 
-            ${bk ? `
-            <div style="padding:10px 16px; background:rgba(0,200,150,0.06); border-bottom:1px solid var(--line); display:flex; gap:20px; font-size:12px; flex-wrap:wrap; align-items:center;">
-                <span><i class="fa-solid fa-ticket" style="color:var(--teal)"></i> <strong>${bk.booking_code}</strong></span>
-                <span><i class="fa-solid fa-route" style="color:var(--blue)"></i> ${bk.source||"?"} → ${bk.destination||"?"}</span>
-                <span><i class="fa-solid fa-chair" style="color:var(--purple)"></i> Seat ${bk.seat_number||"?"}</span>
-                <span class="badge-status ${bk.booking_status==='CONFIRMED'?'confirmed':'cancelled'}">${bk.booking_status}</span>
-                <span class="badge-status ${bk.payment_status==='PAID'?'paid':'pending'}">${bk.payment_status}</span>
-                ${bk.departure_time ? `<span style="color:var(--text-dim)"><i class="fa-solid fa-clock"></i> ${new Date(bk.departure_time).toLocaleString()}</span>` : ""}
-            </div>` : ""}
-
-            ${enriched?.possible_problem ? `
-            <div style="padding:8px 16px; background:rgba(255,80,80,0.05); border-bottom:1px solid var(--line); font-size:12px; color:var(--text-dim);">
-                <i class="fa-solid fa-triangle-exclamation" style="color:var(--red)"></i>
-                <strong style="color:var(--text)"> Possible Issue:</strong> ${escapeHTML(enriched.possible_problem)}
-            </div>` : ""}
-
-            <div class="conversation-body" style="flex-grow:1; overflow-y:auto;">
-                ${messagesHtml}
+            <!-- Detail Tabs Nav -->
+            <div class="detail-tabs-nav">
+                <button class="detail-tab-btn active" data-tab-target="transcript-${c.id}">
+                    <i class="fa-solid fa-file-invoice"></i> Transcript
+                </button>
+                <button class="detail-tab-btn" data-tab-target="qa-review-${c.id}">
+                    <i class="fa-solid fa-clipboard-check"></i> QA Review
+                </button>
             </div>
 
-            <div class="review-segment" style="padding:16px; border-top:1px solid var(--line); background:rgba(0,0,0,0.25); display:flex; flex-direction:column; gap:12px;">
-                <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+            <!-- TAB 1: TRANSCRIPT CONTENT -->
+            <div id="transcript-container-${c.id}" class="detail-tab-content" style="display:flex; flex-direction:column; flex-grow:1; overflow:hidden;">
+                ${bk ? `
+                <div style="padding:10px 16px; background:rgba(0,200,150,0.06); border-bottom:1px solid var(--line); display:flex; gap:20px; font-size:12px; flex-wrap:wrap; align-items:center;">
+                    <span><i class="fa-solid fa-ticket" style="color:var(--teal)"></i> <strong>${bk.booking_code}</strong></span>
+                    <span><i class="fa-solid fa-route" style="color:var(--blue)"></i> ${bk.source||"?"} → ${bk.destination||"?"}</span>
+                    <span><i class="fa-solid fa-chair" style="color:var(--purple)"></i> Seat ${bk.seat_number||"?"}</span>
+                    <span class="badge-status ${bk.booking_status==='CONFIRMED'?'confirmed':'cancelled'}">${bk.booking_status}</span>
+                    <span class="badge-status ${bk.payment_status==='PAID'?'paid':'pending'}">${bk.payment_status}</span>
+                    ${bk.departure_time ? `<span style="color:var(--text-dim)"><i class="fa-solid fa-clock"></i> ${new Date(bk.departure_time).toLocaleString()}</span>` : ""}
+                </div>` : ""}
+
+                ${enriched?.possible_problem ? `
+                <div style="padding:8px 16px; background:rgba(255,80,80,0.05); border-bottom:1px solid var(--line); font-size:12px; color:var(--text-dim);">
+                    <i class="fa-solid fa-triangle-exclamation" style="color:var(--red)"></i>
+                    <strong style="color:var(--text)"> Possible Issue:</strong> ${escapeHTML(enriched.possible_problem)}
+                </div>` : ""}
+
+                <div class="conversation-body" style="flex-grow:1; overflow-y:auto; padding: 12px 16px;">
+                    ${messagesHtml}
+                </div>
+
+                <div class="resolution-bar" style="padding:16px; border-top:1px solid var(--line); background:rgba(0,0,0,0.25); display:flex; align-items:center; justify-content:space-between; gap:12px;">
                     <div style="font-size:13px; font-weight:600; color:var(--text-dim);"><i class="fa-solid fa-square-check"></i> Resolution status:</div>
-                    <select class="resolution-select" id="res-select-${c.id}" style="background:var(--surface-2); border:1px solid var(--line); color:white; padding:6px 10px; border-radius:6px; font-size:12.5px;">
+                    <select class="resolution-select" id="res-select-${c.id}" style="background:var(--surface-2); border:1px solid var(--line); color:white; padding:6px 10px; border-radius:6px; font-size:12.5px; outline:none; cursor:pointer;">
                         <option value="unresolved" ${resStatus==='unresolved'?'selected':''}>Unresolved</option>
                         <option value="resolved" ${resStatus==='resolved'?'selected':''}>Resolved</option>
                         <option value="escalated" ${resStatus==='escalated'?'selected':''}>Escalated</option>
                     </select>
                 </div>
-                <div style="font-size:11px; font-weight:700; color:var(--text-dim); text-transform:uppercase;"><i class="fa-solid fa-list-check"></i> QA Reviews Trail</div>
-                <div class="qa-reviews-list" id="qa-reviews-${c.id}" style="font-size:12px; display:flex; flex-direction:column; gap:6px; max-height:90px; overflow-y:auto; background:rgba(0,0,0,0.15); padding:8px; border-radius:6px; border:1px solid rgba(255,255,255,0.03);">Loading QA trail...</div>
-                <form class="qa-review-form" id="qa-form-${c.id}" style="display:flex; gap:8px; align-items:center;">
-                    <input type="text" placeholder="Outcome tag (e.g. Helpful)" id="qa-tag-${c.id}" required style="padding:10px; font-size:12px; border:1px solid var(--line); background:var(--surface-2); border-radius:6px; flex:1;">
-                    <input type="text" placeholder="QA review notes..." id="qa-notes-${c.id}" style="padding:10px; font-size:12px; border:1px solid var(--line); background:var(--surface-2); border-radius:6px; flex:2;">
-                    <button type="submit" style="margin-top:0; padding:10px 14px; width:auto; font-size:12.5px; white-space:nowrap;">Submit QA</button>
+            </div>
+
+            <!-- TAB 2: QA REVIEW CONTENT -->
+            <div id="qa-review-container-${c.id}" class="detail-tab-content" style="display:none; flex-direction:column; flex-grow:1; overflow-y:auto; padding:16px; gap:12px; background:rgba(0,0,0,0.1);">
+                <div style="font-size:13px; font-weight:700; color:var(--text-dim); text-transform:uppercase;"><i class="fa-solid fa-list-check"></i> QA Reviews Trail</div>
+                <div class="qa-reviews-list" id="qa-reviews-${c.id}" style="font-size:12px; display:flex; flex-direction:column; gap:6px; min-height:80px; max-height:160px; overflow-y:auto; background:rgba(0,0,0,0.15); padding:8px; border-radius:6px; border:1px solid rgba(255,255,255,0.03);">Loading QA trail...</div>
+                
+                <div style="font-size:11.5px; font-weight:700; color:var(--text-dim); text-transform:uppercase; margin-top:8px;"><i class="fa-solid fa-pen-to-square"></i> Submit QA Review</div>
+                <form class="qa-review-form" id="qa-form-${c.id}" style="display:flex; flex-direction:column; gap:10px;">
+                    <div style="display:flex; flex-direction:column; gap:4px;">
+                        <input type="text" placeholder="Outcome tag (e.g. Helpful)" id="qa-tag-${c.id}" required style="padding:10px; font-size:12px; border:1px solid var(--line); background:var(--surface-2); border-radius:6px; color:white;">
+                    </div>
+                    <div style="display:flex; flex-direction:column; gap:4px;">
+                        <textarea placeholder="QA review notes..." id="qa-notes-${c.id}" style="padding:10px; font-size:12px; border:1px solid var(--line); background:var(--surface-2); border-radius:6px; color:white; min-height:60px; resize:vertical; font-family:inherit;"></textarea>
+                    </div>
+                    <button type="submit" style="margin-top:4px; padding:10px 14px; font-size:12.5px; cursor:pointer; background:linear-gradient(135deg, var(--teal), var(--blue)); border:none; color:white; border-radius:6px; font-weight:600;">Submit QA</button>
                 </form>
             </div>
         `;
@@ -732,6 +791,32 @@ async function loadEnrichedConversationDetail(convId) {
         const body = detailCol.querySelector(".conversation-body");
         if (body) body.scrollTop = body.scrollHeight;
 
+        // Tab Switching Logic
+        const tabBtns = detailCol.querySelectorAll(".detail-tab-btn");
+        const transcriptTab = detailCol.querySelector(`#transcript-container-${c.id}`);
+        const qaTab = detailCol.querySelector(`#qa-review-container-${c.id}`);
+
+        tabBtns.forEach(btn => {
+            btn.addEventListener("click", () => {
+                const target = btn.dataset.tabTarget;
+                tabBtns.forEach(b => {
+                    b.classList.remove("active");
+                });
+                btn.classList.add("active");
+
+                if (target.startsWith("transcript-")) {
+                    transcriptTab.style.display = "flex";
+                    qaTab.style.display = "none";
+                    if (body) body.scrollTop = body.scrollHeight;
+                } else {
+                    transcriptTab.style.display = "none";
+                    qaTab.style.display = "flex";
+                    loadQaReviews();
+                }
+            });
+        });
+
+        // Resolution select listener
         const resSelect = document.getElementById(`res-select-${c.id}`);
         if (resSelect) {
             resSelect.addEventListener("change", async (e) => {
@@ -742,6 +827,7 @@ async function loadEnrichedConversationDetail(convId) {
             });
         }
 
+        // QA Reviews load helper
         const loadQaReviews = async () => {
             const listDiv = document.getElementById(`qa-reviews-${c.id}`);
             if (!listDiv) return;
@@ -768,6 +854,7 @@ async function loadEnrichedConversationDetail(convId) {
             }
         };
 
+        // QA form submit listener
         const qaForm = document.getElementById(`qa-form-${c.id}`);
         if (qaForm) {
             qaForm.addEventListener("submit", async (e) => {
@@ -786,6 +873,8 @@ async function loadEnrichedConversationDetail(convId) {
                 }
             });
         }
+
+        // Initially load QA reviews in background
         loadQaReviews();
 
     } catch (err) {
@@ -795,189 +884,7 @@ async function loadEnrichedConversationDetail(convId) {
 }
 
 async function loadConversationDetail(convId) {
-
-    const detailCol = document.getElementById("live-call-detail");
-    if (!detailCol) return;
-
-    detailCol.innerHTML = `<div class="empty-state-panel"><i class="fa-solid fa-spinner fa-spin fa-2x"></i></div>`;
-
-    try {
-        const response = await getConversationDetail(convId);
-        const c = response.data || response;
-
-        if (!c) {
-            detailCol.innerHTML = `<div class="empty-state-panel"><h3>Conversation not found</h3></div>`;
-            return;
-        }
-
-        const dateStr = c.updated_at ? new Date(c.updated_at).toLocaleString() : "";
-        const messages = c.messages || [];
-
-        let messagesHtml = `<div class="empty-state-panel"><p>No messages recorded.</p></div>`;
-        if (messages.length > 0) {
-            messagesHtml = messages.map(m => {
-                const isUser = m.sender === "USER";
-                const rowClass = isUser ? "user" : "ai";
-                const label = isUser ? "User" : "AI Agent";
-                const msgTime = m.created_at ? new Date(m.created_at).toLocaleTimeString() : "";
-
-                let metaTags = [];
-                if (m.intent) metaTags.push(`<span class="meta-pill">NLU Intent: ${m.intent}</span>`);
-                if (m.tool_used) metaTags.push(`<span class="meta-pill">Tool: ${m.tool_used}</span>`);
-                if (m.booking_code) metaTags.push(`<span class="meta-pill" style="border-color: var(--teal); color: var(--teal)">Booking: ${m.booking_code}</span>`);
-                if (m.response_time_ms) metaTags.push(`<span class="meta-pill">${m.response_time_ms} ms</span>`);
-
-                let audioWidget = "";
-                if (m.audio_path) {
-                    let cleanPath = m.audio_path.replace(/\\/g, "/");
-                    if (!cleanPath.startsWith("http")) {
-                        const tempIdx = cleanPath.indexOf("temp/");
-                        const genIdx = cleanPath.indexOf("generated_audio/");
-                        if (tempIdx !== -1) {
-                            cleanPath = cleanPath.substring(tempIdx);
-                        } else if (genIdx !== -1) {
-                            cleanPath = cleanPath.substring(genIdx);
-                        } else {
-                            cleanPath = `generated_audio/${cleanPath}`;
-                        }
-                    }
-                    const audioUrl = cleanPath.startsWith("http") ? cleanPath : `${getBaseUrl()}/${cleanPath}`;
-                    audioWidget = `
-                        <div style="margin-top:8px;">
-                            <audio controls style="width:100%; max-width:280px; height: 32px;">
-                                <source src="${audioUrl}" type="audio/webm">
-                            </audio>
-                        </div>`;
-                }
-
-                return `
-                    <div class="bubble-row ${rowClass}">
-                        <span class="bubble-sender">${label} • ${msgTime}</span>
-                        <div class="bubble-text">${escapeHTML(m.message)} ${audioWidget}</div>
-                        <div class="bubble-meta-tags">
-                            ${metaTags.join("")}
-                        </div>
-                    </div>
-                `;
-            }).join("");
-        }
-
-        detailCol.innerHTML = `
-            <div class="detail-header">
-                <div class="detail-header-info">
-                    <h3>Session: ${c.session_id.slice(0, 12)}...</h3>
-                    <p>Channel: ${c.channel} | Lang: ${(c.language || 'en').toUpperCase()} | Last Updated: ${dateStr}</p>
-                </div>
-                <div class="detail-actions">
-                    <span class="live-badge" style="background: rgba(53, 216, 182, 0.1); color: var(--teal); border: 1px solid var(--teal)">Active</span>
-                </div>
-            </div>
-            
-            <div class="conversation-body" style="flex-grow: 1; overflow-y: auto;">
-                ${messagesHtml}
-            </div>
-
-            <!-- Resolution Status and Reviews Segment -->
-            <div class="review-segment" style="padding: 16px; border-top: 1px solid var(--line); background: rgba(0,0,0,0.25); display: flex; flex-direction: column; gap: 12px; border-bottom-left-radius: var(--radius-lg); border-bottom-right-radius: var(--radius-lg);">
-                <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
-                    <div style="font-size: 13px; font-weight: 600; color: var(--text-dim);"><i class="fa-solid fa-square-check"></i> Resolution status:</div>
-                    <select class="resolution-select" id="res-select-${c.id}" style="background: var(--surface-2); border: 1px solid var(--line); color: white; padding: 6px 10px; border-radius: 6px; font-size: 12.5px; outline: none; cursor: pointer;">
-                        <option value="unresolved" ${c.resolution_status === 'unresolved' ? 'selected' : ''}>Unresolved</option>
-                        <option value="resolved" ${c.resolution_status === 'resolved' ? 'selected' : ''}>Resolved</option>
-                        <option value="escalated" ${c.resolution_status === 'escalated' ? 'selected' : ''}>Escalated</option>
-                    </select>
-                </div>
-
-                <!-- Call QA Reviews list -->
-                <div style="font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; margin-top: 4px;"><i class="fa-solid fa-list-check"></i> QA Reviews Trail</div>
-                <div class="qa-reviews-list" id="qa-reviews-${c.id}" style="font-size: 12px; display: flex; flex-direction: column; gap: 6px; max-height: 90px; overflow-y: auto; background: rgba(0,0,0,0.15); padding: 8px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.03);">
-                    Loading QA trail...
-                </div>
-
-                <!-- Add Call Review Form -->
-                <form class="qa-review-form" id="qa-form-${c.id}" style="display: flex; gap: 8px; align-items: center; margin-top: 4px;">
-                    <input type="text" placeholder="Outcome tag (e.g. Helpful)" id="qa-tag-${c.id}" required style="padding: 10px; font-size: 12px; border: 1px solid var(--line); background: var(--surface-2); border-radius: 6px; flex: 1;">
-                    <input type="text" placeholder="QA review notes..." id="qa-notes-${c.id}" style="padding: 10px; font-size: 12px; border: 1px solid var(--line); background: var(--surface-2); border-radius: 6px; flex: 2;">
-                    <button type="submit" style="margin-top: 0; padding: 10px 14px; width: auto; font-size: 12.5px; white-space: nowrap;">Submit QA</button>
-                </form>
-            </div>
-        `;
-
-        // Scroll to bottom
-        const body = detailCol.querySelector(".conversation-body");
-        if (body) body.scrollTop = body.scrollHeight;
-
-        // Resolution Select Handler
-        const resSelect = document.getElementById(`res-select-${c.id}`);
-        if (resSelect) {
-            resSelect.addEventListener("change", async (e) => {
-                try {
-                    await updateResolutionStatus(c.id, e.target.value);
-                    console.log("Resolution status updated to:", e.target.value);
-                    // Silently reload list to sync badge status indicators
-                    await loadConversations(true);
-                } catch (err) {
-                    console.error("Failed to update resolution status:", err);
-                }
-            });
-        }
-
-        // Helper to load QA Reviews list
-        const loadQaReviews = async () => {
-            const listDiv = document.getElementById(`qa-reviews-${c.id}`);
-            if (!listDiv) return;
-            try {
-                const reviewsRes = await fetch(`${getBaseUrl()}/api/v1/conversations/${c.id}/reviews`, {
-                    headers: { "Authorization": `Bearer ${getToken()}` }
-                });
-                const reviewsJson = await reviewsRes.json();
-                const reviews = reviewsJson.data || [];
-                
-                if (reviews.length === 0) {
-                    listDiv.innerHTML = `<span style="color:var(--text-dim); font-style:italic;">No QA reviews logged for this conversation.</span>`;
-                } else {
-                    listDiv.innerHTML = reviews.map(r => {
-                        const rDate = new Date(r.reviewed_at).toLocaleTimeString();
-                        return `<div style="padding: 6px 4px; border-bottom: 1px solid rgba(255,255,255,0.03); line-height: 1.4;">
-                            <strong style="color:var(--teal)">[${escapeHTML(r.outcome_tag)}]</strong> 
-                            <span style="color:var(--text)">${escapeHTML(r.notes || '')}</span>
-                            <span style="color:var(--text-dim); font-size: 10px; float: right;">${rDate}</span>
-                        </div>`;
-                    }).join("");
-                }
-            } catch (err) {
-                listDiv.innerHTML = `<span style="color:var(--red)">Failed to load QA trail.</span>`;
-            }
-        };
-
-        // Form Submit Handler
-        const qaForm = document.getElementById(`qa-form-${c.id}`);
-        if (qaForm) {
-            qaForm.addEventListener("submit", async (e) => {
-                e.preventDefault();
-                const tagInput = document.getElementById(`qa-tag-${c.id}`);
-                const notesInput = document.getElementById(`qa-notes-${c.id}`);
-                if (!tagInput) return;
-
-                try {
-                    await submitCallReview(c.id, tagInput.value, notesInput.value);
-                    tagInput.value = "";
-                    notesInput.value = "";
-                    await loadQaReviews();
-                } catch (err) {
-                    console.error("Failed to submit QA review:", err);
-                    alert("Error submitting QA review: " + err.message);
-                }
-            });
-        }
-
-        // Initialize reviews loading
-        loadQaReviews();
-
-    } catch (err) {
-        console.error("Failed to load conversation details:", err);
-        detailCol.innerHTML = `<div class="empty-state-panel"><p style="color:var(--red)">Failed to load details.</p></div>`;
-    }
+    return loadEnrichedConversationDetail(convId);
 }
 
 function escapeHTML(str) {

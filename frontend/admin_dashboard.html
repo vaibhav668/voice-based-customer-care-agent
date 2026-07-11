@@ -37,9 +37,13 @@
                     <i class="fa-solid fa-chart-line"></i>
                     <span>Dashboard</span>
                 </button>
-                <button class="nav-item" data-tab="live-calls">
+                <button class="nav-item" data-tab="chat-support">
+                    <i class="fa-solid fa-comments"></i>
+                    <span>Chat Support</span>
+                </button>
+                <button class="nav-item" data-tab="call-support">
                     <i class="fa-solid fa-phone-volume"></i>
-                    <span>Live Calls</span>
+                    <span>Call Support</span>
                     <span class="pulse-badge">LIVE</span>
                 </button>
                 <button class="nav-item" data-tab="bookings">
@@ -296,24 +300,47 @@
                     </div>
                 </section>
 
-                <!-- 2. LIVE CALLS TAB -->
-                <section class="tab-pane" id="tab-live-calls">
+                <!-- 2a. CHAT SUPPORT TAB -->
+                <section class="tab-pane" id="tab-chat-support">
                     <div class="pane-split-layout">
                         <div class="pane-list-column">
                             <div class="column-header">
-                                <h3>Ongoing Conversations</h3>
-                                <div class="live-counter"><span class="tiny-pulse"></span> <span id="live-calls-count">3</span> Active</div>
+                                <h3>Ongoing Chats</h3>
+                                <div class="live-counter" style="color: var(--cyan); background: rgba(6, 182, 212, 0.08);"><span class="tiny-pulse" style="background: var(--cyan)"></span> <span id="live-chats-count">0</span> Active</div>
                             </div>
-                            <div class="scrollable-list" id="live-conversations-list">
+                            <div class="scrollable-list" id="chat-conversations-list">
                                 <!-- Populated dynamically -->
                             </div>
                         </div>
 
-                        <div class="pane-detail-column" id="live-call-detail">
+                        <div class="pane-detail-column" id="chat-support-detail">
+                            <div class="empty-state-panel">
+                                <i class="fa-solid fa-comments" style="font-size: 48px; color: var(--text-dim); margin-bottom: 16px;"></i>
+                                <h3>Select an active chat to monitor</h3>
+                                <p>Read live transcripts, inspect customer information, and manage resolutions.</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 2b. CALL SUPPORT TAB -->
+                <section class="tab-pane" id="tab-call-support">
+                    <div class="pane-split-layout">
+                        <div class="pane-list-column">
+                            <div class="column-header">
+                                <h3>Ongoing Calls</h3>
+                                <div class="live-counter"><span class="tiny-pulse"></span> <span id="live-calls-count">0</span> Active</div>
+                            </div>
+                            <div class="scrollable-list" id="call-conversations-list">
+                                <!-- Populated dynamically -->
+                            </div>
+                        </div>
+
+                        <div class="pane-detail-column" id="call-support-detail">
                             <div class="empty-state-panel">
                                 <i class="fa-solid fa-phone-volume" style="font-size: 48px; color: var(--text-dim); margin-bottom: 16px;"></i>
                                 <h3>Select an active call to monitor</h3>
-                                <p>You can listen in, read live transcripts, and inspect NLU logs in real time.</p>
+                                <p>You can listen in, read live transcripts, and inspect call logs in real time.</p>
                             </div>
                         </div>
                     </div>
