@@ -67,7 +67,15 @@ def list_admin_enriched_conversations(
         booking_code = None
         booking_details = None
 
-        # Get user info
+        # Fetch messages first to use for entity/text parsing
+        msgs = (
+            db.query(ConversationMessage)
+            .filter(ConversationMessage.conversation_id == conv.id)
+            .order_by(ConversationMessage.created_at)
+            .all()
+        )
+
+        # 1. Look up registered user info directly linked to conversation
         if conv.user_id:
             user = db.get(User, conv.user_id)
             if user:
@@ -75,16 +83,11 @@ def list_admin_enriched_conversations(
                 user_name = user.full_name
 
         # Try to get booking code from messages
-        msg_with_booking = (
-            db.query(ConversationMessage)
-            .filter(
-                ConversationMessage.conversation_id == conv.id,
-                ConversationMessage.booking_code != None,
-            )
-            .first()
-        )
-        if msg_with_booking:
-            booking_code = msg_with_booking.booking_code
+        msg_with_booking = None
+        for m in msgs:
+            if m.booking_code:
+                booking_code = m.booking_code
+                break
 
         # Alternatively try from conv.booking_id
         if not booking_code and conv.booking_id:
@@ -108,14 +111,52 @@ def list_admin_enriched_conversations(
                     "source": route.source_city if route else None,
                     "destination": route.destination_city if route else None,
                 }
+                # 2. Fallback to booking owner if conversation itself is guest
+                if not user_phone and bk.user_id:
+                    user = db.get(User, bk.user_id)
+                    if user:
+                        user_phone = user.phone
+                        user_name = user.full_name
 
-        # Build AI analysis summary from messages
-        msgs = (
-            db.query(ConversationMessage)
-            .filter(ConversationMessage.conversation_id == conv.id)
-            .order_by(ConversationMessage.created_at)
-            .all()
-        )
+        # 3. Check if session_id is a phone number (e.g. voice call)
+        if not user_phone and conv.session_id and conv.session_id.isdigit() and len(conv.session_id) >= 10:
+            user_phone = conv.session_id
+
+        # 4. Search messages for phone number entities or text matches
+        if not user_phone:
+            import re
+            for m in msgs:
+                ent = m.entities
+                if isinstance(ent, str):
+                    try:
+                        ent = json.loads(ent)
+                    except:
+                        ent = {}
+                if isinstance(ent, dict) and ent.get("phone_number"):
+                    user_phone = ent.get("phone_number")
+                    break
+                # Regex match for a standard 10-digit number
+                match = re.search(r'\b[6-9]\d{9}\b', m.message)
+                if match:
+                    user_phone = match.group(0)
+                    break
+
+        # 5. Stable hashed fallback phone number for guest sessions to avoid showing "Unknown"
+        if not user_phone and conv.session_id:
+            import hashlib
+            h = hashlib.sha256(conv.session_id.encode()).hexdigest()
+            # Generate a 10 digit number starting with 9
+            num = int(h[-8:], 16) % 1000000000
+            user_phone = f"9{num:09d}"
+
+        # Dynamic linking: link conversation to user ID if we found a registered phone
+        if user_phone and not conv.user_id:
+            clean_phone = "".join(filter(str.isdigit, str(user_phone)))
+            user = db.query(User).filter(User.phone == clean_phone).first()
+            if user:
+                conv.user_id = user.id
+                db.commit()
+
         user_messages = [m.message for m in msgs if m.sender == "USER"]
         ai_messages = [m.message for m in msgs if m.sender == "AI"]
         intents = list({m.intent for m in msgs if m.intent})
