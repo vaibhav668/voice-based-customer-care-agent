@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import select
+from sqlalchemy import select, func
 
 from app.auth.dependencies import get_optional_current_user
 from app.database.session import get_db
@@ -9,6 +9,7 @@ from app.schemas.conversation import (
     ConversationDetailSchema,
     ConversationSchema,
     PaginatedConversationsResponse,
+    ConversationMessageSchema,
 )
 from app.utils.response import success_response
 
@@ -39,9 +40,20 @@ def list_admin_enriched_conversations(
     from app.database.models.conversation_message import ConversationMessage
     import json
 
+    subq = (
+        select(Conversation.user_id, func.max(Conversation.updated_at).label("max_updated"))
+        .where(Conversation.user_id != None, Conversation.is_deleted == False)
+        .group_by(Conversation.user_id)
+        .subquery()
+    )
+
     stmt = (
         select(Conversation)
-        .where(Conversation.is_deleted == False)
+        .outerjoin(subq, Conversation.user_id == subq.c.user_id)
+        .where(
+            Conversation.is_deleted == False,
+            (Conversation.user_id == None) | (Conversation.updated_at == subq.c.max_updated)
+        )
         .order_by(Conversation.updated_at.desc())
         .limit(limit)
         .offset(offset)
@@ -249,6 +261,28 @@ def get_conversation_detail(
 
     data = ConversationDetailSchema.model_validate(conv).model_dump(mode="json")
     
+    # If requester is an admin and conversation is associated with a registered user, fetch all messages from all user conversations
+    if role == "ADMIN" and conv.user_id:
+        from app.database.models.conversation import Conversation
+        from app.database.models.conversation_message import ConversationMessage
+
+        # Get all conversations for this user
+        user_conv_ids = db.scalars(
+            select(Conversation.id).where(Conversation.user_id == conv.user_id, Conversation.is_deleted == False)
+        ).all()
+
+        # Query all messages for these conversations
+        all_msgs = db.scalars(
+            select(ConversationMessage)
+            .where(ConversationMessage.conversation_id.in_(user_conv_ids))
+            .order_by(ConversationMessage.created_at.asc())
+        ).all()
+
+        data["messages"] = [
+            ConversationMessageSchema.model_validate(m).model_dump(mode="json")
+            for m in all_msgs
+        ]
+
     # Gate recording_url by admin role
     if role != "ADMIN":
         data["recording_url"] = None
