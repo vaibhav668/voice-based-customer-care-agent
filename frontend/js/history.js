@@ -2,6 +2,11 @@ import { langManager } from "./language.js";
 import { getToken } from "./storage.js";
 import { getBaseUrl } from "./api.js";
 
+const token = getToken();
+if (!token) {
+    location.href = "../index.html";
+}
+
 const API_BASE = `${getBaseUrl()}/api/v1`;
 
 document.addEventListener("DOMContentLoaded", () => {

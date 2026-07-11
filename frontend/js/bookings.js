@@ -1,5 +1,11 @@
 import { getBookings } from "./api.js";
 import { langManager } from "./language.js";
+import { getToken } from "./storage.js";
+
+const token = getToken();
+if (!token) {
+    location.href = "../index.html";
+}
 
 document.addEventListener("DOMContentLoaded", () => {
     langManager.init("lang-selector-container");

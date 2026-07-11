@@ -3,12 +3,20 @@ import {
 } from "./api.js";
 
 import {
-    clearAll
+    clearAll,
+    getToken
 } from "./storage.js";
 import { langManager } from "./language.js";
 
+const token = getToken();
+if (!token) {
+    location.href = "index.html";
+}
+
 document.addEventListener("DOMContentLoaded", () => {
-    langManager.init("lang-selector-container");
+    if (token) {
+        langManager.init("lang-selector-container");
+    }
 });
 
 const logout = document.getElementById("logout");
@@ -19,31 +27,33 @@ if (logout) {
     };
 }
 
-(async()=>{
+if (token) {
+    (async()=>{
 
-try{
+    try{
 
-const response=await getProfile();
-const profile = response.data || response;
+    const response=await getProfile();
+    const profile = response.data || response;
 
-if (profile.role === "ADMIN") {
-    location.href = "admin_dashboard.html";
-    return;
+    if (profile.role === "ADMIN") {
+        location.href = "admin_dashboard.html";
+        return;
+    }
+
+    if (profile.preferred_language) {
+        await langManager.setLanguage(profile.preferred_language, false);
+    }
+
+    const welcomeHeader = document.querySelector("h1[data-i18n='dashboard_welcome']");
+    if (welcomeHeader) {
+        welcomeHeader.innerHTML = `${langManager.getText("dashboard_welcome")}, ${profile.full_name || ''}`;
+    }
+
+    }catch(err){
+
+    console.warn("Profile fetch failed:", err);
+
+    }
+
+    })();
 }
-
-if (profile.preferred_language) {
-    await langManager.setLanguage(profile.preferred_language, false);
-}
-
-const welcomeHeader = document.querySelector("h1[data-i18n='dashboard_welcome']");
-if (welcomeHeader) {
-    welcomeHeader.innerHTML = `${langManager.getText("dashboard_welcome")}, ${profile.full_name || ''}`;
-}
-
-}catch(err){
-
-console.warn("Profile fetch failed:", err);
-
-}
-
-})();

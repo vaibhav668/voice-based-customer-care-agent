@@ -1,5 +1,11 @@
 import { sendVoice, getBaseUrl } from "./api.js";
 import { langManager, LANGUAGES } from "./language.js";
+import { getToken } from "./storage.js";
+
+const token = getToken();
+if (!token) {
+    location.href = "../index.html";
+}
 
 let recorder = null;
 let stream = null;

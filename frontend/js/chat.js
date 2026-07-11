@@ -1,5 +1,11 @@
 import { sendMessage } from "./api.js";
 import { langManager } from "./language.js";
+import { getToken } from "./storage.js";
+
+const token = getToken();
+if (!token) {
+    location.href = "../index.html";
+}
 
 function getMessagesContainer() {
     return document.getElementById("messages");

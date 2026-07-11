@@ -38,6 +38,8 @@ class AuthService:
     def register(self, request: RegisterRequest):
         # Clean phone input to avoid duplication checks matching incorrectly
         clean_phone = "".join(filter(str.isdigit, str(request.phone)))
+        if len(clean_phone) > 10:
+            clean_phone = clean_phone[-10:]
         if not clean_phone:
             raise ConflictException("Invalid phone number")
 
@@ -64,6 +66,8 @@ class AuthService:
 
     def login(self, request: LoginRequest):
         clean_phone = "".join(filter(str.isdigit, str(request.phone)))
+        if len(clean_phone) > 10:
+            clean_phone = clean_phone[-10:]
         user = self.repository.get_by_phone(clean_phone)
 
         if not user:

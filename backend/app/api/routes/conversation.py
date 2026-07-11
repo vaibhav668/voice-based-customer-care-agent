@@ -144,6 +144,8 @@ def list_admin_enriched_conversations(
         # Dynamic linking: link conversation to user ID if we found a registered phone
         if user_phone and not conv.user_id:
             clean_phone = "".join(filter(str.isdigit, str(user_phone)))
+            if len(clean_phone) > 10:
+                clean_phone = clean_phone[-10:]
             user = db.query(User).filter(User.phone == clean_phone).first()
             if user:
                 conv.user_id = user.id

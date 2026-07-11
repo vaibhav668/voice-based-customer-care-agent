@@ -18,6 +18,8 @@ def send_otp(
     request: SendOTPRequest,
 ):
     clean_phone = "".join(filter(str.isdigit, str(request.phone)))
+    if len(clean_phone) > 10:
+        clean_phone = clean_phone[-10:]
     otp = generate_otp(clean_phone)
     # Return OTP in payload to simplify local testing and debugging
     return success_response(
