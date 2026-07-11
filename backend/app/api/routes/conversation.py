@@ -141,14 +141,6 @@ def list_admin_enriched_conversations(
                     user_phone = match.group(0)
                     break
 
-        # 5. Stable hashed fallback phone number for guest sessions to avoid showing "Unknown"
-        if not user_phone and conv.session_id:
-            import hashlib
-            h = hashlib.sha256(conv.session_id.encode()).hexdigest()
-            # Generate a 10 digit number starting with 9
-            num = int(h[-8:], 16) % 1000000000
-            user_phone = f"9{num:09d}"
-
         # Dynamic linking: link conversation to user ID if we found a registered phone
         if user_phone and not conv.user_id:
             clean_phone = "".join(filter(str.isdigit, str(user_phone)))
@@ -156,6 +148,10 @@ def list_admin_enriched_conversations(
             if user:
                 conv.user_id = user.id
                 db.commit()
+
+        # Filter: Skip conversations with no phone number resolved
+        if not user_phone:
+            continue
 
         user_messages = [m.message for m in msgs if m.sender == "USER"]
         ai_messages = [m.message for m in msgs if m.sender == "AI"]

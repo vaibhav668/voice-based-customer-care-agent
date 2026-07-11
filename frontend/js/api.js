@@ -138,35 +138,26 @@ export async function getTrip(bookingCode){
 }
 
 export async function sendMessage(message){
+    const headers = {
+        "Content-Type":"application/json"
+    };
+    const token = getToken();
+    if (token) {
+        headers.Authorization = `Bearer ${token}`;
+    }
 
     return await request(
-
         "/api/v1/chat/",
-
         {
-
             method:"POST",
-
-            headers:{
-
-                "Content-Type":"application/json"
-
-            },
-
+            headers,
             body:JSON.stringify({
-
                 session_id:getSessionId(),
-
                 message,
-
                 language: langManager.getLanguage(),
-
             })
-
         }
-
     );
-
 }
 
 
