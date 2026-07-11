@@ -26,7 +26,10 @@ class ConversationRepository(BaseRepository):
 
         if conv:
             if user_id and not conv.user_id:
-                conv.user_id = user_id if isinstance(user_id, uuid.UUID) else uuid.UUID(str(user_id))
+                try:
+                    conv.user_id = user_id if isinstance(user_id, uuid.UUID) else uuid.UUID(str(user_id))
+                except ValueError:
+                    pass
             if language:
                 conv.language = language
             self.db.commit()
