@@ -481,40 +481,61 @@ def fix_foreign_keys_referring_to_users_old():
     (often caused by table rename migrations in PostgreSQL) and drops/recreates 
     them to point to the correct 'users' table."""
     from app.database.session import engine
-    from sqlalchemy import inspect, text
+    from sqlalchemy import text
     
     if engine.dialect.name != "postgresql":
         return
 
     try:
         with engine.begin() as conn:
-            inspector = inspect(conn)
-            tables = inspector.get_table_names()
-            for table in tables:
-                fkeys = inspector.get_foreign_keys(table)
-                for fk in fkeys:
-                    if fk.get("referred_table") == "users_old":
-                        fk_name = fk.get("name")
-                        constrained_cols = ", ".join(f'"{c}"' for c in fk.get("constrained_columns"))
-                        referred_cols = ", ".join(f'"{c}"' for c in fk.get("referred_columns"))
-                        
-                        logger.info(f"Found invalid foreign key constraint {fk_name} on table {table} referring to users_old!")
-                        
-                        if fk_name:
-                            try:
-                                logger.info(f"Dropping constraint {fk_name} on table {table}...")
-                                conn.execute(text(f'ALTER TABLE "{table}" DROP CONSTRAINT "{fk_name}"'))
-                                
-                                logger.info(f"Re-creating constraint {fk_name} pointing to users...")
-                                conn.execute(text(
-                                    f'ALTER TABLE "{table}" ADD CONSTRAINT "{fk_name}" '
-                                    f'FOREIGN KEY ({constrained_cols}) REFERENCES "users"({referred_cols})'
-                                ))
-                                logger.info(f"Successfully re-linked constraint {fk_name} to users table.")
-                            except Exception as ex:
-                                logger.warning(f"Failed to fix constraint {fk_name}: {ex}")
+            # Query constraints pointing to users_old via system catalogs
+            query = text("""
+                SELECT c.conname, t.relname AS tablename, a.attname AS colname
+                FROM pg_constraint c
+                JOIN pg_class r ON c.confrelid = r.oid
+                JOIN pg_class t ON c.conrelid = t.oid
+                JOIN pg_attribute a ON a.attnum = c.conkey[1] AND a.attrelid = t.oid
+                WHERE r.relname = 'users_old'
+            """)
+            results = conn.execute(query).fetchall()
+            
+            if not results:
+                logger.info("No foreign key constraints referencing users_old found.")
+                return
+                
+            for conname, tablename, colname in results:
+                logger.info(f"Found invalid foreign key constraint '{conname}' on table '{tablename}' column '{colname}' referencing 'users_old'!")
+                
+                try:
+                    # 1. Clean up invalid data that would break constraint validation
+                    if tablename in ("conversations", "bookings"):
+                        logger.info(f"Cleaning up orphan {colname} in {tablename} by setting to NULL...")
+                        conn.execute(text(
+                            f'UPDATE "{tablename}" SET "{colname}" = NULL '
+                            f'WHERE "{colname}" IS NOT NULL AND "{colname}" NOT IN (SELECT "id" FROM "users")'
+                        ))
+                    elif tablename == "call_reviews":
+                        logger.info(f"Deleting orphan rows in call_reviews referring to non-existent users...")
+                        conn.execute(text(
+                            f'DELETE FROM "call_reviews" WHERE "{colname}" NOT IN (SELECT "id" FROM "users")'
+                        ))
+                    
+                    # 2. Drop the old constraint
+                    logger.info(f"Dropping constraint '{conname}' on table '{tablename}'...")
+                    conn.execute(text(f'ALTER TABLE "{tablename}" DROP CONSTRAINT "{conname}"'))
+                    
+                    # 3. Add the corrected constraint referencing 'users'
+                    logger.info(f"Adding constraint '{conname}' pointing to 'users' table...")
+                    conn.execute(text(
+                        f'ALTER TABLE "{tablename}" ADD CONSTRAINT "{conname}" '
+                        f'FOREIGN KEY ("{colname}") REFERENCES "users"("id")'
+                    ))
+                    logger.info(f"Successfully repaired constraint '{conname}'!")
+                except Exception as ex:
+                    logger.warning(f"Error repairing constraint '{conname}': {ex}")
+                    
     except Exception as e:
-        logger.warning(f"Error during foreign key fix inspection: {e}")
+        logger.warning(f"Error inspecting/repairing pg foreign keys referencing users_old: {e}")
 
 
 @asynccontextmanager
