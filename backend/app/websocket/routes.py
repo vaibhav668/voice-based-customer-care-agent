@@ -39,3 +39,18 @@ async def websocket_chat(
     finally:
 
         manager.disconnect(websocket)
+
+
+@router.websocket("/ws/admin")
+async def websocket_admin(
+    websocket: WebSocket,
+):
+    await manager.connect(websocket)
+    try:
+        while True:
+            # Receive heartbeats or keep-alive from the client
+            await websocket.receive_text()
+    except Exception:
+        pass
+    finally:
+        manager.disconnect(websocket)

@@ -89,6 +89,52 @@ document.addEventListener("DOMContentLoaded", async () => {
             await loadConversations(true);
         }
     }, 4000);
+
+    // 7. Establish real-time WebSocket connection to receive call update events
+    const initWebSocket = () => {
+        let wsUrl;
+        const baseUrl = getBaseUrl();
+        if (baseUrl.startsWith("https://")) {
+            wsUrl = baseUrl.replace("https://", "wss://") + "/ws/admin";
+        } else if (baseUrl.startsWith("http://")) {
+            wsUrl = baseUrl.replace("http://", "ws://") + "/ws/admin";
+        } else {
+            const loc = window.location;
+            const proto = loc.protocol === "https:" ? "wss:" : "ws:";
+            wsUrl = `${proto}//${loc.host}/ws/admin`;
+        }
+
+        try {
+            console.log("Connecting to admin WebSocket:", wsUrl);
+            const socket = new WebSocket(wsUrl);
+            
+            socket.onopen = () => {
+                console.log("Admin WebSocket connected successfully.");
+            };
+            
+            socket.onmessage = async (event) => {
+                console.log("WebSocket event received:", event.data);
+                // Trigger immediate updates on live events
+                if (getToken()) {
+                    await loadConversations(true);
+                    await loadBookings(true);
+                }
+            };
+            
+            socket.onclose = (e) => {
+                console.warn("WebSocket closed. Attempting reconnect in 3 seconds...", e);
+                setTimeout(initWebSocket, 3000);
+            };
+            
+            socket.onerror = (err) => {
+                console.error("WebSocket error:", err);
+                socket.close();
+            };
+        } catch (e) {
+            console.error("Failed to initialize WebSocket:", e);
+        }
+    };
+    initWebSocket();
 });
 
 /* ----------------- TAB NAVIGATION ----------------- */

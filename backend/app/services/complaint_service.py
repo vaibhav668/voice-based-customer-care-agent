@@ -17,8 +17,10 @@ class ComplaintService:
 
     def register(
         self,
-        booking_code,
-        description,
+        booking_code: str,
+        description: str,
+        user_id: str | None = None,
+        session_phone: str | None = None,
     ):
 
         booking = self.booking_repository.get_booking_with_trip(

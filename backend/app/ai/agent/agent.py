@@ -211,7 +211,15 @@ class SupportAgent:
                     user_id=user_id,
                     session_phone=session_phone,
                 )
-            elif intent in (Intent.BOOKING_STATUS, Intent.REFUND_STATUS, Intent.PAYMENT_ISSUE, Intent.RESCHEDULE, Intent.BUS_TRACKING, Intent.BUS_DELAY):
+            elif intent == Intent.RESCHEDULE:
+                data = tool.execute(
+                    booking_code=booking_code,
+                    travel_date=travel_date,
+                    confirmation=confirmation,
+                    user_id=user_id,
+                    session_phone=session_phone,
+                )
+            elif intent in (Intent.BOOKING_STATUS, Intent.REFUND_STATUS, Intent.PAYMENT_ISSUE, Intent.BUS_TRACKING, Intent.BUS_DELAY):
                 # Pass user_id and session_phone for authorization checks
                 data = tool.execute(
                     booking_code=booking_code,

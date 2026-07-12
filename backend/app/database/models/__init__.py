@@ -9,6 +9,7 @@ from .conversation import Conversation, ConversationStatus, ConversationChannel
 from .conversation_message import ConversationMessage, MessageSender, MessageType
 from .campaign import Campaign
 from .call_review import CallReview
+from .ivr_session import IvrSession
 
 __all__ = [
     "User",
@@ -26,4 +27,5 @@ __all__ = [
     "MessageType",
     "Campaign",
     "CallReview",
+    "IvrSession",
 ]

@@ -13,10 +13,13 @@ class RescheduleTool:
     def execute(
         self,
         booking_code: str,
+        travel_date: str | None = None,
+        confirmation: str | None = None,
         user_id: str | None = None,
         session_phone: str | None = None,
     ):
-        """Checks if a booking is eligible for rescheduling."""
+        """Checks rescheduling eligibility and processes travel date updates if confirmed."""
+        # Securely verify ownership first
         booking_details = self.service.get_booking_details_secure(booking_code, user_id, session_phone=session_phone)
         
         status = booking_details.get("booking_status")
@@ -35,10 +38,10 @@ class RescheduleTool:
                 "booking": booking_details
             }
             
+        fee = "₹50"
         try:
             # Parse departure string (e.g. "2026-07-06 18:30")
             departure = datetime.strptime(departure_str, "%Y-%m-%d %H:%M")
-            # Make it aware if needed (assuming local timezone or naive comparison is fine for demo)
             now = datetime.now()
             
             diff_hours = (departure - now).total_seconds() / 3600
@@ -50,22 +53,44 @@ class RescheduleTool:
                     "booking": booking_details
                 }
             elif diff_hours <= 24:
-                return {
-                    "reschedule_eligible": True,
-                    "fee": "₹100",
-                    "message": "This booking is eligible for rescheduling with a ₹100 fee. Please specify your desired new travel date.",
-                    "booking": booking_details
-                }
-            else:
-                return {
-                    "reschedule_eligible": True,
-                    "fee": "₹50",
-                    "message": "This booking is eligible for rescheduling with a ₹50 fee. Please specify your desired new travel date.",
-                    "booking": booking_details
-                }
+                fee = "₹100"
         except Exception:
+            pass
+
+        # Perform rescheduling if travel date and confirmation are present
+        if travel_date and confirmation and confirmation.strip().lower() in ["yes", "yes reschedule", "confirm", "proceed", "go ahead", "yes cancel"]:
+            try:
+                res = self.service.reschedule_booking(booking_code, travel_date)
+                return {
+                    "reschedule_eligible": True,
+                    "status": "rescheduled",
+                    "fee": fee,
+                    "message": f"Successfully rescheduled booking {booking_code} to {res.get('departure_time')} with a fee of {fee}.",
+                    "result": res
+                }
+            except Exception as e:
+                return {
+                    "reschedule_eligible": False,
+                    "message": f"Failed to reschedule booking: {str(e)}",
+                    "booking": booking_details
+                }
+
+        # Ask for confirmation if date is specified
+        if travel_date:
             return {
                 "reschedule_eligible": True,
-                "message": "This booking appears eligible for rescheduling. Please contact support for date availability.",
+                "fee": fee,
+                "status": "confirmation_required",
+                "message": f"Your booking {booking_code} is eligible for rescheduling to {travel_date} for a fee of {fee}. Please confirm to proceed.",
+                "travel_date": travel_date,
+                "requires_confirmation": True,
                 "booking": booking_details
             }
+
+        return {
+            "reschedule_eligible": True,
+            "fee": fee,
+            "status": "date_required",
+            "message": f"Your booking {booking_code} is eligible for rescheduling for a fee of {fee}. What is your preferred new travel date?",
+            "booking": booking_details
+        }

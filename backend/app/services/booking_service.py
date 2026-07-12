@@ -124,7 +124,9 @@ class BookingService:
             "updated_eta": _fmt_dt(trip.updated_eta) if (trip and trip.updated_eta) else None,
         }
 
-    def cancel_booking(self, booking_code: str):
+    def cancel_booking(self, booking_code: str, user_id=None, session_phone=None):
+        # Securely verify ownership first
+        self.get_booking_details_secure(booking_code, user_id, session_phone=session_phone)
 
         booking = self.repository.get_booking_with_trip(
             booking_code
@@ -145,7 +147,9 @@ class BookingService:
             "seat_number": booking.seat_number,
         }
 
-    def get_refund_status(self, booking_code: str):
+    def get_refund_status(self, booking_code: str, user_id=None, session_phone=None):
+        # Securely verify ownership first
+        self.get_booking_details_secure(booking_code, user_id, session_phone=session_phone)
 
         booking = self.repository.get_refund_status(
             booking_code
@@ -181,11 +185,14 @@ class BookingService:
             "destination": trip.route.destination_city if (trip and trip.route) else None,
         }
 
-    def get_cancellation_preview(self, booking_code: str):
+    def get_cancellation_preview(self, booking_code: str, user_id=None, session_phone=None):
         """
         Returns booking preview for the cancellation confirmation gate.
         Does NOT cancel the booking. Used to show what will be cancelled.
         """
+        # Securely verify ownership first
+        self.get_booking_details_secure(booking_code, user_id, session_phone=session_phone)
+
         booking = self.repository.get_booking_with_trip(booking_code)
 
         if booking is None:
@@ -329,4 +336,85 @@ class BookingService:
             "destination": booking.trip.route.destination_city if (booking and booking.trip and booking.trip.route) else destination,
             "departure_time": _fmt_dt(booking.trip.departure_time) if (booking and booking.trip) else "N/A",
             "arrival_time": _fmt_dt(booking.trip.arrival_time) if (booking and booking.trip) else "N/A",
+        }
+
+    def reschedule_booking(self, booking_code: str, travel_date: str, user_id=None, session_phone=None) -> dict:
+        """
+        Executes rescheduling: finds a trip on the same route for the new travel date
+        and updates the booking's trip association.
+        """
+        # Securely verify ownership first
+        self.get_booking_details_secure(booking_code, user_id, session_phone=session_phone)
+
+        from app.repositories.trip_repository import TripRepository
+        from app.database.models.trip import Trip, TripStatus
+        from app.database.models.route import Route
+        from app.database.models.bus import Bus, BusType
+        from datetime import datetime, timedelta
+        from sqlalchemy import select
+        import random
+
+        booking = self.repository.get_booking_with_trip(booking_code)
+        if not booking:
+            raise NotFoundException("Booking not found")
+
+        trip = booking.trip
+        route = trip.route if trip else None
+        if not route:
+            raise NotFoundException("Route not found for this booking")
+
+        # Parse travel_date string (e.g. "2026-07-20")
+        try:
+            if " " in travel_date.strip():
+                new_date = datetime.strptime(travel_date.strip(), "%Y-%m-%d %H:%M")
+            else:
+                new_date = datetime.strptime(travel_date.strip(), "%Y-%m-%d")
+        except Exception:
+            raise ValueError(f"Invalid date format: {travel_date}. Please use YYYY-MM-DD.")
+
+        # Find trip on the same route for the target date
+        trip_repo = TripRepository(self.repository.db)
+        stmt = (
+            select(Trip)
+            .where(
+                Trip.route_id == route.id,
+                Trip.departure_time >= new_date.replace(hour=0, minute=0, second=0),
+                Trip.departure_time <= new_date.replace(hour=23, minute=59, second=59),
+            )
+        )
+        new_trip = self.repository.db.scalar(stmt)
+
+        if not new_trip:
+            # If no trip scheduled on that date, create one automatically
+            departure = new_date.replace(hour=18, minute=30, second=0, microsecond=0)
+            arrival = departure + (trip.arrival_time - trip.departure_time if trip else timedelta(hours=5))
+            new_trip = Trip(
+                route_id=route.id,
+                bus_id=trip.bus_id if trip else None,
+                departure_time=departure,
+                arrival_time=arrival,
+                status=TripStatus.SCHEDULED,
+                delay_minutes=0,
+                available_seats=35,
+            )
+            self.repository.db.add(new_trip)
+            self.repository.db.commit()
+            self.repository.db.refresh(new_trip)
+
+        # Update the booking
+        booking.trip_id = new_trip.id
+        self.repository.db.commit()
+        self.repository.db.refresh(booking)
+
+        return {
+            "success": True,
+            "message": f"Booking {booking_code} successfully rescheduled to {_fmt_dt(new_trip.departure_time)}.",
+            "booking_code": booking_code,
+            "seat_number": booking.seat_number,
+            "booking_status": booking.booking_status.value,
+            "payment_status": booking.payment_status.value,
+            "source": route.source_city,
+            "destination": route.destination_city,
+            "departure_time": _fmt_dt(new_trip.departure_time),
+            "arrival_time": _fmt_dt(new_trip.arrival_time),
         }
