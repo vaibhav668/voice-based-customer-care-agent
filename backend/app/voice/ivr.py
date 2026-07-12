@@ -347,7 +347,12 @@ class IVRCallSession:
 
             self.state = IVRState.COMPLETED
             self._save_to_db()
-            return self.complete_call()
+            self.complete_call()
+            return {
+                "state": self.state.value,
+                "prompt": "Thank you for your feedback. Goodbye.",
+                "expect_input": "NONE",
+            }
 
         return {
             "state": self.state.value,
@@ -407,6 +412,90 @@ class IVRCallSession:
         })
         
         # Broadcast status syncs
+        if conv:
+            broadcast_call_event("call_updated", self.session_id, f"Call state updated: {res_status}.", {
+                "current_intent": conv.current_intent,
+                "last_tool": conv.last_tool,
+                "resolution_status": res_status,
+            })
+
+        return res
+
+    async def process_text_agent_turn(self, text: str) -> dict:
+        """Processes voice turn when transcription is already available (e.g. from Twilio SpeechResult)."""
+        if self.state != IVRState.ACTIVE_AGENT:
+            return {"error": "Voice inputs are only allowed during the active agent state."}
+
+        from app.schemas.chat import ChatRequest
+        from app.services.chat_service import ChatService
+        chat_service = ChatService(db=self.db)
+        
+        res_chat = chat_service.process(
+            request=ChatRequest(
+                session_id=self.session_id,
+                message=text,
+                language=self.language,
+            ),
+            user_id=self.user_id,
+            channel="VOICE",
+        )
+
+        from app.voice.tts import TextToSpeech
+        tts = TextToSpeech()
+        generated_audio = await tts.generate(
+            res_chat["response"],
+            language=self.language,
+        )
+
+        if res_chat.get("db_message_id"):
+            try:
+                from app.database.models.conversation_message import ConversationMessage
+                db_msg = self.db.get(ConversationMessage, res_chat["db_message_id"])
+                if db_msg:
+                    db_msg.audio_path = generated_audio
+                    self.db.commit()
+            except Exception as e:
+                print("Voice DB audio path sync notice:", e)
+
+        res = {
+            "session_id": res_chat["session_id"],
+            "transcript": text,
+            "text": res_chat["response"],
+            "audio_path": generated_audio,
+        }
+
+        conv = ConversationRepository(self.db).get_by_session_id(self.session_id)
+        res_status = conv.resolution_status if conv else "unresolved"
+
+        if conv and conv.resolution_status == "resolved" and self.state == IVRState.ACTIVE_AGENT:
+            self.state = IVRState.FEEDBACK_PENDING
+            self._save_to_db()
+            self._log_system_event("Conversation completed. Prompting for customer feedback rating.")
+            
+            feedback_prompt = "Thank you. Please rate your support experience from 1 to 10 using your telephone keypad, where 0 represents a rating of 10."
+            if self.language == "hi":
+                feedback_prompt = "धन्यवाद। कृपया अपने सहायता अनुभव को 1 से 10 के पैमाने पर रेट करें, जहाँ 0 का अर्थ 10 है।"
+            elif self.language == "te":
+                feedback_prompt = "ధన్యవాదాలు. దయచేసి మీ టెలిఫోన్ కీప్యాడ్ ఉపయోగించి మీ సహాయ అనుభవాన్ని 1 నుండి 10 వరకు రేట్ చేయండి, ఇక్కడ 0 అంటే 10."
+                
+            res["text"] = res.get("text", "") + " " + feedback_prompt
+            res["expect_input"] = "DTMF"
+            res["state"] = self.state.value
+            
+            broadcast_call_event("call_updated", self.session_id, "Prompting for customer feedback rating.", {
+                "state": self.state.value,
+                "resolution_status": conv.resolution_status
+            })
+
+        broadcast_call_event("new_transcript", self.session_id, f"Customer: {text}", {
+            "sender": "USER",
+            "transcript": text,
+        })
+        broadcast_call_event("new_transcript", self.session_id, f"AI: {res.get('text')}", {
+            "sender": "AI",
+            "transcript": res.get('text'),
+        })
+        
         if conv:
             broadcast_call_event("call_updated", self.session_id, f"Call state updated: {res_status}.", {
                 "current_intent": conv.current_intent,

@@ -21,6 +21,7 @@ from app.api.routes.booking import router as booking_router
 from app.websocket.routes import router as websocket_router
 from app.api.routes.trip import router as trip_router
 from app.api.routes.ivr import router as ivr_router
+from app.api.routes.telephony import router as telephony_router
 setup_logging()
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.lifespan import lifespan
@@ -90,6 +91,7 @@ app.include_router(campaign_router)
 app.include_router(call_review_router)
 app.include_router(websocket_router)
 app.include_router(ivr_router)
+app.include_router(telephony_router)
 register_exception_handlers(app)
 app.include_router(health_router)
 app.add_middleware(RequestIDMiddleware)
