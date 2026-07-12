@@ -98,7 +98,7 @@ uvicorn main:app --port 8000 --reload
 ### Start the Frontend Server
 Because the frontend communicates with the FastAPI server via Javascript modules, it needs to be served via an HTTP server. Run a local server from the **`frontend/`** directory:
 
-**Using Python:**
+**Using Python:** 
 ```bash
 cd ../frontend
 python -m http.server 5500

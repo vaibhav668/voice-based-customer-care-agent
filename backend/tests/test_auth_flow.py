@@ -15,34 +15,44 @@ from app.auth.security import decode_access_token, verify_password
 
 
 def run_auth_tests():
+    from app.database.session import engine
+    from app.database.base import Base
+    import app.database.models  # Ensures all ORM models are registered
+    Base.metadata.create_all(bind=engine)
+
+    try:
+        from migrate import run_migrations
+        run_migrations()
+    except Exception:
+        pass
+
     db = SessionLocal()
     print("Initializing Auth Flow Tests...")
 
-    # Unique email for test
-    test_email = f"test_user_{uuid.uuid4().hex[:6]}@example.com"
-    test_password = "SecurePassword123!"
     test_name = "Auth Flow Tester"
-    test_phone = f"99{uuid.uuid4().hex[:8]}"  # Unique phone to satisfy constraints
+    # Ensure phone number is exactly 10 digits
+    test_phone = f"99{str(uuid.uuid4().int)[:8]}"  
+    test_phone = test_phone[:10]
+    test_otp = "123456"
 
     controller = AuthController(db)
 
     # 1. Test Registration
-    print(f"\n1. Attempting to register user: {test_email}...")
+    print(f"\n1. Attempting to register user with phone: {test_phone}...")
     register_data = RegisterRequest(
         full_name=test_name,
-        email=test_email,
         phone=test_phone,
-        password=test_password
+        otp=test_otp,
+        preferred_language="en"
     )
     
     try:
         registered_user = controller.register(register_data)
         print(f"-> Registration successful! Created User ID: {registered_user.id}")
-        assert registered_user.email == test_email
         assert registered_user.full_name == test_name
+        assert registered_user.phone == test_phone
         assert registered_user.role == UserRole.CUSTOMER
-        assert verify_password(test_password, registered_user.password_hash)
-        print("-> Verification: Password hash successfully verified.")
+        print("-> Verification: OTP registration successfully verified.")
     except Exception as e:
         print(f"-> Registration FAILED: {e}")
         db.close()
@@ -51,8 +61,8 @@ def run_auth_tests():
     # 2. Test Login
     print(f"\n2. Attempting to login with correct credentials...")
     login_data = LoginRequest(
-        email=test_email,
-        password=test_password
+        phone=test_phone,
+        otp=test_otp
     )
     
     try:
@@ -75,7 +85,6 @@ def run_auth_tests():
         print(f"-> Decoded Payload: {payload}")
         assert payload is not None
         assert payload.get("sub") == str(registered_user.id)
-        assert payload.get("email") == test_email
         assert payload.get("role") == UserRole.CUSTOMER.value
         print("-> Verification: JWT payload contents successfully verified.")
     except Exception as e:
@@ -83,15 +92,15 @@ def run_auth_tests():
         db.close()
         return False
 
-    # 4. Test Login with Incorrect Password
-    print(f"\n4. Attempting to login with incorrect password...")
+    # 4. Test Login with Incorrect OTP
+    print(f"\n4. Attempting to login with incorrect OTP...")
     bad_login_data = LoginRequest(
-        email=test_email,
-        password="WrongPassword123"
+        phone=test_phone,
+        otp="000000"
     )
     try:
         controller.login(bad_login_data)
-        print("-> Failure: Logged in with incorrect password! (Expected UnauthorizedException)")
+        print("-> Failure: Logged in with incorrect OTP! (Expected UnauthorizedException)")
         db.close()
         return False
     except Exception as e:
@@ -99,7 +108,7 @@ def run_auth_tests():
 
     # 5. Verify database record directly
     print(f"\n5. Directly querying database record...")
-    db_user = db.query(User).filter_by(email=test_email).first()
+    db_user = db.query(User).filter_by(phone=test_phone).first()
     assert db_user is not None
     assert db_user.id == registered_user.id
     print(f"-> DB query successful. User is safely recorded in database.")
@@ -111,7 +120,7 @@ def run_auth_tests():
     print("-> Cleanup complete.")
 
     db.close()
-    print("\nALL AUTHENTICATION AND DATABASE INTEGRATION TESTS PASSED WELL! 🎉")
+    print("\nALL AUTHENTICATION AND DATABASE INTEGRATION TESTS PASSED WELL! [SUCCESS]")
     return True
 
 

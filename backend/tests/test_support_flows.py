@@ -38,6 +38,10 @@ def run_tests():
     from migrate import run_migrations
     run_migrations()
 
+    # Seed the database
+    from app.core.lifespan import auto_seed_database
+    auto_seed_database()
+
     db = SessionLocal()
     print("==================================================")
     print("STARTING UPGRADE TRAVEL BOOKING SUPPORT FLOW TESTS")
