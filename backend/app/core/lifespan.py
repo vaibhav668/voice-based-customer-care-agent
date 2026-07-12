@@ -476,10 +476,54 @@ def auto_seed_database():
         db.close()
 
 
+def fix_foreign_keys_referring_to_users_old():
+    """Finds any foreign key constraints pointing to 'users_old' table 
+    (often caused by table rename migrations in PostgreSQL) and drops/recreates 
+    them to point to the correct 'users' table."""
+    from app.database.session import engine
+    from sqlalchemy import inspect, text
+    
+    if engine.dialect.name != "postgresql":
+        return
+
+    try:
+        with engine.begin() as conn:
+            inspector = inspect(conn)
+            tables = inspector.get_table_names()
+            for table in tables:
+                fkeys = inspector.get_foreign_keys(table)
+                for fk in fkeys:
+                    if fk.get("referred_table") == "users_old":
+                        fk_name = fk.get("name")
+                        constrained_cols = ", ".join(f'"{c}"' for c in fk.get("constrained_columns"))
+                        referred_cols = ", ".join(f'"{c}"' for c in fk.get("referred_columns"))
+                        
+                        logger.info(f"Found invalid foreign key constraint {fk_name} on table {table} referring to users_old!")
+                        
+                        if fk_name:
+                            try:
+                                logger.info(f"Dropping constraint {fk_name} on table {table}...")
+                                conn.execute(text(f'ALTER TABLE "{table}" DROP CONSTRAINT "{fk_name}"'))
+                                
+                                logger.info(f"Re-creating constraint {fk_name} pointing to users...")
+                                conn.execute(text(
+                                    f'ALTER TABLE "{table}" ADD CONSTRAINT "{fk_name}" '
+                                    f'FOREIGN KEY ({constrained_cols}) REFERENCES "users"({referred_cols})'
+                                ))
+                                logger.info(f"Successfully re-linked constraint {fk_name} to users table.")
+                            except Exception as ex:
+                                logger.warning(f"Failed to fix constraint {fk_name}: {ex}")
+    except Exception as e:
+        logger.warning(f"Error during foreign key fix inspection: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app):
     logger.info("🚀 SupportAI Backend Started")
     try:
+        # Check and resolve any PostgreSQL foreign key constraints pointing to users_old
+        fix_foreign_keys_referring_to_users_old()
+
         # Check if users table needs migration (adding name_encrypted column)
         with engine.begin() as conn:
             inspector = inspect(conn)
