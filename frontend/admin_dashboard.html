@@ -50,6 +50,10 @@
                     <i class="fa-solid fa-ticket"></i>
                     <span>Bookings</span>
                 </button>
+                <button class="nav-item" data-tab="reviews">
+                    <i class="fa-solid fa-star"></i>
+                    <span>Customer Feedback</span>
+                </button>
                 <button class="nav-item" data-tab="drivers">
                     <i class="fa-solid fa-id-card"></i>
                     <span>Drivers</span>
@@ -229,72 +233,26 @@
 
                     <!-- Bottom Grid -->
                     <div class="bottom-dash-grid">
-                        <!-- Global Latency -->
-                        <div class="sub-panel latency-panel">
+                        <!-- Recent Customer Reviews Summary -->
+                        <div class="sub-panel" style="grid-column: span 2;">
                             <div class="panel-header">
-                                <h4>Global Latency (ms)</h4>
-                                <i class="fa-solid fa-gauge-high text-cyan"></i>
+                                <h4>Recent Customer Feedback Ratings</h4>
+                                <i class="fa-solid fa-star text-teal"></i>
                             </div>
-                            <div class="latency-list">
-                                <div class="latency-item">
-                                    <span class="region">North America</span>
-                                    <div class="latency-bar-container">
-                                        <div class="latency-fill" style="width: 15%; background: var(--teal);"></div>
-                                    </div>
-                                    <span class="ms">12ms</span>
-                                </div>
-                                <div class="latency-item">
-                                    <span class="region">EU-West</span>
-                                    <div class="latency-bar-container">
-                                        <div class="latency-fill" style="width: 32%; background: var(--blue);"></div>
-                                    </div>
-                                    <span class="ms">28ms</span>
-                                </div>
-                                <div class="latency-item">
-                                    <span class="region">APAC Cluster</span>
-                                    <div class="latency-bar-container">
-                                        <div class="latency-fill" style="width: 78%; background: var(--purple);"></div>
-                                    </div>
-                                    <span class="ms">84ms</span>
-                                </div>
+                            <div class="scrollable-list" id="dash-feedback-summary" style="max-height: 180px; overflow-y: auto;">
+                                <div style="text-align: center; color: var(--text-dim); padding: 20px;">No feedback logged yet.</div>
                             </div>
                         </div>
 
-                        <!-- Sample AI Output -->
-                        <div class="sub-panel output-panel">
+                        <!-- Overall CSAT Indicator -->
+                        <div class="sub-panel">
                             <div class="panel-header">
-                                <h4>Sample AI Output</h4>
+                                <h4>Customer Satisfaction (CSAT)</h4>
+                                <i class="fa-solid fa-face-smile text-cyan"></i>
                             </div>
-                            <div class="wave-container">
-                                <canvas id="waveCanvas"></canvas>
-                                <span class="synth-badge">SPEECH-SYNTH-ACTIVE (ENG-US)</span>
-                            </div>
-                        </div>
-
-                        <!-- Engine Health -->
-                        <div class="sub-panel health-panel">
-                            <div class="panel-header">
-                                <h4>Engine Health</h4>
-                                <i class="fa-solid fa-microchip text-violet"></i>
-                            </div>
-                            <div class="health-grid">
-                                <div class="health-card">
-                                    <span class="title">GPU COMPUTE</span>
-                                    <span class="value" id="health-gpu">42%</span>
-                                    <div class="mini-radial-progress" data-value="42"></div>
-                                </div>
-                                <div class="health-card">
-                                    <span class="title">MEMORY</span>
-                                    <span class="value" id="health-mem">1.8TB</span>
-                                </div>
-                                <div class="health-card">
-                                    <span class="title">THREADS</span>
-                                    <span class="value" id="health-threads">18k</span>
-                                </div>
-                                <div class="health-card">
-                                    <span class="title">UPTIME</span>
-                                    <span class="value" id="health-uptime">100%</span>
-                                </div>
+                            <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:120px; gap:8px;">
+                                <div id="dash-csat-value" style="font-size: 32px; font-weight: 700; font-family: var(--font-display); color: var(--teal);">0.0 / 10</div>
+                                <div style="font-size: 11px; color: var(--text-dim);" id="dash-csat-count">Based on 0 customer ratings</div>
                             </div>
                         </div>
                     </div>
@@ -548,6 +506,57 @@
                                 <span class="switch-slider"></span>
                                 <span>Enable Vector RAG Cache</span>
                             </label>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 9. CUSTOMER FEEDBACK TAB -->
+                <section class="tab-pane" id="tab-reviews">
+                    <!-- Reviews Dashboard Grid -->
+                    <div class="stats-grid" style="margin-bottom: 24px;">
+                        <div class="stat-card">
+                            <div class="stat-header">
+                                <span class="stat-title">TOTAL REVIEWS</span>
+                            </div>
+                            <div class="stat-value" id="feedback-total-count">0</div>
+                            <div class="stat-description">Real customer ratings logged</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-header">
+                                <span class="stat-title">AVERAGE RATING</span>
+                            </div>
+                            <div class="stat-value" id="feedback-avg-rating">0.0 / 10</div>
+                            <div class="stat-progress-bar">
+                                <div class="progress-fill" id="feedback-avg-fill" style="width: 0%;"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="pane-split-layout">
+                        <!-- Left Panel: Rating Distribution & Recent Reviews List -->
+                        <div class="pane-list-column" style="flex: 1.2;">
+                            <div class="column-header">
+                                <h3>Rating Distribution</h3>
+                            </div>
+                            <div style="padding: 16px; background: rgba(0,0,0,0.15); border-bottom: 1px solid var(--line); display:flex; flex-direction:column; gap:8px;" id="feedback-distribution">
+                                <!-- Populated dynamically -->
+                            </div>
+
+                            <div class="column-header" style="border-top: 1px solid var(--line);">
+                                <h3>Recent Customer Reviews</h3>
+                            </div>
+                            <div class="scrollable-list" id="feedback-list">
+                                <!-- Populated dynamically -->
+                            </div>
+                        </div>
+
+                        <!-- Right Panel: Related Call Transcript Details -->
+                        <div class="pane-detail-column" id="feedback-detail">
+                            <div class="empty-state-panel">
+                                <i class="fa-solid fa-star" style="font-size: 48px; color: var(--text-dim); margin-bottom: 16px;"></i>
+                                <h3>Select a review to inspect</h3>
+                                <p>View full caller information, rating timestamps, and inspect the underlying telephone conversation transcript.</p>
+                            </div>
                         </div>
                     </div>
                 </section>

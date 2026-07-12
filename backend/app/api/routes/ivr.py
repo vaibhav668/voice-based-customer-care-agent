@@ -89,7 +89,7 @@ async def process_voice(
             "transcript": res.get("transcript"),
             "prompt": res.get("text"),
             "audio_path": res.get("audio_path"),
-            "expect_input": "VOICE",
+            "expect_input": res.get("expect_input", "VOICE"),
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Voice agent process error: {str(e)}")

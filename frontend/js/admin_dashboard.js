@@ -60,6 +60,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     // 3. Load Real-time Data
     await loadBookings();
     await loadConversations();
+    await loadFeedbacks();
     initDriversTab();
 
     // 4. Set up Refresh handler
@@ -87,6 +88,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (getToken()) {
             await loadBookings(true);
             await loadConversations(true);
+            await loadFeedbacks(true);
         }
     }, 4000);
 
@@ -118,6 +120,12 @@ document.addEventListener("DOMContentLoaded", async () => {
                 if (getToken()) {
                     await loadConversations(true);
                     await loadBookings(true);
+                    try {
+                        const parsed = JSON.parse(event.data);
+                        if (parsed && parsed.event === "feedback_submitted") {
+                            await loadFeedbacks(true);
+                        }
+                    } catch (e) {}
                 }
             };
             
@@ -173,6 +181,9 @@ function switchToTab(tabName) {
     // Resize canvasses if showing dashboard
     if (tabName === "dashboard") {
         resizeCanvases();
+    }
+    if (tabName === "reviews") {
+        loadFeedbacks();
     }
 }
 
@@ -236,11 +247,12 @@ async function loadConversations(silent = false) {
         const conversations = response.data?.conversations || [];
         allEnrichedConvs = conversations;
 
-        // Stats
-        const totalCalls = conversations.length;
-        const activeCalls = conversations.filter(c => c.status === "ACTIVE").length;
-        const resolvedCalls = conversations.filter(c => c.resolution_status === "resolved").length;
-        const escalatedCalls = conversations.filter(c => c.resolution_status === "escalated").length;
+        // Stats (voice only for Todays Calls and Active Calls)
+        const voiceConvs = conversations.filter(c => c.channel === "VOICE");
+        const totalCalls = voiceConvs.length;
+        const activeCalls = voiceConvs.filter(c => c.status === "ACTIVE").length;
+        const resolvedCalls = voiceConvs.filter(c => c.resolution_status === "resolved").length;
+        const escalatedCalls = voiceConvs.filter(c => c.resolution_status === "escalated").length;
         const resRate = totalCalls > 0 ? ((resolvedCalls / totalCalls) * 100).toFixed(1) : "0.0";
         const escRate = totalCalls > 0 ? ((escalatedCalls / totalCalls) * 100).toFixed(1) : "0.0";
 
@@ -1467,5 +1479,233 @@ function initSettingsTab() {
         slider.addEventListener("input", (e) => {
             valSpan.textContent = `${e.target.value}%`;
         });
+    }
+}
+
+/* ----------------- CUSTOMER REVIEWS & FEEDBACK ----------------- */
+let allFeedbacks = [];
+
+async function loadFeedbacks(silent = false) {
+    const feedbackList = document.getElementById("feedback-list");
+    const feedbackTotal = document.getElementById("feedback-total-count");
+    const feedbackAvg = document.getElementById("feedback-avg-rating");
+    const feedbackAvgFill = document.getElementById("feedback-avg-fill");
+    const feedbackDistribution = document.getElementById("feedback-distribution");
+
+    if (!feedbackList) return;
+
+    if (!silent) {
+        feedbackList.innerHTML = `<div style="text-align:center; padding: 20px;"><i class="fa-solid fa-spinner fa-spin"></i> Fetching customer feedback...</div>`;
+    }
+
+    try {
+        const token = getToken();
+        const headers = { "Content-Type": "application/json" };
+        if (token) {
+            headers["Authorization"] = `Bearer ${token}`;
+        }
+        const res = await fetch(`${getBaseUrl()}/api/v1/conversations/admin/reviews`, { headers });
+        const json = await res.json();
+        const reviews = json.data?.reviews || [];
+        allFeedbacks = reviews;
+
+        // Render Stats
+        const total = reviews.length;
+        if (feedbackTotal) feedbackTotal.textContent = total;
+
+        let avg = 0;
+        if (total > 0) {
+            const sum = reviews.reduce((acc, curr) => acc + curr.rating, 0);
+            avg = sum / total;
+        }
+        if (feedbackAvg) feedbackAvg.textContent = `${avg.toFixed(1)} / 10`;
+        if (feedbackAvgFill) feedbackAvgFill.style.width = `${(avg * 10)}%`;
+
+        // Render distribution (10 stars to 1 star)
+        const dist = {};
+        for (let i = 1; i <= 10; i++) dist[i] = 0;
+        reviews.forEach(r => {
+            dist[r.rating] = (dist[r.rating] || 0) + 1;
+        });
+
+        let distHtml = "";
+        for (let i = 10; i >= 1; i--) {
+            const count = dist[i] || 0;
+            const pct = total > 0 ? (count / total * 100) : 0;
+            distHtml += `
+                <div class="intent-item" style="margin-bottom:4px; display:flex; align-items:center;">
+                    <span style="font-size:11px; font-family:var(--font-mono); width:60px; color:var(--text-dim);">${i} Stars</span>
+                    <div class="bar-container" style="height:8px; flex:1; background:rgba(255,255,255,0.05); border-radius:4px; overflow:hidden; margin:0 10px;">
+                        <div class="fill" style="width: ${pct}%; background: ${i >= 8 ? 'var(--teal)' : (i >= 5 ? 'var(--blue)' : 'var(--red)')}; height:100%;"></div>
+                    </div>
+                    <span style="font-size:11px; width:30px; text-align:right; color:var(--text);">${count}</span>
+                </div>
+            `;
+        }
+        if (feedbackDistribution) feedbackDistribution.innerHTML = distHtml;
+
+        // Render list of recent reviews
+        if (total === 0) {
+            feedbackList.innerHTML = `<div style="text-align:center; padding: 20px; color:var(--text-dim)">No customer reviews found.</div>`;
+        } else {
+            feedbackList.innerHTML = reviews.map((r, idx) => {
+                const dateStr = r.created_at ? new Date(r.created_at).toLocaleString() : "";
+                const resClass = r.resolution_status === "resolved" ? "badge-resolved" : (r.resolution_status === "escalated" ? "badge-escalated" : "badge-frustration");
+                return `
+                    <div class="list-item" data-feedback-id="${r.id}" style="cursor:pointer; padding: 12px; border-bottom:1px solid var(--line);">
+                        <div class="item-meta" style="margin-bottom: 4px; display:flex; justify-content:space-between; font-size:11px;">
+                            <span style="font-weight:700; color:var(--teal);"><i class="fa-solid fa-star"></i> Rating: ${r.rating}/10</span>
+                            <span style="color:var(--text-dim);">${dateStr}</span>
+                        </div>
+                        <div class="item-title" style="font-size:12px; margin-bottom: 2px;">
+                            <strong style="color:white;">${escapeHTML(r.user_name)}</strong> <span style="color:var(--text-dim); font-size:11px; margin-left:4px;">(${escapeHTML(r.user_phone)})</span>
+                        </div>
+                        <div class="item-subtitle" style="font-size:11px; display:flex; justify-content:space-between; margin-top:4px;">
+                            <span>Resolution: <span class="badge ${resClass}" style="font-size:8px; padding: 1px 4px;">${r.resolution_status.toUpperCase()}</span></span>
+                            <span style="color:var(--blue); font-weight:600;"><i class="fa-solid fa-magnifying-glass"></i> Inspect Call</span>
+                        </div>
+                    </div>
+                `;
+            }).join("");
+
+            // Add click handlers
+            const items = feedbackList.querySelectorAll(".list-item");
+            items.forEach(item => {
+                item.addEventListener("click", () => {
+                    items.forEach(it => it.classList.remove("active"));
+                    item.classList.add("active");
+                    const fbId = item.dataset.feedbackId;
+                    const feedback = allFeedbacks.find(f => f.id === fbId);
+                    if (feedback) {
+                        renderFeedbackDetail(feedback);
+                    }
+                });
+            });
+        }
+
+        // Render dashboard summary if elements exist
+        const dashSummary = document.getElementById("dash-feedback-summary");
+        const dashCsatVal = document.getElementById("dash-csat-value");
+        const dashCsatCount = document.getElementById("dash-csat-count");
+        if (dashSummary) {
+            if (dashCsatVal) dashCsatVal.textContent = `${avg.toFixed(1)} / 10`;
+            if (dashCsatCount) dashCsatCount.textContent = `Based on ${total} customer ratings`;
+            if (total === 0) {
+                dashSummary.innerHTML = `<div style="text-align: center; color: var(--text-dim); padding: 20px;">No feedback logged yet.</div>`;
+            } else {
+                dashSummary.innerHTML = reviews.slice(0, 5).map(r => {
+                    const dateStr = r.created_at ? new Date(r.created_at).toLocaleTimeString() : "";
+                    return `
+                        <div style="padding: 10px 14px; border-bottom: 1px solid var(--line); display:flex; justify-content:space-between; align-items:center; font-size:12px;">
+                            <div>
+                                <strong style="color:white;">${escapeHTML(r.user_name)}</strong> 
+                                <span style="color:var(--text-dim); font-size:11px; margin-left:6px;">(${escapeHTML(r.user_phone)})</span>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <span style="color:var(--teal); font-weight:700;"><i class="fa-solid fa-star"></i> ${r.rating}/10</span>
+                                <span style="color:var(--text-dim); font-size:10px;">${dateStr}</span>
+                            </div>
+                        </div>
+                    `;
+                }).join("");
+            }
+        }
+
+    } catch (err) {
+        console.error("Failed to load feedbacks:", err);
+        if (feedbackList) {
+            feedbackList.innerHTML = `<div style="text-align:center; padding:20px; color:var(--red)">Error fetching feedback data.</div>`;
+        }
+    }
+}
+
+async function renderFeedbackDetail(fb) {
+    const detail = document.getElementById("feedback-detail");
+    if (!detail) return;
+
+    detail.innerHTML = `<div style="text-align:center; padding: 40px;"><i class="fa-solid fa-spinner fa-spin"></i> Loading conversation logs...</div>`;
+
+    try {
+        const token = getToken();
+        const headers = { "Content-Type": "application/json" };
+        if (token) {
+            headers["Authorization"] = `Bearer ${token}`;
+        }
+        const convId = fb.conversation_id;
+        const res = await fetch(`${getBaseUrl()}/api/v1/conversations/${convId}`, { headers });
+        const json = await res.json();
+        const conv = json.data;
+
+        if (!conv) {
+            detail.innerHTML = `<div style="text-align:center; padding:40px; color:var(--red)">Conversation not found.</div>`;
+            return;
+        }
+
+        // Render messages
+        const msgs = conv.messages || [];
+        const messagesHtml = msgs.map(m => {
+            const isUser = m.sender === "USER" || m.sender === "Customer";
+            const isSystem = m.sender === "SYSTEM";
+            const bubbleClass = isSystem ? "system-bubble" : (isUser ? "user-bubble" : "ai-bubble");
+            const senderName = isSystem ? "SYSTEM" : (isUser ? "Customer" : "AI Agent");
+            const timeStr = m.created_at ? new Date(m.created_at).toLocaleTimeString() : "";
+            
+            if (isSystem) {
+                return `
+                    <div class="system-log" style="text-align:center; margin: 8px 0; font-size:11px; color:var(--text-dim); font-style:italic;">
+                        [${timeStr}] <i class="fa-solid fa-circle-info"></i> ${escapeHTML(m.message)}
+                    </div>
+                `;
+            }
+
+            return `
+                <div class="chat-bubble ${bubbleClass}" style="margin-bottom:12px; padding:10px 14px; border-radius:8px; max-width:80%; ${isUser ? 'margin-left:auto; background:rgba(6,182,212,0.12); color:white;' : 'margin-right:auto; background:var(--surface-2); color:white;'}">
+                    <div style="font-size:10px; font-weight:700; color:var(--text-dim); display:flex; justify-content:space-between; margin-bottom:4px;">
+                        <span>${senderName}</span>
+                        <span>${timeStr}</span>
+                    </div>
+                    <div style="font-size:12.5px; line-height:1.4;">${escapeHTML(m.message)}</div>
+                </div>
+            `;
+        }).join("");
+
+        const resClass = fb.resolution_status === "resolved" ? "badge-resolved" : (fb.resolution_status === "escalated" ? "badge-escalated" : "badge-frustration");
+
+        detail.innerHTML = `
+            <div class="detail-header" style="padding: 16px 20px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center;">
+                <div class="detail-header-info">
+                    <h3 style="color:white; font-size:16px;">Review Call Log</h3>
+                    <p style="font-size:11.5px; color:var(--text-dim); margin-top:2px;">Session ID: <strong>${conv.session_id}</strong></p>
+                </div>
+                <div class="detail-actions">
+                    <span style="font-size:18px; font-weight:700; color:var(--teal);"><i class="fa-solid fa-star"></i> ${fb.rating}/10</span>
+                </div>
+            </div>
+
+            <!-- Customer Meta Info -->
+            <div style="background: rgba(255,255,255,0.015); border-bottom: 1px solid var(--line); padding: 16px 20px; display:flex; flex-direction:column; gap:8px;">
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; font-size:12px;">
+                    <div><span style="color:var(--text-dim)">Customer:</span> <strong style="color:white">${escapeHTML(fb.user_name)}</strong></div>
+                    <div><span style="color:var(--text-dim)">Phone:</span> <strong style="color:white">${escapeHTML(fb.user_phone)}</strong></div>
+                    <div><span style="color:var(--text-dim)">Channel:</span> <strong style="color:white">${escapeHTML(conv.channel || "VOICE")}</strong></div>
+                    <div><span style="color:var(--text-dim)">Resolution:</span> <span class="badge ${resClass}" style="font-size:8px; padding:1px 4px; display:inline-block;">${fb.resolution_status.toUpperCase()}</span></div>
+                </div>
+            </div>
+
+            <!-- Call Transcript -->
+            <div style="padding: 12px 20px 4px; font-family: var(--font-display); font-size:12px; font-weight: 700; color: var(--text-dim); border-bottom: 1px solid rgba(255,255,255,0.04);">
+                <i class="fa-solid fa-comments"></i> Transcript & System Events
+            </div>
+            <div class="conversation-body" style="flex-grow:1; overflow-y:auto; padding: 16px; background: rgba(0,0,0,0.1); display:flex; flex-direction:column;">
+                ${messagesHtml}
+            </div>
+        `;
+
+        const body = detail.querySelector(".conversation-body");
+        if (body) body.scrollTop = body.scrollHeight;
+
+    } catch (err) {
+        console.error("Failed to load feedback details:", err);
+        detail.innerHTML = `<div style="text-align:center; padding:40px; color:var(--red)">Failed to load call transcript.</div>`;
     }
 }

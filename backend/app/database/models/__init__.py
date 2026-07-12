@@ -10,6 +10,7 @@ from .conversation_message import ConversationMessage, MessageSender, MessageTyp
 from .campaign import Campaign
 from .call_review import CallReview
 from .ivr_session import IvrSession
+from .customer_feedback import CustomerFeedback
 
 __all__ = [
     "User",
@@ -28,4 +29,5 @@ __all__ = [
     "Campaign",
     "CallReview",
     "IvrSession",
+    "CustomerFeedback",
 ]

@@ -40,20 +40,9 @@ def list_admin_enriched_conversations(
     from app.database.models.conversation_message import ConversationMessage
     import json
 
-    subq = (
-        select(Conversation.user_id, func.max(Conversation.updated_at).label("max_updated"))
-        .where(Conversation.user_id != None, Conversation.is_deleted == False)
-        .group_by(Conversation.user_id)
-        .subquery()
-    )
-
     stmt = (
         select(Conversation)
-        .outerjoin(subq, Conversation.user_id == subq.c.user_id)
-        .where(
-            Conversation.is_deleted == False,
-            (Conversation.user_id == None) | (Conversation.updated_at == subq.c.max_updated)
-        )
+        .where(Conversation.is_deleted == False)
         .order_by(Conversation.updated_at.desc())
         .limit(limit)
         .offset(offset)
@@ -194,6 +183,44 @@ def list_admin_enriched_conversations(
         message="Admin enriched conversations fetched",
     )
 
+
+@router.get("/admin/reviews", response_model=dict)
+def get_admin_reviews(
+    current_user=Depends(get_optional_current_user),
+    db: Session = Depends(get_db),
+):
+    """Admin-only endpoint: returns all customer reviews/feedbacks with conversation details."""
+    role = current_user.get("role") if current_user else None
+    if role != "ADMIN":
+        from app.exceptions.common import UnauthorizedException
+        raise UnauthorizedException("Access restricted to administrators")
+
+    from app.database.models.customer_feedback import CustomerFeedback
+    from app.database.models.conversation import Conversation
+    from app.database.models.user import User
+
+    stmt = select(CustomerFeedback).order_by(CustomerFeedback.created_at.desc())
+    feedbacks = db.scalars(stmt).all()
+
+    reviews = []
+    for fb in feedbacks:
+        conv = fb.conversation
+        user_name = fb.user.full_name if fb.user else "Guest"
+        user_phone = fb.user.phone if fb.user else (conv.session_id if (conv and conv.session_id.isdigit()) else "Unknown")
+        reviews.append({
+            "id": str(fb.id),
+            "conversation_id": str(fb.conversation_id),
+            "rating": fb.rating,
+            "created_at": fb.created_at.isoformat() if fb.created_at else None,
+            "user_name": user_name,
+            "user_phone": user_phone,
+            "resolution_status": conv.resolution_status if conv else "resolved",
+        })
+
+    return success_response(
+        data={"reviews": reviews, "total": len(reviews)},
+        message="Admin customer reviews fetched",
+    )
 
 
 @router.get("", response_model=dict)
