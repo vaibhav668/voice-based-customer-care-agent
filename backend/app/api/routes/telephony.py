@@ -75,12 +75,25 @@ async def trigger_test_outbound(
 async def handle_incoming(
     request: Request,
     CallSid: str = Form(...),
-    From: str = Form(...),
+    From: str = Form(None),
+    To: str = Form(None),
+    Direction: str = Form(None),
     db: Session = Depends(get_db),
     _ = Depends(validate_signature_dependency),
 ):
-    """Answers inbound telephone calls, sets up caller verification and consent templates."""
-    session = ivr_manager.get_or_create_call(CallSid, From, db)
+    """Answers inbound/outbound telephone calls, sets up caller verification and consent templates."""
+    twilio_number = os.getenv("TWILIO_PHONE_NUMBER", "").replace("+", "").replace(" ", "")
+    
+    # For outbound calls: From = Twilio number, To = customer number
+    # For inbound calls:  From = customer number, To = Twilio number
+    from_digits = (From or "").replace("+", "").replace(" ", "")
+    if twilio_number and from_digits.endswith(twilio_number):
+        # This is an outbound call — customer is in 'To'
+        caller_phone = To or From
+    else:
+        caller_phone = From
+    
+    session = ivr_manager.get_or_create_call(CallSid, caller_phone, db)
     res = session.advance_state("INIT")
     
     xml = adapter.generate_menu_response(
