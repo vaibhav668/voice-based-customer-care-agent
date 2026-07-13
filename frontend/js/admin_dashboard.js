@@ -57,10 +57,15 @@ document.addEventListener("DOMContentLoaded", async () => {
     initLiveAlerts();
     initSettingsTab();
     
-    // 3. Load Real-time Data
-    await loadBookings();
-    await loadConversations();
-    await loadFeedbacks();
+    // 3. Clear hardcoded placeholder values & show skeletons immediately
+    clearStaleHTML();
+
+    // 4. Load all real-time data in parallel (no sequential waiting)
+    await Promise.all([
+        loadBookings(),
+        loadConversations(),
+        loadFeedbacks(),
+    ]);
     initDriversTab();
 
     // 4. Set up Refresh handler
@@ -188,7 +193,43 @@ function switchToTab(tabName) {
 }
 
 /* ----------------- REAL-TIME DATA LOGS ----------------- */
+/* ---------- Wipe hardcoded HTML placeholder values before first real load ---------- */
+function clearStaleHTML() {
+    const el = id => document.getElementById(id);
+
+    // Stat cards — show "—" while real data is fetching
+    const statIds = ["stat-todays-calls", "stat-active-calls", "stat-resolution-rate", "stat-transfer-rate"];
+    statIds.forEach(id => { if (el(id)) el(id).textContent = "—"; });
+
+    // Progress bar — reset to 0 so it doesn't flash the fake 94%
+    const pf = document.querySelector(".stat-card .progress-fill");
+    if (pf) pf.style.width = "0%";
+
+    // Support Interceptions — replace fake ticket card with a loading shimmer
+    const feed = el("dashboard-interceptions");
+    if (feed) {
+        feed.innerHTML = `
+            <div style="display:flex; flex-direction:column; gap:10px; padding:8px 0;">
+                ${[1,2,3].map(() => `
+                    <div style="
+                        background: rgba(255,255,255,0.03);
+                        border-radius: 8px;
+                        padding: 14px 16px;
+                        animation: shimmer 1.4s ease-in-out infinite alternate;
+                    ">
+                        <div style="height:10px; width:55%; background:rgba(255,255,255,0.07); border-radius:4px; margin-bottom:8px;"></div>
+                        <div style="height:8px; width:85%; background:rgba(255,255,255,0.04); border-radius:4px; margin-bottom:6px;"></div>
+                        <div style="height:8px; width:40%; background:rgba(255,255,255,0.04); border-radius:4px;"></div>
+                    </div>`).join("")}
+            </div>`;
+    }
+
+    // Live counts badges
+    ["live-chats-count", "live-calls-count"].forEach(id => { if (el(id)) el(id).textContent = "…"; });
+}
+
 async function loadBookings(silent = false) {
+
     const tbody = document.getElementById("bookings-table-body");
     if (!tbody) return;
 

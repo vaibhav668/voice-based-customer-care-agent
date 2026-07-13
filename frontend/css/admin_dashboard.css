@@ -823,6 +823,11 @@ body {
     50%       { opacity: 0.55; }
 }
 
+@keyframes shimmer {
+    from { opacity: 0.5; }
+    to   { opacity: 1;   }
+}
+
 .btn-transcript-view {
     background: transparent;
     border: none;
