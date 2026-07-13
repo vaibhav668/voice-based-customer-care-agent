@@ -542,10 +542,6 @@ function renderInterceptionsFromEnriched(conversations) {
             : (c.booking_code || "No booking");
         const problem  = escapeHTML((c.possible_problem || "").substring(0, 120));
         const intents  = (c.intents_detected || []).join(", ") || "—";
-        const ivrLabel = (c.ivr_state && c.ivr_state !== "UNKNOWN")
-            ? `<span style="font-size:10px; background:rgba(255,140,0,0.12); color:var(--orange); border:1px solid rgba(255,140,0,0.35); border-radius:4px; padding:1px 6px; margin-left:6px;">${c.ivr_state}</span>`
-            : "";
-
         const cardBorder = live
             ? "border-left: 3px solid var(--teal); background: rgba(53,216,182,0.04);"
             : "";
@@ -557,7 +553,6 @@ function renderInterceptionsFromEnriched(conversations) {
                         <i class="fa-solid fa-${c.channel === 'VOICE' ? 'phone' : 'comment'}" style="color:${live ? 'var(--teal)' : 'var(--cyan)'}"></i>
                         <strong style="font-family:var(--font-mono); color:white;">${phone}</strong>
                         <span style="color:var(--text-dim); font-size:11px; margin-left:4px;">${name}</span>
-                        ${ivrLabel}
                     </span>
                     <span class="time-stamp">${dateStr}</span>
                 </div>
