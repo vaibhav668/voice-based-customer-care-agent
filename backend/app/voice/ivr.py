@@ -203,14 +203,14 @@ class IVRCallSession:
                     self._log_system_event("Caller verification pending. Asking for booking reference code.")
                     return {
                         "state": self.state.value,
-                        "prompt": "We could not verify your phone number. Please key in your 6 digit booking reference code.",
+                        "prompt": "We could not verify your phone number. Please key in your booking reference code.",
                         "expect_input": "DTMF",
                     }
-
+ 
         elif self.state == IVRState.VERIFICATION_PENDING:
             booking_code = data.strip().upper() if (action == "DTMF" and data) else ""
             if booking_code:
-                if not booking_code.startswith("BK-") and len(booking_code) == 6:
+                if not booking_code.startswith("BK-"):
                     booking_code = f"BK-{booking_code}"
                 
                 # Retrieve booking record from DB
@@ -222,7 +222,7 @@ class IVRCallSession:
                     self._log_system_event(f"Caller verification failed: booking {booking_code} not found.")
                     return {
                         "state": self.state.value,
-                        "prompt": "Invalid booking reference. Please enter your 6 digit booking reference code again.",
+                        "prompt": "Invalid booking reference. Please enter your booking reference code again.",
                         "expect_input": "DTMF",
                     }
 
@@ -265,7 +265,7 @@ class IVRCallSession:
             else:
                 return {
                     "state": self.state.value,
-                    "prompt": "Booking code not received. Please key in your 6 digit booking reference code using your keypad.",
+                    "prompt": "Booking code not received. Please key in your booking reference code using your keypad.",
                     "expect_input": "DTMF",
                 }
 
