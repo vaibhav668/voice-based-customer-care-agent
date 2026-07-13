@@ -34,6 +34,43 @@ async def validate_signature_dependency(request: Request, x_twilio_signature: st
         raise HTTPException(status_code=400, detail="Invalid Twilio signature.")
 
 
+@router.post("/test-outbound")
+async def trigger_test_outbound(
+    to_phone: str = "+918266894170",
+    db: Session = Depends(get_db),
+):
+    """Triggers an outbound test call to the user's phone, linking it to the IVR loop."""
+    account_sid = os.getenv("TWILIO_ACCOUNT_SID")
+    auth_token = os.getenv("TWILIO_AUTH_TOKEN")
+    from_phone = os.getenv("TWILIO_PHONE_NUMBER")
+    public_url = os.getenv("PUBLIC_URL")
+
+    if not all([account_sid, auth_token, from_phone, public_url]):
+        raise HTTPException(
+            status_code=400,
+            detail="Missing required Twilio configuration settings: SID, Token, phone, or PUBLIC_URL."
+        )
+
+    try:
+        from twilio.rest import Client
+        client = Client(account_sid, auth_token)
+        call = client.calls.create(
+            to=to_phone,
+            from_=from_phone,
+            url=f"{public_url}/api/v1/telephony/twilio/incoming"
+        )
+        return {
+            "status": "success",
+            "message": f"Outbound call triggered successfully to {to_phone}.",
+            "call_sid": call.sid
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to initiate outbound Twilio call: {str(e)}"
+        )
+
+
 @router.post("/incoming")
 async def handle_incoming(
     request: Request,
