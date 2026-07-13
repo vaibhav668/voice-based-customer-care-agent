@@ -225,11 +225,13 @@ class IVRCallSession:
         if not self.phone_number:
             return
         
-        stmt = select(User).where(User.phone.like(f"%{self.phone_number}"))
-        user = self.db.scalar(stmt)
-        if user:
-            self.user_id = str(user.id)
-            self.language = user.preferred_language or "en"
+        clean_caller = "".join(filter(str.isdigit, str(self.phone_number)))[-10:]
+        if clean_caller:
+            stmt = select(User).where(User.phone.like(f"%{clean_caller}%"))
+            user = self.db.scalar(stmt)
+            if user:
+                self.user_id = str(user.id)
+                self.language = user.preferred_language or "en"
 
     def advance_state(self, action: str, data: Optional[str] = None) -> dict:
         """
@@ -288,8 +290,10 @@ class IVRCallSession:
                 # Check if phone number exists in database
                 user = None
                 if self.phone_number:
-                    stmt = select(User).where(User.phone.like(f"%{self.phone_number}"))
-                    user = self.db.scalar(stmt)
+                    clean_caller = "".join(filter(str.isdigit, str(self.phone_number)))[-10:]
+                    if clean_caller:
+                        stmt = select(User).where(User.phone.like(f"%{clean_caller}%"))
+                        user = self.db.scalar(stmt)
                 
                 if user:
                     self.state = IVRState.OTP_PENDING
@@ -311,7 +315,7 @@ class IVRCallSession:
                     
                     return {
                         "state": self.state.value,
-                        "prompt": "Select your preferred language. Press 1 for English. Hindi ke liye 2 dabaye. Telugu kosam 3 nokkandi. Tamilukku 4 amuthavum. Marathi sathi 5 daba. Kannadakkagi 6 otti. Gujarati mate 7 dabavo. Banglar jonno 8 tipun. Malayalathinaayi 9 amarthuka. Urdu ke liye 0 dabaye.",
+                        "prompt": "Select your preferred language. Press 1 for English, 2 for Hindi, 3 for Telugu, 4 for Kannada, 5 for Marathi, 6 for Tamil, 7 for Gujarati, 8 for Bengali, 9 for Malayalam, or 0 for Urdu.",
                         "expect_input": "DTMF",
                         "num_digits": 1,
                     }
@@ -320,8 +324,10 @@ class IVRCallSession:
             entered_otp = data.strip() if (action == "DTMF" and data) else ""
             user = None
             if self.phone_number:
-                stmt = select(User).where(User.phone.like(f"%{self.phone_number}"))
-                user = self.db.scalar(stmt)
+                clean_caller = "".join(filter(str.isdigit, str(self.phone_number)))[-10:]
+                if clean_caller:
+                    stmt = select(User).where(User.phone.like(f"%{clean_caller}%"))
+                    user = self.db.scalar(stmt)
             
             if user:
                 from app.auth.service import verify_otp
@@ -337,7 +343,7 @@ class IVRCallSession:
                     
                     return {
                         "state": self.state.value,
-                        "prompt": "OTP verification successful. Select your preferred language. Press 1 for English. Hindi ke liye 2 dabaye. Telugu kosam 3 nokkandi. Tamilukku 4 amuthavum. Marathi sathi 5 daba. Kannadakkagi 6 otti. Gujarati mate 7 dabavo. Banglar jonno 8 tipun. Malayalathinaayi 9 amarthuka. Urdu ke liye 0 dabaye.",
+                        "prompt": "OTP verification successful. Select your preferred language. Press 1 for English, 2 for Hindi, 3 for Telugu, 4 for Kannada, 5 for Marathi, 6 for Tamil, 7 for Gujarati, 8 for Bengali, 9 for Malayalam, or 0 for Urdu.",
                         "expect_input": "DTMF",
                         "num_digits": 1,
                     }
@@ -356,9 +362,9 @@ class IVRCallSession:
                 "1": "en",
                 "2": "hi",
                 "3": "te",
-                "4": "ta",
+                "4": "kn",
                 "5": "mr",
-                "6": "kn",
+                "6": "ta",
                 "7": "gu",
                 "8": "bn",
                 "9": "ml",
