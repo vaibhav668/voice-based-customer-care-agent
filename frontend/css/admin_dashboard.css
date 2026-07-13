@@ -810,6 +810,19 @@ body {
     color: var(--red);
 }
 
+.badge-live {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ff4444;
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+
+@keyframes pulse-badge {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.55; }
+}
+
 .btn-transcript-view {
     background: transparent;
     border: none;

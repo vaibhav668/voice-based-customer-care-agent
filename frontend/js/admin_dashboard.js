@@ -494,42 +494,82 @@ function renderInterceptionsFromEnriched(conversations) {
         return;
     }
 
-    // Show top 6, prioritizing unresolved/escalated
+    // Active IVR states that mean the call is live right now
+    const LIVE_IVR_STATES = new Set([
+        "ACTIVE_AGENT", "OTP_PENDING", "LANGUAGE_SELECTION_PENDING",
+        "CONSENT_PENDING", "VERIFICATION_PENDING", "POST_ANSWER_CHOICE",
+        "RATING_PENDING"
+    ]);
+
+    const isLive = c =>
+        LIVE_IVR_STATES.has(c.ivr_state) ||
+        (c.status === "ACTIVE" && c.channel === "VOICE");
+
+    // Sort: live calls first, then escalated, then unresolved, then rest; newest first within each tier
     const prioritized = [...conversations].sort((a, b) => {
-        const score = s => s === "escalated" ? 2 : s === "unresolved" ? 1 : 0;
-        return score(b.resolution_status) - score(a.resolution_status);
+        const tier = c => isLive(c) ? 3 : c.resolution_status === "escalated" ? 2 : c.resolution_status === "unresolved" ? 1 : 0;
+        const tDiff = tier(b) - tier(a);
+        if (tDiff !== 0) return tDiff;
+        // Same tier → newest updated_at first
+        return new Date(b.updated_at || 0) - new Date(a.updated_at || 0);
     }).slice(0, 6);
 
     feed.innerHTML = prioritized.map(c => {
+        const live = isLive(c);
         const dateStr = c.updated_at ? formatRelativeTime(c.updated_at) : "recently";
         const resStatus = c.resolution_status || "unresolved";
-        const badgeClass = resStatus === "resolved" ? "badge-resolved" : (resStatus === "escalated" ? "badge-escalated" : "badge-frustration");
-        const phone = c.user_phone || "Unknown";
-        const name = c.user_name || "Guest";
+
+        let badgeClass, badgeText;
+        if (live) {
+            badgeClass = "badge-live";
+            badgeText  = "🔴 LIVE";
+        } else if (resStatus === "resolved") {
+            badgeClass = "badge-resolved";
+            badgeText  = "RESOLVED";
+        } else if (resStatus === "escalated") {
+            badgeClass = "badge-escalated";
+            badgeText  = "ESCALATED";
+        } else {
+            badgeClass = "badge-frustration";
+            badgeText  = "UNRESOLVED";
+        }
+
+        const phone   = c.user_phone || "Unknown";
+        const name    = c.user_name  || "Guest";
         const booking = c.booking_details;
-        const route = booking ? `${booking.source || "?"} → ${booking.destination || "?"}` : (c.booking_code || "No booking");
-        const problem = escapeHTML((c.possible_problem || "").substring(0, 120));
-        const intents = (c.intents_detected || []).join(", ") || "—";
+        const route   = booking
+            ? `${booking.source || "?"} → ${booking.destination || "?"}`
+            : (c.booking_code || "No booking");
+        const problem  = escapeHTML((c.possible_problem || "").substring(0, 120));
+        const intents  = (c.intents_detected || []).join(", ") || "—";
+        const ivrLabel = (c.ivr_state && c.ivr_state !== "UNKNOWN")
+            ? `<span style="font-size:10px; background:rgba(255,140,0,0.12); color:var(--orange); border:1px solid rgba(255,140,0,0.35); border-radius:4px; padding:1px 6px; margin-left:6px;">${c.ivr_state}</span>`
+            : "";
+
+        const cardBorder = live
+            ? "border-left: 3px solid var(--teal); background: rgba(53,216,182,0.04);"
+            : "";
 
         return `
-            <div class="interception-item clickable-card" data-conv-id="${c.id}" style="cursor: pointer;">
+            <div class="interception-item clickable-card" data-conv-id="${c.id}" style="cursor:pointer; ${cardBorder}">
                 <div class="item-header">
                     <span class="ticket-code">
-                        <i class="fa-solid fa-phone" style="color:var(--teal)"></i>
+                        <i class="fa-solid fa-${c.channel === 'VOICE' ? 'phone' : 'comment'}" style="color:${live ? 'var(--teal)' : 'var(--cyan)'}"></i>
                         <strong style="font-family:var(--font-mono); color:white;">${phone}</strong>
                         <span style="color:var(--text-dim); font-size:11px; margin-left:4px;">${name}</span>
+                        ${ivrLabel}
                     </span>
                     <span class="time-stamp">${dateStr}</span>
                 </div>
-                <p class="item-body" style="margin: 6px 0; color: var(--text-dim); font-size: 12px; line-height:1.5;">
+                <p class="item-body" style="margin:6px 0; color:var(--text-dim); font-size:12px; line-height:1.5;">
                     ${problem || "No user message recorded."}
                 </p>
-                <div style="font-size: 10.5px; color: var(--cyan); margin-bottom: 6px;">
+                <div style="font-size:10.5px; color:var(--cyan); margin-bottom:6px;">
                     <i class="fa-solid fa-route"></i> ${route} &nbsp;|&nbsp;
                     <i class="fa-solid fa-brain"></i> ${intents}
                 </div>
                 <div class="item-footer">
-                    <span class="badge ${badgeClass}">${resStatus.toUpperCase()}</span>
+                    <span class="badge ${badgeClass}" ${live ? 'style="animation: pulse-badge 1.4s ease-in-out infinite;"' : ''}>${badgeText}</span>
                     <button class="btn-transcript-view" data-conv-id="${c.id}">View Convo</button>
                 </div>
             </div>
@@ -545,11 +585,9 @@ function renderInterceptionsFromEnriched(conversations) {
                 const targetTab = (conv && conv.channel === "CHAT") ? "chat-support" : "call-support";
                 switchToTab(targetTab);
                 loadEnrichedConversationDetail(convId);
-                
-                // highlight in list
+
                 const listId = targetTab === "chat-support" ? "chat-conversations-list" : "call-conversations-list";
-                const items = document.querySelectorAll(`#${listId} .list-item`);
-                items.forEach(item => {
+                document.querySelectorAll(`#${listId} .list-item`).forEach(item => {
                     item.classList.toggle("active", item.dataset.convId === convId);
                 });
             }
