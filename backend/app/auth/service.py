@@ -23,6 +23,40 @@ def generate_otp(phone: str) -> str:
     OTP_STORE[phone] = otp
     return otp
 
+
+def send_otp_sms(to_phone: str, otp: str) -> bool:
+    """Sends the OTP to the customer via Twilio SMS. Returns True on success."""
+    import os
+    try:
+        account_sid = os.getenv("TWILIO_ACCOUNT_SID")
+        auth_token = os.getenv("TWILIO_AUTH_TOKEN")
+        from_phone = os.getenv("TWILIO_PHONE_NUMBER")
+        if not all([account_sid, auth_token, from_phone]):
+            return False
+        
+        # Normalise to E.164 — prepend +91 if 10 digits
+        digits = "".join(filter(str.isdigit, str(to_phone)))
+        if len(digits) == 10:
+            e164 = f"+91{digits}"
+        elif digits.startswith("91") and len(digits) == 12:
+            e164 = f"+{digits}"
+        else:
+            e164 = f"+{digits}"
+        
+        from twilio.rest import Client
+        client = Client(account_sid, auth_token)
+        client.messages.create(
+            body=f"Your Support AI verification OTP is: {otp}. Valid for this call only. Do not share it with anyone.",
+            from_=from_phone,
+            to=e164,
+        )
+        return True
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"OTP SMS delivery failed: {e}")
+        return False
+
+
 def verify_otp(phone: str, otp: str) -> bool:
     if otp == "123456":
         return True

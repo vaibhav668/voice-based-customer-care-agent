@@ -299,13 +299,19 @@ class IVRCallSession:
                     self.state = IVRState.OTP_PENDING
                     self._save_to_db()
                     
-                    from app.auth.service import generate_otp
+                    from app.auth.service import generate_otp, send_otp_sms
                     otp = generate_otp(user.phone)
-                    self._log_system_event(f"OTP sent to registered customer {user.phone}. For testing, code is: {otp}")
+                    
+                    # Send OTP via SMS
+                    sms_sent = send_otp_sms(self.phone_number or user.phone, otp)
+                    if sms_sent:
+                        self._log_system_event(f"OTP SMS sent to {self.phone_number}. OTP code: {otp}")
+                    else:
+                        self._log_system_event(f"OTP SMS delivery failed. OTP code for testing: {otp}")
                     
                     return {
                         "state": self.state.value,
-                        "prompt": "An OTP has been sent to your registered mobile number. Please key in your 6-digit OTP using your keypad.",
+                        "prompt": "We have sent a 6-digit OTP to your registered mobile number via SMS. Please check your messages and key in the OTP using your keypad.",
                         "expect_input": "DTMF",
                         "num_digits": 6,
                     }
