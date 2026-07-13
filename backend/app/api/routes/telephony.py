@@ -393,10 +393,12 @@ async def handle_recording_callback(
     if RecordingStatus == "completed" and RecordingUrl:
         conv = db.query(Conversation).filter_by(session_id=ivr_sess.session_id).first()
         if conv:
-            conv.recording_url = RecordingUrl
+            # Append .mp3 so the URL is directly playable in browsers without Twilio auth
+            playable_url = RecordingUrl if RecordingUrl.endswith(".mp3") or RecordingUrl.endswith(".wav") else RecordingUrl + ".mp3"
+            conv.recording_url = playable_url
             db.commit()
             broadcast_call_event("call_updated", ivr_sess.session_id, "Call recording is now available.", {
-                "recording_url": RecordingUrl
+                "recording_url": playable_url
             })
             return {"status": "success", "message": "Recording URL mapped to conversation."}
             

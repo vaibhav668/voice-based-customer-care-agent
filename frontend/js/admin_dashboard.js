@@ -790,7 +790,15 @@ async function loadEnrichedConversationDetail(convId) {
                         else cleanPath = `generated_audio/${cleanPath}`;
                     }
                     const audioUrl = cleanPath.startsWith("http") ? cleanPath : `${getBaseUrl()}/${cleanPath}`;
-                    audioWidget = `<div style="margin-top:8px;"><audio controls style="width:100%;max-width:280px;height:32px;"><source src="${audioUrl}" type="audio/webm"></audio></div>`;
+                    // TTS files are MP3 (edge-tts outputs .mp3)
+                    const mimeType = audioUrl.endsWith(".webm") ? "audio/webm" : "audio/mpeg";
+                    audioWidget = `
+                        <div style="margin-top:8px;">
+                            <audio controls style="width:100%;max-width:280px;height:32px;"
+                                onerror="this.outerHTML='<span style=\'font-size:11px;color:var(--text-dim);\'><i class=\'fa-solid fa-circle-exclamation\'></i> Audio unavailable</span>'">
+                                <source src="${audioUrl}" type="${mimeType}">
+                            </audio>
+                        </div>`;
                 }
                 return `
                     <div class="bubble-row ${rowClass}">
@@ -840,11 +848,21 @@ async function loadEnrichedConversationDetail(convId) {
 
             <!-- TAB 1: TRANSCRIPT CONTENT -->
             <div id="transcript-container-${c.id}" class="detail-tab-content" style="display:flex; flex-direction:column; flex-grow:1; overflow:hidden;">
-                ${c.recording_url ? `
-                <div style="padding:10px 16px; background:rgba(0,180,255,0.06); border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; gap:12px; flex-shrink:0;">
-                    <span style="font-size:12px; font-weight:600; color:var(--cyan);"><i class="fa-solid fa-microphone"></i> Full Call Recording:</span>
-                    <audio controls style="height:28px;"><source src="${c.recording_url}" type="audio/mpeg"></audio>
-                </div>` : ""}
+                ${c.recording_url ? (() => {
+                    // Twilio recording URLs need .mp3 appended for unauthenticated playback
+                    let recUrl = c.recording_url;
+                    if (recUrl && recUrl.includes('api.twilio.com') && !recUrl.endsWith('.mp3') && !recUrl.endsWith('.wav')) {
+                        recUrl = recUrl + '.mp3';
+                    }
+                    return `
+                    <div style="padding:10px 16px; background:rgba(0,180,255,0.06); border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; gap:12px; flex-shrink:0;">
+                        <span style="font-size:12px; font-weight:600; color:var(--cyan);"><i class="fa-solid fa-microphone"></i> Full Call Recording:</span>
+                        <audio controls style="height:28px; flex:1; max-width:320px;"
+                            onerror="this.outerHTML='<span style=\'font-size:11px;color:var(--text-dim);\'><i class=\'fa-solid fa-circle-exclamation\'></i> Recording not yet available</span>'">
+                            <source src="${recUrl}" type="audio/mpeg">
+                        </audio>
+                    </div>`;
+                })() : ""}
                 ${bk ? `
                 <div style="padding:10px 16px; background:rgba(0,200,150,0.06); border-bottom:1px solid var(--line); display:flex; gap:20px; font-size:12px; flex-wrap:wrap; align-items:center;">
                     <span><i class="fa-solid fa-ticket" style="color:var(--teal)"></i> <strong>${bk.booking_code}</strong></span>
