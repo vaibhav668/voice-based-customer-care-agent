@@ -418,7 +418,10 @@ class ChatService:
             # Resolution status logic
             if result.tool == "escalate":
                 db_conv.resolution_status = "escalated"
-            elif result.success and result.tool in ("booking", "cancellation", "reschedule", "complaint", "refund"):
+            elif result.success and result.tool in (
+                "booking", "booking_status", "booking_cancel", "cancellation",
+                "reschedule", "complaint", "refund", "refund_status", "create_booking"
+            ):
                 db_conv.resolution_status = "resolved"
 
             self.db.commit()
