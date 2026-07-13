@@ -117,7 +117,7 @@ async def test_twilio_integration():
 
         # Simulate call variables
         call_sid = f"CA-Test-{uuid.uuid4().hex[:6]}"
-        caller_phone = "1234567890" # Unverified phone caller
+        caller_phone = phone_number # Registered customer phone
 
         # Instantiate async httpx client
         transport = httpx.ASGITransport(app=app)
@@ -135,37 +135,37 @@ async def test_twilio_integration():
             print("-> Incoming call TwiML response: PASSED")
 
             # ----------------------------------------------------
-            # 2. Consent Hook (LANGUAGE_SELECTION_PENDING)
+            # 2. Consent Hook (OTP_PENDING for registered phone)
             # ----------------------------------------------------
-            print("\n--- 2. Testing Consent Hook ---")
+            print("\n--- 2. Testing Consent Hook (Redirects to OTP) ---")
             response = await client.post("/api/v1/telephony/twilio/consent", data={"CallSid": call_sid, "Digits": "1"})
             assert response.status_code == 200
-            assert "language" in response.text
-            print("-> Consent TwiML response: PASSED")
+            assert "otp" in response.text
+            print("-> Consent TwiML redirects to OTP response: PASSED")
 
             # ----------------------------------------------------
-            # 3. Language Selection Hook (VERIFICATION_PENDING)
+            # 3. OTP Verification Hook (LANGUAGE_SELECTION_PENDING)
             # ----------------------------------------------------
-            print("\n--- 3. Testing Language Selection Hook ---")
+            print("\n--- 3. Testing OTP Verification Hook ---")
+            response = await client.post("/api/v1/telephony/twilio/otp", data={"CallSid": call_sid, "Digits": "123456"})
+            assert response.status_code == 200
+            assert "language" in response.text
+            print("-> OTP verification successful redirects to language selection: PASSED")
+
+            # ----------------------------------------------------
+            # 4. Language Selection Hook (VERIFICATION_PENDING)
+            # ----------------------------------------------------
+            print("\n--- 4. Testing Language Selection Hook ---")
             response = await client.post("/api/v1/telephony/twilio/language", data={"CallSid": call_sid, "Digits": "1"})
             assert response.status_code == 200
             assert "verify_code" in response.text
-            print("-> Language selection unverified verification redirect TwiML response: PASSED")
+            print("-> Language selection redirects to booking verify code: PASSED")
 
             # ----------------------------------------------------
-            # 4. Verify Code (VERIFICATION_PHONE_PENDING)
+            # 5. Verify Code (ACTIVE_AGENT)
             # ----------------------------------------------------
-            print("\n--- 4. Testing Verify Code Hook ---")
+            print("\n--- 5. Testing Verify Code Hook (Booking Ownership) ---")
             response = await client.post("/api/v1/telephony/twilio/verify_code", data={"CallSid": call_sid, "Digits": booking_code})
-            assert response.status_code == 200
-            assert "verify_phone" in response.text
-            print("-> Code verification phone lookup redirection TwiML response: PASSED")
-
-            # ----------------------------------------------------
-            # 5. Verify Phone (ACTIVE_AGENT)
-            # ----------------------------------------------------
-            print("\n--- 5. Testing Verify Phone Hook ---")
-            response = await client.post("/api/v1/telephony/twilio/verify_phone", data={"CallSid": call_sid, "Digits": phone_number})
             assert response.status_code == 200
             assert "agent" in response.text
             
@@ -173,10 +173,10 @@ async def test_twilio_integration():
             session = ivr_manager.calls[call_sid]
             assert session.state == IVRState.ACTIVE_AGENT
             assert session.user_id == str(user.id)
-            print("-> Caller phone two-step verification TwiML response: PASSED")
+            print("-> Booking ownership verification TwiML response: PASSED")
 
             # ----------------------------------------------------
-            # 6. Active Agent turn (ASR Text input -> TTS Playback)
+            # 6. Active Agent turn (Speech -> Play AI response + choice menu)
             # ----------------------------------------------------
             print("\n--- 6. Testing Active Agent Voice Turn ---")
             
@@ -186,31 +186,27 @@ async def test_twilio_integration():
             conv.resolution_status = "resolved"
             db.commit()
 
-            # Call agent turn with speech - should stay in ACTIVE_AGENT to support multi-turn
+            # Call agent turn with speech - should ask for continue/end query choice
             response = await client.post("/api/v1/telephony/twilio/agent", data={"CallSid": call_sid, "SpeechResult": "Check my booking."})
             assert response.status_code == 200
-            assert "agent" in response.text
-            assert session.state == IVRState.ACTIVE_AGENT
-            print("-> Multi-turn agent voice response: PASSED")
-
-            # Call agent turn with silence (empty speech) - should trigger choice menu
-            response = await client.post("/api/v1/telephony/twilio/agent", data={"CallSid": call_sid, "SpeechResult": ""})
-            assert response.status_code == 200
             assert "query_choice" in response.text
-            print("-> Silence choice menu redirect response: PASSED")
+            print("-> Active agent voice turn choice query redirect TwiML response: PASSED")
 
-            # Post to query choice with Digits=0 (resolved) - should transition to FEEDBACK_PENDING
+            # ----------------------------------------------------
+            # 7. Query Choice selection (Digits=0 transitions to FEEDBACK_PENDING)
+            # ----------------------------------------------------
+            print("\n--- 7. Testing Query Choice Hook (digits=0) ---")
             response = await client.post("/api/v1/telephony/twilio/query_choice", data={"CallSid": call_sid, "Digits": "0"})
             assert response.status_code == 200
             assert "feedback" in response.text
             assert session.state == IVRState.FEEDBACK_PENDING
-            print("-> Query choice resolved to feedback transition response: PASSED")
+            print("-> Choice resolved to feedback transition response: PASSED")
 
             # ----------------------------------------------------
-            # 7. CSAT Rating collection (0 maps to 10, or 10 maps to 10)
+            # 8. CSAT Rating collection (0 maps to 10, or 10 maps to 10)
             # ----------------------------------------------------
-            print("\n--- 7. Testing CSAT Feedback collection ---")
-            response = await client.post("/api/v1/telephony/twilio/feedback", data={"CallSid": call_sid, "Digits": "10"})
+            print("\n--- 8. Testing CSAT Feedback collection ---")
+            response = await client.post("/api/v1/telephony/twilio/feedback", data={"CallSid": call_sid, "Digits": "0"})
             assert response.status_code == 200
             assert "<Hangup" in response.text
             
@@ -224,10 +220,25 @@ async def test_twilio_integration():
             print("-> Customer rating persisted as 10 TwiML response: PASSED")
 
             # ----------------------------------------------------
-            # 8. Status Callback Disconnect Hook
+            # 9. Call Recording Status Callback mapping
             # ----------------------------------------------------
-            print("\n--- 8. Testing Disconnect Status Callbacks ---")
-            # Ensure status callbacks gracefully end sessions
+            print("\n--- 9. Testing Recording Completed Callback ---")
+            recording_url = "https://api.twilio.com/2010-04-01/Accounts/AC/Recordings/RE12345"
+            response = await client.post(
+                "/api/v1/telephony/twilio/recording-callback",
+                data={"CallSid": call_sid, "RecordingUrl": recording_url, "RecordingStatus": "completed"}
+            )
+            assert response.status_code == 200
+            
+            # Verify recording URL stored in database
+            db.refresh(conv)
+            assert conv.recording_url == recording_url
+            print("-> Recording URL correctly saved to conversation database record: PASSED")
+
+            # ----------------------------------------------------
+            # 10. Status Callback Disconnect Hook
+            # ----------------------------------------------------
+            print("\n--- 10. Testing Disconnect Status Callbacks ---")
             session.state = IVRState.ACTIVE_AGENT
             session._save_to_db()
             

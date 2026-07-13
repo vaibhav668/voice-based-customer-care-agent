@@ -170,6 +170,7 @@ class SupportAgent:
                     booking_code=booking_code,
                     complaint=question,
                     user_id=user_id,
+                    session_phone=session_phone,
                 )
                 return ToolResult(
                     success=True,

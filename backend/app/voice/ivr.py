@@ -16,6 +16,7 @@ from app.websocket.routes import manager
 class IVRState(str, enum.Enum):
     INCOMING = "INCOMING"
     RECORDING_CONSENT_PENDING = "RECORDING_CONSENT_PENDING"
+    OTP_PENDING = "OTP_PENDING"
     LANGUAGE_SELECTION_PENDING = "LANGUAGE_SELECTION_PENDING"
     VERIFICATION_PENDING = "VERIFICATION_PENDING"
     VERIFICATION_PHONE_PENDING = "VERIFICATION_PHONE_PENDING"
@@ -33,6 +34,120 @@ def broadcast_call_event(event_type: str, session_id: str, message: str, data: O
         "data": data or {},
     }
     manager.broadcast_sync(json.dumps(payload))
+
+
+PROMPTS = {
+    "en": {
+        "ask_booking": "Please enter your booking reference code using your keypad.",
+        "invalid_booking": "Invalid booking reference. Please enter your booking reference code again.",
+        "unauthorized": "Sorry, you are not authorized to access information about another customer's booking.",
+        "verified": "Thank you, reference verified. Please speak your support request now.",
+        "choose_query": "If you want to ask another query, press 1. If your query is resolved, press 0.",
+        "speak_query": "Please speak your query now.",
+        "timeout_reminder": "We didn't receive any input. Press 1 to continue with another query, or 0 to finish.",
+        "feedback": "Thank you. Please rate your support experience from 1 to 10 using your telephone keypad, where 0 represents a rating of 10.",
+        "goodbye": "Thank you for calling. The call is completed. Goodbye."
+    },
+    "hi": {
+        "ask_booking": "कृपया अपने कीपैड का उपयोग करके अपना बुकिंग संदर्भ कोड दर्ज करें।",
+        "invalid_booking": "अमान्य बुकिंग संदर्भ। कृपया अपना बुकिंग संदर्भ कोड फिर से दर्ज करें।",
+        "unauthorized": "क्षमा करें, आपको दूसरे ग्राहक की बुकिंग के बारे में जानकारी प्राप्त करने का अधिकार नहीं है।",
+        "verified": "धन्यवाद, संदर्भ सत्यापित हो गया है। कृपया अब अपनी सहायता का अनुरोध बोलें।",
+        "choose_query": "यदि आप दूसरा प्रश्न पूछना चाहते हैं, तो 1 दबाएं। यदि आपका प्रश्न हल हो गया है, तो 0 दबाएं।",
+        "speak_query": "कृपया अब अपना प्रश्न बोलें।",
+        "timeout_reminder": "हमें कोई इनपुट नहीं मिला। दूसरा प्रश्न पूछने के लिए 1 दबाएं, या समाप्त करने के लिए 0 दबाएं।",
+        "feedback": "धन्यवाद। कृपया अपने सहायता अनुभव को 1 से 10 के पैमाने पर रेट करें, जहाँ 0 का अर्थ 10 है।",
+        "goodbye": "कॉल करने के लिए धन्यवाद। कॉल पूरी हो गई है। अलविदा।"
+    },
+    "te": {
+        "ask_booking": "దయచేసి మీ కీప్యాడ్ ఉపయోగించి మీ బుకింగ్ రిఫరెన్స్ కోడ్‌ను నమోదు చేయండి.",
+        "invalid_booking": "అవసరమైన బుకింగ్ రిఫరెన్స్ తప్పు. దయచేసి మీ బుకింగ్ రిఫరెన్స్ కోడ్‌ను మళ్లీ నమోదు చేయండి.",
+        "unauthorized": "క్షమించండి, ఇతర కస్టమర్ యొక్క బుకింగ్ సమాచారాన్ని యాక్సెస్ చేయడానికి మీకు అనుమతి లేదు.",
+        "verified": "ధన్యవాదాలు, రిఫరెన్స్ ధృవీకరించబడింది. దయచేసి మీ సహాయ అభ్యర్థనను ఇప్పుడు మాట్లాడండి.",
+        "choose_query": "మీరు మరొక ప్రశ్న అడగాలనుకుంటే, 1 నొక్కండి. మీ ప్రశ్న పరిష్కరించబడితే, 0 నొక్కండి.",
+        "speak_query": "దయచేసి మీ ప్రశ్నను ఇప్పుడు మాట్లాడండి.",
+        "timeout_reminder": "మాకు ఎటువంటి ఇన్‌పుట్ అందలేదు. మరొక ప్రశ్న అడగడానికి 1 నొక్కండి, లేదా ముగించడానికి 0 నొక్కండి.",
+        "feedback": "ధన్యవాదాలు. దయచేసి మీ టెలిఫోన్ కీప్యాడ్ ఉపయోగించి మీ సహాయ అనుభవాన్ని 1 నుండి 10 వరకు రేట్ చేయండి, ఇక్కడ 0 అంటే 10.",
+        "goodbye": "కాల్ చేసినందుకు ధన్యవాదాలు. కాల్ పూర్తయింది. సెలవు."
+    },
+    "ta": {
+        "ask_booking": "தயவுசெய்து உங்கள் விசைப்பலகையைப் பயன்படுத்தி உங்கள் முன்பதிவு குறிப்பு குறியீட்டை உள்ளிடவும்.",
+        "invalid_booking": "தவறான முன்பதிவு குறிப்பு. தயவுசெய்து உங்கள் முன்பதிவு குறிப்பு குறியீட்டை மீண்டும் உள்ளிடவும்.",
+        "unauthorized": "மன்னிக்கவும், மற்றொரு வாடிக்கையாளரின் முன்பதிவு பற்றிய தகவலை அணுக உங்களுக்கு அனுமதி இல்லை.",
+        "verified": "நன்றி, குறிப்பு சரிபார்க்கப்பட்டது. தயவுசெய்து உங்கள் ஆதரவு கோரிக்கையை இப்போது பேசவும்.",
+        "choose_query": "நீங்கள் மற்றொரு கேள்வியைக் கேட்க விரும்பினால், 1 ஐ அழுத்தவும். உங்கள் கேள்வி தீர்க்கப்பட்டால், 0 ஐ அழுத்தவும்.",
+        "speak_query": "தயவுசெய்து உங்கள் கேள்வியை இப்போது பேசவும்.",
+        "timeout_reminder": "எந்த உள்ளீடும் பெறப்படவில்லை. மற்றொரு கேள்வியைத் தொடர 1 ஐ அழுத்தவும், அல்லது முடிக்க 0 ஐ அழுத்தவும்.",
+        "feedback": "நன்றி. உங்கள் தொலைபேசி விசைப்பலகையைப் பயன்படுத்தி உங்கள் ஆதரவு அனுபவத்தை 1 முதல் 10 வரை மதிப்பிடவும், இதில் 0 என்பது 10 ஐக் குறிக்கிறது.",
+        "goodbye": "அழைத்ததற்கு நன்றி. அழைப்பு முடிந்தது. விடைபெறுகிறோம்."
+    },
+    "mr": {
+        "ask_booking": "कृपया आपल्या कीपॅडचा वापर करून आपला बुकिंग संदर्भ कोड प्रविष्ट करा.",
+        "invalid_booking": "अवैध बुकिंग संदर्भ. कृपया आपला बुकिंग संदर्भ कोड पुन्हा प्रविष्ट करा.",
+        "unauthorized": "क्षमस्व, आपल्याला दुसर्‍या ग्राहकाच्या बुकिंगबद्दलची माहिती मिळवण्याचा अधिकार नाही.",
+        "verified": "धन्यवाद, संदर्भ सत्यापित केला गेला आहे. कृपया आता आपली मदत विनंती बोला.",
+        "choose_query": "जर तुम्हाला दुसरा प्रश्न विचारायचा असेल तर 1 दाबा. जर तुमच्या प्रश्नाचे निवारण झाले असेल तर 0 दाबा.",
+        "speak_query": "कृपया आपला प्रश्न आता बोला.",
+        "timeout_reminder": "आम्हाला कोणताही इनपुट मिळाला नाही. दुसरा प्रश्न विचारण्यासाठी 1 दाबा, किंवा समाप्त करण्यासाठी 0 दाबा.",
+        "feedback": "धन्यवाद. कृपया आपल्या टेलिफोन कीपॅडचा वापर करून आपल्या मदत अनुभवाचे 1 ते 10 च्या दरम्यान मूल्यांकन करा, जेथे 0 म्हणजे 10 आहे.",
+        "goodbye": "कॉल केल्याबद्दल धन्यवाद. कॉल पूर्ण झाला आहे. निरोप घेतो."
+    },
+    "kn": {
+        "ask_booking": "ದಯವಿಟ್ಟು ನಿಮ್ಮ ಕೀಪ್ಯಾಡ್ ಬಳಸಿ ನಿಮ್ಮ ಬುಕಿಂಗ್ ಉಲ್ಲೇಖ ಕೋಡ್ ಅನ್ನು ನಮೂದಿಸಿ.",
+        "invalid_booking": "ಅಮಾನ್ಯ ಬುಕಿಂಗ್ ಉಲ್ಲೇಖ. ದಯವಿಟ್ಟು ನಿಮ್ಮ ಬುಕಿಂಗ್ ಉಲ್ಲೇಖ ಕೋಡ್ ಅನ್ನು ಮತ್ತೆ ನಮೂದಿಸಿ.",
+        "unauthorized": "ಕ್ಷಮಿಸಿ, ಇನ್ನೊಬ್ಬ ಗ್ರಾಹಕರ ಬುಕಿಂಗ್ ಬಗ್ಗೆ ಮಾಹಿತಿ ಪಡೆಯಲು ನಿಮಗೆ ಅಧಿಕಾರವಿಲ್ಲ.",
+        "verified": "ಧನ್ಯವಾದಗಳು, ಉಲ್ಲೇಖವನ್ನು ಪರಿಶೀಲಿಸಲಾಗಿದೆ. ದಯವಿಟ್ಟು ನಿಮ್ಮ ಬೆಂಬಲ ವಿನಂತಿಯನ್ನು ಈಗ ಮಾತನಾಡಿ.",
+        "choose_query": "ನೀವು ಇನ್ನೊಂದು ಪ್ರಶ್ನೆಯನ್ನು ಕೇಳಲು ಬಯಸಿದರೆ, 1 ಒತ್ತಿ. ನಿಮ್ಮ ಪ್ರಶ್ನೆ ಪರಿಹಾರವಾಗಿದ್ದರೆ, 0 ಒತ್ತಿ.",
+        "speak_query": "ದಯವಿಟ್ಟು ನಿಮ್ಮ ಪ್ರಶ್ನೆಯನ್ನು ಈಗ ಮಾತನಾಡಿ.",
+        "timeout_reminder": "ಯಾವುದೇ ಇನ್‌ಪುಟ್ ಸ್ವೀಕರಿಸಲಾಗಿಲ್ಲ. ಇನ್ನೊಂದು ಪ್ರಶ್ನೆಯನ್ನು ಕೇಳಲು 1 ಒತ್ತಿ, ಅಥವಾ ಮುಗಿಸಲು 0 ಒತ್ತಿ.",
+        "feedback": "ಧನ್ಯವಾದಗಳು. ದಯವಿಟ್ಟು ನಿಮ್ಮ ದೂರವಾಣಿ ಕೀಪ್ಯಾಡ್ ಬಳಸಿ ನಿಮ್ಮ ಬೆಂಬಲ ಅನುಭವವನ್ನು 1 ರಿಂದ 10 ರವರೆಗೆ ರೇಟ್ ಮಾಡಿ, ಇಲ್ಲಿ 0 ಎಂದರೆ 10 ಆಗಿದೆ.",
+        "goodbye": "ಕರೆ ಮಾಡಿದ್ದಕ್ಕಾಗಿ ಧನ್ಯವಾದಗಳು. ಕರೆ ಪೂರ್ಣಗೊಂಡಿದೆ. ಹೋಗಿಬನ್ನಿ."
+    },
+    "gu": {
+        "ask_booking": "કૃપા કરીને તમારા કીપેડનો ઉપયોગ કરીને તમારો બુકિંગ સંદર્ભ કોડ દાખલ કરો.",
+        "invalid_booking": "અમાન્ય બુકિંગ સંદર્ભ. કૃપા કરીને તમારો બુકિંગ સંદર્ભ કોડ ફરીથી દાખલ કરો.",
+        "unauthorized": "દિલગીર છીએ, તમને અન્ય ગ્રાહકના બુકિંગ વિશેની માહિતી મેળવવાની મંજૂરી નથી.",
+        "verified": "આભાર, સંદર્ભ ચકાસવામાં આવ્યો છે. કૃપા કરીને હવે તમારી સપોર્ટ વિનંતી બોલો.",
+        "choose_query": "જો તમે બીજો પ્રશ્ન પૂછવા માંગતા હો, તો 1 દબાવો. જો તમારો પ્રશ્ન હલ થઈ ગયો હોય, તો 0 દબાવો.",
+        "speak_query": "કૃપા કરીને તમારો પ્રશ્ન હવે બોલો.",
+        "timeout_reminder": "કોઈ ઇનપુટ મળ્યું નથી. બીજો પ્રશ્ન પૂછવા માટે 1 દબાવો, અથવા સમાપ્ત કરવા માટે 0 દબાવો.",
+        "feedback": "આભાર. કૃпа કરીને તમારા ટેલિફોન કીપેડનો ઉપયોગ કરીને તમારા સપોર્ટ અનુભવને 1 થી 10 રેટ કરો, જ્યાં 0 એ 10 નું પ્રતિનિધિત્વ કરે છે.",
+        "goodbye": "કૉલ કરવા બદલ આભાર. કૉલ પૂર્ણ થયો છે. આવજો."
+    },
+    "bn": {
+        "ask_booking": "অনুগ্রহ করে আপনার কিপ্যাড ব্যবহার করে আপনার বুকিং রেফারেন্স কোড লিখুন।",
+        "invalid_booking": "অকার্যকর বুকিং রেফারেন্স। অনুগ্রহ করে আপনার বুকিং রেফারেন্স কোড আবার লিখুন।",
+        "unauthorized": "দুঃখিত, অন্য গ্রাহকের বুকিং সম্পর্কিত তথ্য অ্যাক্সেস করার অনুমতি আপনার নেই।",
+        "verified": "ধন্যবাদ, রেফারেন্স যাচাই করা হয়েছে। অনুগ্রহ করে এখন আপনার সহায়তার অনুরোধটি বলুন।",
+        "choose_query": "আপনি যদি অন্য প্রশ্ন জিজ্ঞাসা করতে চান, তবে 1 টিপুন। আপনার সমস্যার সমাধান হয়ে থাকলে 0 টিপুন।",
+        "speak_query": "অনুগ্রহ করে আপনার প্রশ্নটি এখন বলুন।",
+        "timeout_reminder": "কোন ইনপুট পাওয়া যায়নি। অন্য প্রশ্ন জিজ্ঞাসা করতে 1 টিপুন, অথবা শেষ করতে 0 টিপুন।",
+        "feedback": "ধন্যবাদ। অনুগ্রহ করে আপনার টেলিফোন কিপ্যাড ব্যবহার করে আপনার সহায়তার অভিজ্ঞতাকে 1 থেকে 10 এর মধ্যে রেট করুন, যেখানে 0 মানে 10 রেটিং।",
+        "goodbye": "কল করার জন্য ধন্যবাদ। কলটি সম্পন্ন হয়েছে। বিদায়।"
+    },
+    "ml": {
+        "ask_booking": "ദയവായി നിങ്ങളുടെ കീപാഡ് ഉപയോഗിച്ച് നിങ്ങളുടെ ബുക്കിംഗ് റഫറൻസ് കോഡ് നൽകുക.",
+        "invalid_booking": "അസാധുവായ ബുക്കിംഗ് റഫറൻസ്. ദയവായി നിങ്ങളുടെ ബുക്കിംഗ് റഫറൻസ് കോഡ് വീണ്ടും നൽകുക.",
+        "unauthorized": "ക്ഷമിക്കണം, മറ്റൊരു ഉപഭോക്താവിന്റെ ബുക്കിംഗ് വിവരങ്ങൾ ആക്സസ് ചെയ്യാൻ നിങ്ങൾക്ക് അനുമതിയില്ല.",
+        "verified": "നന്ദി, റഫറൻസ് പരിശോധിച്ചു. ദയവായി നിങ്ങളുടെ പിന്തുണാ അഭ്യർത്ഥന ഇപ്പോൾ സംസാരിക്കുക.",
+        "choose_query": "നിങ്ങൾക്ക് മറ്റൊരു ചോദ്യം ചോദിക്കണമെങ്കിൽ, 1 അമർത്തുക. നിങ്ങളുടെ ചോദ്യം പരിഹരിക്കപ്പെട്ടെങ്കിൽ, 0 അമർത്തുക.",
+        "speak_query": "ദയവായി നിങ്ങളുടെ ചോദ്യം ഇപ്പോൾ സംസാരിക്കുക.",
+        "timeout_reminder": "ഇൻപുട്ടുകളൊന്നും ലഭിച്ചില്ല. മറ്റൊരു ചോദ്യം ചോദിക്കാൻ 1 അമർത്തുക, അല്ലെങ്കിൽ പൂർത്തിയാക്കാൻ 0 അമർത്തുക.",
+        "feedback": "നന്ദി. ദയവായി നിങ്ങളുടെ ടെലിഫോൺ കീപാഡ് ഉപയോഗിച്ച് നിങ്ങളുടെ പിന്തുണാ അനുഭവത്തെ 1 മുതൽ 10 വരെ വിലയിരുത്തുക, ഇവിടെ 0 എന്നാൽ 10 ആണ്.",
+        "goodbye": "വിളിച്ചതിന് നന്ദി. കോൾ പൂർത്തിയായിരിക്കുന്നു. വിട."
+    },
+    "ur": {
+        "ask_booking": "براہ کرم اپنے کیپیڈ کا استعمال کرتے ہوئے اپنا بکنگ ریفرنس کوڈ درج کریں۔",
+        "invalid_booking": "غلط بکنگ ریفرنس۔ براہ کرم اپنا بکنگ ریفرنس کوڈ دوبارہ درج کریں۔",
+        "unauthorized": "معذرت، آپ کو دوسرے کسٹمر की बुकिंग के बारे में जानकारी प्राप्त करने की इजाजत नहीं है।",
+        "verified": "شکریہ، ریفرنس کی تصدیق ہو گئی ہے۔ براہ کرم اب اپنی سپورٹ کی درخواست بولیں۔",
+        "choose_query": "اگر آپ کوئی اور سوال پوچھنا چاہتے ہیں تو 1 دبائیں۔ اگر آپ کا سوال حل ہو گیا ہے तो 0 دبائیں۔",
+        "speak_query": "براہ کرم اپنا سوال اب بولیں۔",
+        "timeout_reminder": "ہمیں کوئی ان پٹ موصول نہیں ہوا۔ کوئی اور سوال پوچھنے کے لیے 1 دبائیں، یا ختم کرنے کے لیے 0 دبائیں۔",
+        "feedback": "شکریہ۔ براہ کرم اپنے ٹیلی فون کیپیڈ کا استعمال کرتے ہوئے اپنے سپورٹ کے تجربے کو 1 سے 10 تک ریٹ کریں، جہاں 0 کا مطلب 10 ہے۔",
+        "goodbye": "کال کرنے کا شکریہ۔ Call complete ho gayi hai. Khuda hafiz."
+    }
+}
 
 
 class IVRCallSession:
@@ -147,66 +262,125 @@ class IVRCallSession:
                 if data == "1":
                     self.recording_consent = True
                     self._log_system_event("Recording consent accepted.")
-                elif data == "2":
+                    # Trigger Twilio Call Recording dynamically
+                    try:
+                        from twilio.rest import Client
+                        import os
+                        account_sid = os.getenv("TWILIO_ACCOUNT_SID")
+                        auth_token = os.getenv("TWILIO_AUTH_TOKEN")
+                        public_url = os.getenv("PUBLIC_URL")
+                        if account_sid and auth_token and public_url:
+                            client = Client(account_sid, auth_token)
+                            recording = client.calls(self.call_id).recordings.create(
+                                recording_status_callback=f"{public_url}/api/v1/telephony/twilio/recording-callback",
+                                recording_status_callback_event=["completed"],
+                                recording_status_callback_method="POST",
+                            )
+                            self._log_system_event(f"Call recording started by system. Recording SID: {recording.sid}")
+                    except Exception as e:
+                        self._log_system_event(f"Notice: Failed to start call recording: {str(e)}")
+                else:
                     self.recording_consent = False
                     self._log_system_event("Recording consent rejected.")
                 
-                self.state = IVRState.LANGUAGE_SELECTION_PENDING
-                self._save_to_db()
                 broadcast_call_event("call_updated", self.session_id, "Call recording consent updated.", {"recording_consent": self.recording_consent})
+
+                # Check if phone number exists in database
+                user = None
+                if self.phone_number:
+                    stmt = select(User).where(User.phone.like(f"%{self.phone_number}"))
+                    user = self.db.scalar(stmt)
                 
-                return {
-                    "state": self.state.value,
-                    "prompt": "Select your preferred language. Press 1 for English, 2 for Hindi, or 3 for Telugu.",
-                    "expect_input": "DTMF",
-                }
-
-        elif self.state == IVRState.LANGUAGE_SELECTION_PENDING:
-            if action == "DTMF":
-                if data == "1":
-                    self.language = "en"
-                elif data == "2":
-                    self.language = "hi"
-                elif data == "3":
-                    self.language = "te"
-                
-                self._log_system_event(f"Language set to {self.language.upper()}.")
-                conv.language = self.language
-                self.db.commit()
-
-                # Run caller ID matching
-                self._identify_caller()
-                broadcast_call_event("call_updated", self.session_id, f"Language set to {self.language}.", {"language": self.language})
-
-                # Check if caller matches user ID
-                if self.user_id:
-                    self.state = IVRState.ACTIVE_AGENT
+                if user:
+                    self.state = IVRState.OTP_PENDING
                     self._save_to_db()
-                    self._log_system_event("Caller identified and verified automatically via caller ID.")
                     
-                    welcome_msg = "Welcome back! How can I assist you with your booking today?"
-                    if self.language == "hi":
-                        welcome_msg = "स्वागत है! आज मैं आपकी बुकिंग में कैसे सहायता कर सकता हूँ?"
-                    elif self.language == "te":
-                        welcome_msg = "స్వాగతం! ఈరోజు మీ బుకింగ్‌లో నేను మీకు ఎలా సహాయపడగలను?"
-
-                    broadcast_call_event("call_updated", self.session_id, "Caller verified. Active Agent started.", {"state": "ACTIVE_AGENT", "user_id": self.user_id})
-
+                    from app.auth.service import generate_otp
+                    otp = generate_otp(user.phone)
+                    self._log_system_event(f"OTP sent to registered customer {user.phone}. For testing, code is: {otp}")
+                    
                     return {
                         "state": self.state.value,
-                        "prompt": welcome_msg,
-                        "expect_input": "VOICE",
+                        "prompt": "An OTP has been sent to your registered mobile number. Please key in your 6-digit OTP using your keypad.",
+                        "expect_input": "DTMF",
+                        "num_digits": 6,
                     }
                 else:
-                    self.state = IVRState.VERIFICATION_PENDING
+                    self.state = IVRState.LANGUAGE_SELECTION_PENDING
                     self._save_to_db()
-                    self._log_system_event("Caller verification pending. Asking for booking reference code.")
+                    
                     return {
                         "state": self.state.value,
-                        "prompt": "We could not verify your phone number. Please key in your booking reference code.",
+                        "prompt": "Select your preferred language. Press 1 for English. Hindi ke liye 2 dabaye. Telugu kosam 3 nokkandi. Tamilukku 4 amuthavum. Marathi sathi 5 daba. Kannadakkagi 6 otti. Gujarati mate 7 dabavo. Banglar jonno 8 tipun. Malayalathinaayi 9 amarthuka. Urdu ke liye 0 dabaye.",
                         "expect_input": "DTMF",
+                        "num_digits": 1,
                     }
- 
+
+        elif self.state == IVRState.OTP_PENDING:
+            entered_otp = data.strip() if (action == "DTMF" and data) else ""
+            user = None
+            if self.phone_number:
+                stmt = select(User).where(User.phone.like(f"%{self.phone_number}"))
+                user = self.db.scalar(stmt)
+            
+            if user:
+                from app.auth.service import verify_otp
+                is_valid = verify_otp(user.phone, entered_otp)
+                
+                if is_valid:
+                    self.user_id = str(user.id)
+                    self.state = IVRState.LANGUAGE_SELECTION_PENDING
+                    self._save_to_db()
+                    
+                    self._log_system_event(f"OTP verification successful for user {self.user_id}.")
+                    broadcast_call_event("call_updated", self.session_id, "OTP verified successfully.", {"user_id": self.user_id})
+                    
+                    return {
+                        "state": self.state.value,
+                        "prompt": "OTP verification successful. Select your preferred language. Press 1 for English. Hindi ke liye 2 dabaye. Telugu kosam 3 nokkandi. Tamilukku 4 amuthavum. Marathi sathi 5 daba. Kannadakkagi 6 otti. Gujarati mate 7 dabavo. Banglar jonno 8 tipun. Malayalathinaayi 9 amarthuka. Urdu ke liye 0 dabaye.",
+                        "expect_input": "DTMF",
+                        "num_digits": 1,
+                    }
+            
+            self._log_system_event("OTP verification failed: incorrect OTP.")
+            return {
+                "state": self.state.value,
+                "prompt": "Invalid OTP. Please enter the 6-digit OTP again using your keypad.",
+                "expect_input": "DTMF",
+                "num_digits": 6,
+            }
+
+        elif self.state == IVRState.LANGUAGE_SELECTION_PENDING:
+            digit = data.strip() if (action == "DTMF" and data) else ""
+            LANG_MAP = {
+                "1": "en",
+                "2": "hi",
+                "3": "te",
+                "4": "ta",
+                "5": "mr",
+                "6": "kn",
+                "7": "gu",
+                "8": "bn",
+                "9": "ml",
+                "0": "ur",
+            }
+            selected_lang = LANG_MAP.get(digit, "en")
+            self.language = selected_lang
+            self.state = IVRState.VERIFICATION_PENDING
+            self._save_to_db()
+            
+            self._log_system_event(f"Language set to {self.language.upper()}.")
+            conv.language = self.language
+            self.db.commit()
+            broadcast_call_event("call_updated", self.session_id, f"Language set to {self.language}.", {"language": self.language})
+            
+            prompt = PROMPTS.get(self.language, PROMPTS["en"])["ask_booking"]
+            return {
+                "state": self.state.value,
+                "prompt": prompt,
+                "expect_input": "DTMF",
+            }
+
         elif self.state == IVRState.VERIFICATION_PENDING:
             booking_code = data.strip().upper() if (action == "DTMF" and data) else ""
             if booking_code:
@@ -220,108 +394,82 @@ class IVRCallSession:
                 
                 if not booking:
                     self._log_system_event(f"Caller verification failed: booking {booking_code} not found.")
+                    prompt = PROMPTS.get(self.language, PROMPTS["en"])["invalid_booking"]
                     return {
                         "state": self.state.value,
-                        "prompt": "Invalid booking reference. Please enter your booking reference code again.",
+                        "prompt": prompt,
                         "expect_input": "DTMF",
                     }
-
-                self.booking_code = booking_code
                 
-                # Check if booking is linked to a user profile
-                if booking.user_id and booking.user:
-                    # Enforce secure two-step caller validation
-                    self.state = IVRState.VERIFICATION_PHONE_PENDING
-                    self._save_to_db()
-                    self._log_system_event(f"Booking {booking_code} found. Prompting for registered phone number.")
+                # Check Booking Ownership
+                if booking.user_id:
+                    import uuid as _uuid
+                    authorized = False
+                    if self.user_id:
+                        try:
+                            uid = _uuid.UUID(str(self.user_id))
+                            booking_uid = _uuid.UUID(str(booking.user_id))
+                            if uid == booking_uid:
+                                authorized = True
+                        except (ValueError, AttributeError):
+                            pass
                     
-                    return {
-                        "state": self.state.value,
-                        "prompt": "Please enter the 10-digit registered phone number associated with this booking.",
-                        "expect_input": "DTMF",
-                    }
-                else:
-                    # Guest booking
-                    self.state = IVRState.ACTIVE_AGENT
-                    self._save_to_db()
-                    
-                    conv.booking_id = booking.id
-                    self.db.commit()
-
-                    self._log_system_event(f"Verified guest booking {booking_code}. Entering active support agent.")
-                    
-                    from app.conversation.manager import ConversationManager
-                    manager_inst = ConversationManager()
-                    session = manager_inst.get_session(self.session_id)
-                    session.entities["booking_code"] = booking_code
-                    
-                    broadcast_call_event("call_updated", self.session_id, f"Guest booking {booking_code} verified.", {"state": "ACTIVE_AGENT", "booking_code": booking_code})
-
-                    return {
-                        "state": self.state.value,
-                        "prompt": "Thank you, reference verified. Please speak your support request now.",
-                        "expect_input": "VOICE",
-                    }
-            else:
+                    if not authorized:
+                        self._log_system_event(f"Caller unauthorized for booking {booking_code}. Owned by different customer.")
+                        prompt = PROMPTS.get(self.language, PROMPTS["en"])["unauthorized"]
+                        return {
+                            "state": self.state.value,
+                            "prompt": prompt,
+                            "expect_input": "DTMF",
+                        }
+                
+                # Verified successfully!
+                self.booking_code = booking_code
+                self.state = IVRState.ACTIVE_AGENT
+                self._save_to_db()
+                
+                import uuid as _uuid
+                conv.booking_id = booking.id
+                if self.user_id:
+                    conv.user_id = _uuid.UUID(str(self.user_id)) if not isinstance(self.user_id, _uuid.UUID) else self.user_id
+                self.db.commit()
+                
+                from app.conversation.manager import ConversationManager
+                manager_inst = ConversationManager()
+                session = manager_inst.get_session(self.session_id)
+                session.entities["booking_code"] = self.booking_code
+                session.entities["phone_number"] = self.phone_number
+                
+                self._log_system_event(f"Booking {booking_code} verified. Entering active support agent.")
+                broadcast_call_event("call_updated", self.session_id, f"Booking {booking_code} verified.", {
+                    "state": "ACTIVE_AGENT",
+                    "booking_code": self.booking_code,
+                    "user_id": self.user_id,
+                })
+                
+                prompt = PROMPTS.get(self.language, PROMPTS["en"])["verified"]
                 return {
                     "state": self.state.value,
-                    "prompt": "Booking code not received. Please key in your booking reference code using your keypad.",
+                    "prompt": prompt,
+                    "expect_input": "VOICE",
+                }
+            else:
+                prompt = PROMPTS.get(self.language, PROMPTS["en"])["ask_booking"]
+                return {
+                    "state": self.state.value,
+                    "prompt": prompt,
                     "expect_input": "DTMF",
                 }
 
         elif self.state == IVRState.VERIFICATION_PHONE_PENDING:
-            input_phone = "".join(filter(str.isdigit, data))[-10:] if (action == "DTMF" and data) else ""
-            if input_phone:
-                # Lookup the booking
-                from app.repositories.booking_repository import BookingRepository
-                booking_repo = BookingRepository(self.db)
-                booking = booking_repo.get_booking_with_trip(self.booking_code)
-                
-                if booking and booking.user:
-                    owner_phone = "".join(filter(str.isdigit, booking.user.phone))[-10:]
-                    if input_phone == owner_phone:
-                        # Successfully verified registered customer phone number!
-                        self.user_id = str(booking.user_id)
-                        self.state = IVRState.ACTIVE_AGENT
-                        self._save_to_db()
-
-                        # Link verified entities to database conversation
-                        conv.user_id = booking.user_id
-                        conv.booking_id = booking.id
-                        self.db.commit()
-
-                        self._log_system_event("Caller phone verification successful. Entering active support agent.")
-
-                        from app.conversation.manager import ConversationManager
-                        manager_inst = ConversationManager()
-                        session = manager_inst.get_session(self.session_id)
-                        session.entities["booking_code"] = self.booking_code
-                        
-                        broadcast_call_event("call_updated", self.session_id, f"Verification successful for user {self.user_id}.", {
-                            "state": "ACTIVE_AGENT",
-                            "booking_code": self.booking_code,
-                            "user_id": self.user_id,
-                        })
-
-                        return {
-                            "state": self.state.value,
-                            "prompt": "Thank you, verification successful. Please speak your support request now.",
-                            "expect_input": "VOICE",
-                        }
-
-                # Mismatch / failure
-                self._log_system_event("Caller phone verification failed: registered phone mismatch.")
-                return {
-                    "state": self.state.value,
-                    "prompt": "Verification failed. Please enter the 10-digit registered phone number again.",
-                    "expect_input": "DTMF",
-                }
-            else:
-                return {
-                    "state": self.state.value,
-                    "prompt": "Phone number not received. Please key in your 10-digit registered phone number associated with this booking.",
-                    "expect_input": "DTMF",
-                }
+            self.state = IVRState.VERIFICATION_PENDING
+            self._save_to_db()
+            prompt = PROMPTS.get(self.language, PROMPTS["en"])["ask_booking"]
+            return {
+                "state": self.state.value,
+                "prompt": prompt,
+                "expect_input": "DTMF",
+            }
 
         elif self.state == IVRState.ACTIVE_AGENT:
             return {
@@ -359,9 +507,11 @@ class IVRCallSession:
             self.state = IVRState.COMPLETED
             self._save_to_db()
             self.complete_call()
+            
+            prompt = PROMPTS.get(self.language, PROMPTS["en"])["goodbye"]
             return {
                 "state": self.state.value,
-                "prompt": "Thank you for your feedback. Goodbye.",
+                "prompt": prompt,
                 "expect_input": "NONE",
             }
 

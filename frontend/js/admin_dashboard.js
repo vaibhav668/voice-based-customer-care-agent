@@ -767,8 +767,17 @@ async function loadEnrichedConversationDetail(convId) {
                     </div>`;
             }).join("");
         }
-
         const resStatus = c.resolution_status || "unresolved";
+
+        const formatDuration = (sec) => {
+            if (!sec) return "0s";
+            const m = Math.floor(sec/60);
+            const s = sec%60;
+            return m > 0 ? `${m}m ${s}s` : `${s}s`;
+        };
+        const durationStr = c.duration !== undefined ? formatDuration(c.duration) : "";
+        const ivrStateHtml = (channel === 'VOICE' && c.ivr_state && c.ivr_state !== 'UNKNOWN') ? `<span class="meta-pill" style="border-color:var(--orange);color:var(--orange);font-size:11px;margin-left:8px;">IVR: ${c.ivr_state}</span>` : "";
+        const ratingHtml = c.rating ? `<span style="color:var(--teal); font-weight:700; margin-left:12px;"><i class="fa-solid fa-star"></i> Rating: ${c.rating}/10</span>` : "";
 
         // Setup Layout with Tabs
         detailCol.innerHTML = `
@@ -779,7 +788,7 @@ async function loadEnrichedConversationDetail(convId) {
                         <span style="font-family:var(--font-mono); color:white;">${phone}</span>
                         <span style="font-size:14px; color:var(--text-dim); margin-left:8px;">${name}</span>
                     </h3>
-                    <p>Channel: ${c.channel} | Lang: ${(c.language||'en').toUpperCase()} | Last Updated: ${dateStr}</p>
+                    <p>Channel: ${c.channel} | Lang: ${(c.language||'en').toUpperCase()} | Duration: ${durationStr} ${ivrStateHtml} ${ratingHtml}</p>
                 </div>
                 <div class="detail-actions">
                     <span class="live-badge" style="background:rgba(53,216,182,0.1); color:var(--teal); border:1px solid var(--teal);">${c.status}</span>
@@ -798,6 +807,11 @@ async function loadEnrichedConversationDetail(convId) {
 
             <!-- TAB 1: TRANSCRIPT CONTENT -->
             <div id="transcript-container-${c.id}" class="detail-tab-content" style="display:flex; flex-direction:column; flex-grow:1; overflow:hidden;">
+                ${c.recording_url ? `
+                <div style="padding:10px 16px; background:rgba(0,180,255,0.06); border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; gap:12px; flex-shrink:0;">
+                    <span style="font-size:12px; font-weight:600; color:var(--cyan);"><i class="fa-solid fa-microphone"></i> Full Call Recording:</span>
+                    <audio controls style="height:28px;"><source src="${c.recording_url}" type="audio/mpeg"></audio>
+                </div>` : ""}
                 ${bk ? `
                 <div style="padding:10px 16px; background:rgba(0,200,150,0.06); border-bottom:1px solid var(--line); display:flex; gap:20px; font-size:12px; flex-wrap:wrap; align-items:center;">
                     <span><i class="fa-solid fa-ticket" style="color:var(--teal)"></i> <strong>${bk.booking_code}</strong></span>

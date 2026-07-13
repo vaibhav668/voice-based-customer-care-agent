@@ -33,7 +33,7 @@ def trigger_call(to_phone: str):
             from_=from_phone,
             url=f"{public_url}/api/v1/telephony/twilio/incoming"
         )
-        print("\n[SUCCESS] Outbound call placed successfully!")
+        print("\n[SUCCESS] Outbound call p laced successfully!")
         print(f"Call SID: {call.sid}")
         print("Please pick up your phone when it rings to test the IVR + Agent flow.")
         print("==============================================")

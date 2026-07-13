@@ -103,12 +103,48 @@ async def handle_consent(
     session = ivr_manager.get_or_create_call(CallSid, "", db)
     res = session.advance_state("DTMF", Digits or "2")
     
-    xml = adapter.generate_menu_response(
-        prompt=res["prompt"],
-        expect_input="DTMF",
-        num_digits=1,
-        action_url="/api/v1/telephony/twilio/language",
-    )
+    if session.state == IVRState.OTP_PENDING:
+        xml = adapter.generate_menu_response(
+            prompt=res["prompt"],
+            expect_input="DTMF",
+            num_digits=6,
+            action_url="/api/v1/telephony/twilio/otp",
+        )
+    else:
+        xml = adapter.generate_menu_response(
+            prompt=res["prompt"],
+            expect_input="DTMF",
+            num_digits=1,
+            action_url="/api/v1/telephony/twilio/language",
+        )
+    return Response(content=xml, media_type="application/xml")
+
+
+@router.post("/otp")
+async def handle_otp(
+    Digits: str = Form(None),
+    CallSid: str = Form(...),
+    db: Session = Depends(get_db),
+    _ = Depends(validate_signature_dependency),
+):
+    """Processes customer OTP inputs."""
+    session = ivr_manager.get_or_create_call(CallSid, "", db)
+    res = session.advance_state("DTMF", Digits)
+    
+    if session.state == IVRState.LANGUAGE_SELECTION_PENDING:
+        xml = adapter.generate_menu_response(
+            prompt=res["prompt"],
+            expect_input="DTMF",
+            num_digits=1,
+            action_url="/api/v1/telephony/twilio/language",
+        )
+    else:
+        xml = adapter.generate_menu_response(
+            prompt=res["prompt"],
+            expect_input="DTMF",
+            num_digits=6,
+            action_url="/api/v1/telephony/twilio/otp",
+        )
     return Response(content=xml, media_type="application/xml")
 
 
@@ -123,24 +159,12 @@ async def handle_language(
     session = ivr_manager.get_or_create_call(CallSid, "", db)
     res = session.advance_state("DTMF", Digits or "1")
     
-    if session.state == IVRState.ACTIVE_AGENT:
-        from app.voice.tts import TextToSpeech
-        tts = TextToSpeech()
-        audio_file = await tts.generate(res["prompt"], language=session.language)
-        audio_url = get_public_audio_url(audio_file)
-        
-        xml = adapter.generate_voice_agent_response(
-            audio_url=audio_url,
-            text_prompt=res["prompt"],
-            action_url="/api/v1/telephony/twilio/agent",
-        )
-    else:
-        xml = adapter.generate_menu_response(
-            prompt=res["prompt"],
-            expect_input="DTMF",
-            num_digits=6,
-            action_url="/api/v1/telephony/twilio/verify_code",
-        )
+    xml = adapter.generate_menu_response(
+        prompt=res["prompt"],
+        expect_input="DTMF",
+        num_digits=6,
+        action_url="/api/v1/telephony/twilio/verify_code",
+    )
     return Response(content=xml, media_type="application/xml")
 
 
@@ -151,18 +175,11 @@ async def handle_verify_code(
     db: Session = Depends(get_db),
     _ = Depends(validate_signature_dependency),
 ):
-    """Collects and validates 6 digit booking reference code keypad inputs."""
+    """Collects and validates booking reference code keypad inputs."""
     session = ivr_manager.get_or_create_call(CallSid, "", db)
     res = session.advance_state("DTMF", Digits)
     
-    if session.state == IVRState.VERIFICATION_PHONE_PENDING:
-        xml = adapter.generate_menu_response(
-            prompt=res["prompt"],
-            expect_input="DTMF",
-            num_digits=10,
-            action_url="/api/v1/telephony/twilio/verify_phone",
-        )
-    elif session.state == IVRState.ACTIVE_AGENT:
+    if session.state == IVRState.ACTIVE_AGENT:
         from app.voice.tts import TextToSpeech
         tts = TextToSpeech()
         audio_file = await tts.generate(res["prompt"], language=session.language)
@@ -190,7 +207,7 @@ async def handle_verify_phone(
     db: Session = Depends(get_db),
     _ = Depends(validate_signature_dependency),
 ):
-    """Enforces unverified caller registered phone numbers two-step check."""
+    """Redirect fallback for verify_phone."""
     session = ivr_manager.get_or_create_call(CallSid, "", db)
     res = session.advance_state("DTMF", Digits)
     
@@ -209,8 +226,8 @@ async def handle_verify_phone(
         xml = adapter.generate_menu_response(
             prompt=res["prompt"],
             expect_input="DTMF",
-            num_digits=10,
-            action_url="/api/v1/telephony/twilio/verify_phone",
+            num_digits=6,
+            action_url="/api/v1/telephony/twilio/verify_code",
         )
     return Response(content=xml, media_type="application/xml")
 
@@ -222,49 +239,57 @@ async def handle_agent_turn(
     db: Session = Depends(get_db),
     _ = Depends(validate_signature_dependency),
 ):
-    """Receives and forwards caller spoken responses into NLU understanding loops."""
+    """Receives spoken inputs, feeds them to ChatService, and plays AI response + DTMF choice menu."""
     session = ivr_manager.get_or_create_call(CallSid, "", db)
+    from app.voice.ivr import PROMPTS
     
     if not SpeechResult or not SpeechResult.strip():
-        xml = adapter.generate_menu_response(
-            prompt="If you want to ask another query, press 1. If your query is resolved, press 0.",
-            expect_input="DTMF",
-            num_digits=1,
-            action_url="/api/v1/telephony/twilio/query_choice",
-        )
+        choose_prompt = PROMPTS.get(session.language, PROMPTS["en"])["choose_query"]
+        xml = f'<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n'
+        xml += f'    <Gather action="/api/v1/telephony/twilio/query_choice" method="POST" input="dtmf" numDigits="1" timeout="4">\n'
+        xml += f'        <Say>{choose_prompt}</Say>\n'
+        xml += f'    </Gather>\n'
+        xml += f'    <Redirect method="POST">/api/v1/telephony/twilio/query_choice?timeout=1</Redirect>\n'
+        xml += f'</Response>'
         return Response(content=xml, media_type="application/xml")
 
     res = await session.process_text_agent_turn(SpeechResult)
-    
     audio_url = get_public_audio_url(res["audio_path"]) if res.get("audio_path") else ""
+    choose_prompt = PROMPTS.get(session.language, PROMPTS["en"])["choose_query"]
     
-    if session.state == IVRState.FEEDBACK_PENDING:
-        xml = adapter.generate_menu_response(
-            prompt=res["text"],
-            expect_input="DTMF",
-            num_digits=2,
-            action_url="/api/v1/telephony/twilio/feedback",
-        )
+    xml = f'<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n'
+    xml += f'    <Gather action="/api/v1/telephony/twilio/query_choice" method="POST" input="dtmf" numDigits="1" timeout="4">\n'
+    if audio_url:
+        xml += f'        <Play>{audio_url}</Play>\n'
     else:
-        xml = adapter.generate_voice_agent_response(
-            audio_url=audio_url,
-            text_prompt=res["text"],
-            action_url="/api/v1/telephony/twilio/agent",
-        )
+        xml += f'        <Say>{res["text"]}</Say>\n'
+    xml += f'        <Say>{choose_prompt}</Say>\n'
+    xml += f'    </Gather>\n'
+    xml += f'    <Redirect method="POST">/api/v1/telephony/twilio/query_choice?timeout=1</Redirect>\n'
+    xml += f'</Response>'
     return Response(content=xml, media_type="application/xml")
 
 
 @router.post("/query_choice")
 async def handle_query_choice(
+    request: Request,
     Digits: str = Form(None),
     CallSid: str = Form(...),
     db: Session = Depends(get_db),
     _ = Depends(validate_signature_dependency),
 ):
-    """Processes customer selection to continue conversation or trigger CSAT survey."""
+    """Processes caller continue or end conversation choice."""
     session = ivr_manager.get_or_create_call(CallSid, "", db)
+    from app.voice.ivr import PROMPTS
     
-    if Digits == "0":
+    if Digits == "1":
+        speak_prompt = PROMPTS.get(session.language, PROMPTS["en"])["speak_query"]
+        xml = adapter.generate_voice_agent_response(
+            audio_url="",
+            text_prompt=speak_prompt,
+            action_url="/api/v1/telephony/twilio/agent",
+        )
+    elif Digits == "0":
         session.state = IVRState.FEEDBACK_PENDING
         session._save_to_db()
         
@@ -275,12 +300,7 @@ async def handle_query_choice(
             conv.resolution_status = "resolved"
             db.commit()
             
-        feedback_prompt = "Thank you. Please rate your support experience from 1 to 10 using your telephone keypad, where 0 represents a rating of 10."
-        if session.language == "hi":
-            feedback_prompt = "धन्यवाद। कृपया अपने सहायता अनुभव को 1 से 10 के पैमाने पर रेट करें, जहाँ 0 का अर्थ 10 है।"
-        elif session.language == "te":
-            feedback_prompt = "ధన్యవాదాలు. దయచేసి మీ టెలిఫోన్ కీప్యాడ్ ఉపయోగించి మీ సహాయ అనుభవాన్ని 1 నుండి 10 వరకు రేట్ చేయండి, ఇక్కడ 0 అంటే 10."
-            
+        feedback_prompt = PROMPTS.get(session.language, PROMPTS["en"])["feedback"]
         xml = adapter.generate_menu_response(
             prompt=feedback_prompt,
             expect_input="DTMF",
@@ -288,11 +308,26 @@ async def handle_query_choice(
             action_url="/api/v1/telephony/twilio/feedback",
         )
     else:
-        xml = adapter.generate_voice_agent_response(
-            audio_url="",
-            text_prompt="Please speak your query now.",
-            action_url="/api/v1/telephony/twilio/agent",
-        )
+        is_timeout_retry = request.query_params.get("timeout") == "1"
+        if not is_timeout_retry:
+            reminder_prompt = PROMPTS.get(session.language, PROMPTS["en"])["timeout_reminder"]
+            xml = f'<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n'
+            xml += f'    <Gather action="/api/v1/telephony/twilio/query_choice" method="POST" input="dtmf" numDigits="1" timeout="4">\n'
+            xml += f'        <Say>{reminder_prompt}</Say>\n'
+            xml += f'    </Gather>\n'
+            xml += f'    <Redirect method="POST">/api/v1/telephony/twilio/query_choice?timeout=1</Redirect>\n'
+            xml += f'</Response>'
+        else:
+            session.state = IVRState.FEEDBACK_PENDING
+            session._save_to_db()
+            
+            feedback_prompt = PROMPTS.get(session.language, PROMPTS["en"])["feedback"]
+            xml = adapter.generate_menu_response(
+                prompt=feedback_prompt,
+                expect_input="DTMF",
+                num_digits=2,
+                action_url="/api/v1/telephony/twilio/feedback",
+            )
     return Response(content=xml, media_type="application/xml")
 
 
@@ -324,3 +359,32 @@ async def handle_status_callback(
         if session.state != IVRState.COMPLETED:
             session.complete_call()
     return {"status": "ok"}
+
+
+@router.post("/recording-callback")
+async def handle_recording_callback(
+    RecordingUrl: str = Form(None),
+    CallSid: str = Form(...),
+    RecordingStatus: str = Form(None),
+    db: Session = Depends(get_db),
+):
+    """Processes Twilio recording callback and links the completed recording URL to the conversation record."""
+    from app.database.models.ivr_session import IvrSession
+    from app.database.models.conversation import Conversation
+    from app.voice.ivr import broadcast_call_event
+
+    ivr_sess = db.query(IvrSession).filter_by(call_id=CallSid).first()
+    if not ivr_sess:
+        return {"status": "ignored", "reason": "No IVR session found for CallSid"}
+        
+    if RecordingStatus == "completed" and RecordingUrl:
+        conv = db.query(Conversation).filter_by(session_id=ivr_sess.session_id).first()
+        if conv:
+            conv.recording_url = RecordingUrl
+            db.commit()
+            broadcast_call_event("call_updated", ivr_sess.session_id, "Call recording is now available.", {
+                "recording_url": RecordingUrl
+            })
+            return {"status": "success", "message": "Recording URL mapped to conversation."}
+            
+    return {"status": "ignored", "RecordingStatus": RecordingStatus}

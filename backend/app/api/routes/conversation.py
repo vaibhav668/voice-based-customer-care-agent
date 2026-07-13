@@ -155,6 +155,38 @@ def list_admin_enriched_conversations(
         elif conv.resolution_status == "unresolved":
             possible_problem = f"🔴 Unresolved — {possible_problem}"
 
+        # Query matching IvrSession
+        from app.database.models.ivr_session import IvrSession
+        from app.database.models.customer_feedback import CustomerFeedback
+        from datetime import datetime
+
+        ivr_state = "UNKNOWN"
+        ivr_sess = db.query(IvrSession).filter_by(session_id=conv.session_id).first()
+        if ivr_sess:
+            ivr_state = ivr_sess.state
+            if ivr_sess.booking_code and not booking_code:
+                booking_code = ivr_sess.booking_code
+            if ivr_sess.phone_number and user_phone == "Unknown":
+                user_phone = ivr_sess.phone_number
+
+        # Fetch feedback rating
+        fb = db.query(CustomerFeedback).filter_by(conversation_id=conv.id).first()
+        rating = fb.rating if fb else None
+
+        # Compute duration
+        duration = 0
+        if conv.started_at:
+            try:
+                end_time = conv.ended_at or datetime.now()
+                if conv.started_at.tzinfo is not None and end_time.tzinfo is None:
+                    from datetime import timezone
+                    end_time = end_time.replace(tzinfo=timezone.utc)
+                elif conv.started_at.tzinfo is None and end_time.tzinfo is not None:
+                    end_time = end_time.replace(tzinfo=None)
+                duration = int((end_time - conv.started_at).total_seconds())
+            except Exception:
+                duration = 0
+
         enriched.append({
             "id": str(conv.id),
             "session_id": conv.session_id,
@@ -176,6 +208,9 @@ def list_admin_enriched_conversations(
             "possible_problem": possible_problem,
             "started_at": conv.started_at.isoformat() if conv.started_at else None,
             "updated_at": conv.updated_at.isoformat() if conv.updated_at else None,
+            "ivr_state": ivr_state,
+            "rating": rating,
+            "duration": duration,
         })
 
     return success_response(
@@ -324,6 +359,38 @@ def get_conversation_detail(
         raise UnauthorizedException("Access to this conversation is unauthorized")
 
     data = ConversationDetailSchema.model_validate(conv).model_dump(mode="json")
+    
+    # Query matching IvrSession
+    from app.database.models.ivr_session import IvrSession
+    from app.database.models.customer_feedback import CustomerFeedback
+    from datetime import datetime
+
+    ivr_state = "UNKNOWN"
+    ivr_sess = db.query(IvrSession).filter_by(session_id=conv.session_id).first()
+    if ivr_sess:
+        ivr_state = ivr_sess.state
+
+    # Fetch feedback rating
+    fb = db.query(CustomerFeedback).filter_by(conversation_id=conv.id).first()
+    rating = fb.rating if fb else None
+
+    # Compute duration
+    duration = 0
+    if conv.started_at:
+        try:
+            end_time = conv.ended_at or datetime.now()
+            if conv.started_at.tzinfo is not None and end_time.tzinfo is None:
+                from datetime import timezone
+                end_time = end_time.replace(tzinfo=timezone.utc)
+            elif conv.started_at.tzinfo is None and end_time.tzinfo is not None:
+                end_time = end_time.replace(tzinfo=None)
+            duration = int((end_time - conv.started_at).total_seconds())
+        except Exception:
+            duration = 0
+
+    data["ivr_state"] = ivr_state
+    data["rating"] = rating
+    data["duration"] = duration
     
     # If requester is an admin and conversation is associated with a registered user, fetch all messages from all user conversations
     if role == "ADMIN" and conv.user_id:
