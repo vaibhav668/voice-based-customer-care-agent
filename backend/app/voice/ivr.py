@@ -208,8 +208,8 @@ class IVRCallSession:
                     }
 
         elif self.state == IVRState.VERIFICATION_PENDING:
-            if action == "DTMF" and data:
-                booking_code = data.strip().upper()
+            booking_code = data.strip().upper() if (action == "DTMF" and data) else ""
+            if booking_code:
                 if not booking_code.startswith("BK-") and len(booking_code) == 6:
                     booking_code = f"BK-{booking_code}"
                 
@@ -262,11 +262,16 @@ class IVRCallSession:
                         "prompt": "Thank you, reference verified. Please speak your support request now.",
                         "expect_input": "VOICE",
                     }
+            else:
+                return {
+                    "state": self.state.value,
+                    "prompt": "Booking code not received. Please key in your 6 digit booking reference code using your keypad.",
+                    "expect_input": "DTMF",
+                }
 
         elif self.state == IVRState.VERIFICATION_PHONE_PENDING:
-            if action == "DTMF" and data:
-                input_phone = "".join(filter(str.isdigit, data))[-10:]
-                
+            input_phone = "".join(filter(str.isdigit, data))[-10:] if (action == "DTMF" and data) else ""
+            if input_phone:
                 # Lookup the booking
                 from app.repositories.booking_repository import BookingRepository
                 booking_repo = BookingRepository(self.db)
@@ -309,6 +314,12 @@ class IVRCallSession:
                 return {
                     "state": self.state.value,
                     "prompt": "Verification failed. Please enter the 10-digit registered phone number again.",
+                    "expect_input": "DTMF",
+                }
+            else:
+                return {
+                    "state": self.state.value,
+                    "prompt": "Phone number not received. Please key in your 10-digit registered phone number associated with this booking.",
                     "expect_input": "DTMF",
                 }
 
