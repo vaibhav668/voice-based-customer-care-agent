@@ -225,8 +225,16 @@ async def handle_agent_turn(
     """Receives and forwards caller spoken responses into NLU understanding loops."""
     session = ivr_manager.get_or_create_call(CallSid, "", db)
     
-    text_input = SpeechResult or "hello"
-    res = await session.process_text_agent_turn(text_input)
+    if not SpeechResult or not SpeechResult.strip():
+        xml = adapter.generate_menu_response(
+            prompt="If you want to ask another query, press 1. If your query is resolved, press 0.",
+            expect_input="DTMF",
+            num_digits=1,
+            action_url="/api/v1/telephony/twilio/query_choice",
+        )
+        return Response(content=xml, media_type="application/xml")
+
+    res = await session.process_text_agent_turn(SpeechResult)
     
     audio_url = get_public_audio_url(res["audio_path"]) if res.get("audio_path") else ""
     
@@ -234,13 +242,55 @@ async def handle_agent_turn(
         xml = adapter.generate_menu_response(
             prompt=res["text"],
             expect_input="DTMF",
-            num_digits=1,
+            num_digits=2,
             action_url="/api/v1/telephony/twilio/feedback",
         )
     else:
         xml = adapter.generate_voice_agent_response(
             audio_url=audio_url,
             text_prompt=res["text"],
+            action_url="/api/v1/telephony/twilio/agent",
+        )
+    return Response(content=xml, media_type="application/xml")
+
+
+@router.post("/query_choice")
+async def handle_query_choice(
+    Digits: str = Form(None),
+    CallSid: str = Form(...),
+    db: Session = Depends(get_db),
+    _ = Depends(validate_signature_dependency),
+):
+    """Processes customer selection to continue conversation or trigger CSAT survey."""
+    session = ivr_manager.get_or_create_call(CallSid, "", db)
+    
+    if Digits == "0":
+        session.state = IVRState.FEEDBACK_PENDING
+        session._save_to_db()
+        
+        from app.repositories.conversation_repository import ConversationRepository
+        conv_repo = ConversationRepository(db)
+        conv = conv_repo.get_by_session_id(session.session_id)
+        if conv:
+            conv.resolution_status = "resolved"
+            db.commit()
+            
+        feedback_prompt = "Thank you. Please rate your support experience from 1 to 10 using your telephone keypad, where 0 represents a rating of 10."
+        if session.language == "hi":
+            feedback_prompt = "धन्यवाद। कृपया अपने सहायता अनुभव को 1 से 10 के पैमाने पर रेट करें, जहाँ 0 का अर्थ 10 है।"
+        elif session.language == "te":
+            feedback_prompt = "ధన్యవాదాలు. దయచేసి మీ టెలిఫోన్ కీప్యాడ్ ఉపయోగించి మీ సహాయ అనుభవాన్ని 1 నుండి 10 వరకు రేట్ చేయండి, ఇక్కడ 0 అంటే 10."
+            
+        xml = adapter.generate_menu_response(
+            prompt=feedback_prompt,
+            expect_input="DTMF",
+            num_digits=2,
+            action_url="/api/v1/telephony/twilio/feedback",
+        )
+    else:
+        xml = adapter.generate_voice_agent_response(
+            audio_url="",
+            text_prompt="Please speak your query now.",
             action_url="/api/v1/telephony/twilio/agent",
         )
     return Response(content=xml, media_type="application/xml")

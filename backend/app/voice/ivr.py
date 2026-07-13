@@ -334,7 +334,7 @@ class IVRCallSession:
             rating = None
             if action == "DTMF" and data:
                 digit = data.strip()
-                if digit == "0":
+                if digit in ("0", "10"):
                     rating = 10
                 elif digit.isdigit() and 1 <= int(digit) <= 9:
                     rating = int(digit)
@@ -392,25 +392,6 @@ class IVRCallSession:
         conv = ConversationRepository(self.db).get_by_session_id(self.session_id)
         res_status = conv.resolution_status if conv else "unresolved"
 
-        if conv and conv.resolution_status == "resolved" and self.state == IVRState.ACTIVE_AGENT:
-            self.state = IVRState.FEEDBACK_PENDING
-            self._save_to_db()
-            self._log_system_event("Conversation completed. Prompting for customer feedback rating.")
-            
-            feedback_prompt = "Thank you. Please rate your support experience from 1 to 10 using your telephone keypad, where 0 represents a rating of 10."
-            if self.language == "hi":
-                feedback_prompt = "धन्यवाद। कृपया अपने सहायता अनुभव को 1 से 10 के पैमाने पर रेट करें, जहाँ 0 का अर्थ 10 है।"
-            elif self.language == "te":
-                feedback_prompt = "ధన్యవాదాలు. దయచేసి మీ టెలిఫోన్ కీప్యాడ్ ఉపయోగించి మీ సహాయ అనుభవాన్ని 1 నుండి 10 వరకు రేట్ చేయండి, ఇక్కడ 0 అంటే 10."
-                
-            res["text"] = res.get("text", "") + " " + feedback_prompt
-            res["expect_input"] = "DTMF"
-            res["state"] = self.state.value
-            
-            broadcast_call_event("call_updated", self.session_id, "Prompting for customer feedback rating.", {
-                "state": self.state.value,
-                "resolution_status": conv.resolution_status
-            })
 
         # Broadcast turn-by-turn transcripts and tool changes
         broadcast_call_event("new_transcript", self.session_id, f"Customer: {res.get('transcript')}", {
@@ -478,25 +459,6 @@ class IVRCallSession:
         conv = ConversationRepository(self.db).get_by_session_id(self.session_id)
         res_status = conv.resolution_status if conv else "unresolved"
 
-        if conv and conv.resolution_status == "resolved" and self.state == IVRState.ACTIVE_AGENT:
-            self.state = IVRState.FEEDBACK_PENDING
-            self._save_to_db()
-            self._log_system_event("Conversation completed. Prompting for customer feedback rating.")
-            
-            feedback_prompt = "Thank you. Please rate your support experience from 1 to 10 using your telephone keypad, where 0 represents a rating of 10."
-            if self.language == "hi":
-                feedback_prompt = "धन्यवाद। कृपया अपने सहायता अनुभव को 1 से 10 के पैमाने पर रेट करें, जहाँ 0 का अर्थ 10 है।"
-            elif self.language == "te":
-                feedback_prompt = "ధన్యవాదాలు. దయచేసి మీ టెలిఫోన్ కీప్యాడ్ ఉపయోగించి మీ సహాయ అనుభవాన్ని 1 నుండి 10 వరకు రేట్ చేయండి, ఇక్కడ 0 అంటే 10."
-                
-            res["text"] = res.get("text", "") + " " + feedback_prompt
-            res["expect_input"] = "DTMF"
-            res["state"] = self.state.value
-            
-            broadcast_call_event("call_updated", self.session_id, "Prompting for customer feedback rating.", {
-                "state": self.state.value,
-                "resolution_status": conv.resolution_status
-            })
 
         broadcast_call_event("new_transcript", self.session_id, f"Customer: {text}", {
             "sender": "USER",

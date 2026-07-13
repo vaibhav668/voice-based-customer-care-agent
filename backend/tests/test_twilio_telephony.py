@@ -186,18 +186,31 @@ async def test_twilio_integration():
             conv.resolution_status = "resolved"
             db.commit()
 
-            # Call agent turn, which should intercept resolution and transition to FEEDBACK_PENDING
-            response = await client.post("/api/v1/telephony/twilio/agent", data={"CallSid": call_sid, "SpeechResult": "All good thanks."})
+            # Call agent turn with speech - should stay in ACTIVE_AGENT to support multi-turn
+            response = await client.post("/api/v1/telephony/twilio/agent", data={"CallSid": call_sid, "SpeechResult": "Check my booking."})
+            assert response.status_code == 200
+            assert "agent" in response.text
+            assert session.state == IVRState.ACTIVE_AGENT
+            print("-> Multi-turn agent voice response: PASSED")
+
+            # Call agent turn with silence (empty speech) - should trigger choice menu
+            response = await client.post("/api/v1/telephony/twilio/agent", data={"CallSid": call_sid, "SpeechResult": ""})
+            assert response.status_code == 200
+            assert "query_choice" in response.text
+            print("-> Silence choice menu redirect response: PASSED")
+
+            # Post to query choice with Digits=0 (resolved) - should transition to FEEDBACK_PENDING
+            response = await client.post("/api/v1/telephony/twilio/query_choice", data={"CallSid": call_sid, "Digits": "0"})
             assert response.status_code == 200
             assert "feedback" in response.text
             assert session.state == IVRState.FEEDBACK_PENDING
-            print("-> Agent text turn to feedback collection transition TwiML response: PASSED")
+            print("-> Query choice resolved to feedback transition response: PASSED")
 
             # ----------------------------------------------------
-            # 7. CSAT Rating collection (0 maps to 10)
+            # 7. CSAT Rating collection (0 maps to 10, or 10 maps to 10)
             # ----------------------------------------------------
             print("\n--- 7. Testing CSAT Feedback collection ---")
-            response = await client.post("/api/v1/telephony/twilio/feedback", data={"CallSid": call_sid, "Digits": "0"})
+            response = await client.post("/api/v1/telephony/twilio/feedback", data={"CallSid": call_sid, "Digits": "10"})
             assert response.status_code == 200
             assert "<Hangup" in response.text
             
