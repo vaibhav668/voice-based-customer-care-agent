@@ -22,6 +22,16 @@ def get_public_audio_url(audio_path: str) -> str:
     return f"{public_url}/{audio_path}"
 
 
+def get_public_url(path: str) -> str:
+    public_url = os.getenv("PUBLIC_URL", "http://localhost:8000")
+    if public_url.endswith("/"):
+        public_url = public_url[:-1]
+    if not path.startswith("/"):
+        path = f"/{path}"
+    return f"{public_url}{path}"
+
+
+
 async def validate_plivo_signature_dependency(
     request: Request,
     x_plivo_signature_v3: str = Header(None, alias="X-Plivo-Signature-V3"),
@@ -270,7 +280,7 @@ async def handle_agent_turn(
         choose_prompt = PROMPTS.get(session.language, PROMPTS["en"])["choose_query"]
         response = plivoxml.ResponseElement()
         get_input = plivoxml.GetInputElement(
-            action="/api/v1/telephony/plivo/query_choice",
+            action=get_public_url("/api/v1/telephony/plivo/query_choice"),
             method="POST",
             input_type="dtmf",
             num_digits=1,
@@ -278,7 +288,7 @@ async def handle_agent_turn(
         )
         get_input.add(plivoxml.SpeakElement(choose_prompt))
         response.add(get_input)
-        response.add(plivoxml.RedirectElement("/api/v1/telephony/plivo/query_choice?timeout=1", method="POST"))
+        response.add(plivoxml.RedirectElement(get_public_url("/api/v1/telephony/plivo/query_choice?timeout=1"), method="POST"))
         return Response(content=response.to_string(), media_type="application/xml")
 
     res = await session.process_text_agent_turn(Speech)
@@ -287,7 +297,7 @@ async def handle_agent_turn(
     
     response = plivoxml.ResponseElement()
     get_input = plivoxml.GetInputElement(
-        action="/api/v1/telephony/plivo/query_choice",
+        action=get_public_url("/api/v1/telephony/plivo/query_choice"),
         method="POST",
         input_type="dtmf",
         num_digits=1,
@@ -299,7 +309,7 @@ async def handle_agent_turn(
         get_input.add(plivoxml.SpeakElement(res["text"]))
     get_input.add(plivoxml.SpeakElement(choose_prompt))
     response.add(get_input)
-    response.add(plivoxml.RedirectElement("/api/v1/telephony/plivo/query_choice?timeout=1", method="POST"))
+    response.add(plivoxml.RedirectElement(get_public_url("/api/v1/telephony/plivo/query_choice?timeout=1"), method="POST"))
     return Response(content=response.to_string(), media_type="application/xml")
 
 
@@ -346,7 +356,7 @@ async def handle_query_choice(
             reminder_prompt = PROMPTS.get(session.language, PROMPTS["en"])["timeout_reminder"]
             response = plivoxml.ResponseElement()
             get_input = plivoxml.GetInputElement(
-                action="/api/v1/telephony/plivo/query_choice",
+                action=get_public_url("/api/v1/telephony/plivo/query_choice"),
                 method="POST",
                 input_type="dtmf",
                 num_digits=1,
@@ -354,7 +364,7 @@ async def handle_query_choice(
             )
             get_input.add(plivoxml.SpeakElement(reminder_prompt))
             response.add(get_input)
-            response.add(plivoxml.RedirectElement("/api/v1/telephony/plivo/query_choice?timeout=1", method="POST"))
+            response.add(plivoxml.RedirectElement(get_public_url("/api/v1/telephony/plivo/query_choice?timeout=1"), method="POST"))
             xml = response.to_string()
         else:
             session.state = IVRState.FEEDBACK_PENDING
