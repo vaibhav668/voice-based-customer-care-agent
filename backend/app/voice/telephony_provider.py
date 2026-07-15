@@ -16,6 +16,10 @@ class TelephonyProvider(ABC):
         pass
 
     @abstractmethod
+    def generate_query_choice_response(self, audio_url: str, text_prompt: str, action_url: str) -> str:
+        pass
+
+    @abstractmethod
     def generate_completion_response(self, prompt: str) -> str:
         pass
 
@@ -86,6 +90,26 @@ class PlivoAdapter(TelephonyProvider):
             get_input.add(plivoxml.SpeakElement(text_prompt))
         response.add(get_input)
         # Redirect back to agent hook if caller is silent
+        response.add(plivoxml.RedirectElement(abs_action_url, method="POST"))
+        return response.to_string()
+
+    def generate_query_choice_response(self, audio_url: str, text_prompt: str, action_url: str) -> str:
+        """Generates Plivo XML playing TTS audio and waiting for DTMF choice, resolving absolute action URL."""
+        abs_action_url = self._get_absolute_url(action_url)
+        response = plivoxml.ResponseElement()
+        get_input = plivoxml.GetInputElement(
+            action=abs_action_url,
+            method="POST",
+            input_type="dtmf",
+            num_digits=1,
+            execution_timeout=4
+        )
+        if audio_url:
+            get_input.add(plivoxml.PlayElement(audio_url))
+        else:
+            get_input.add(plivoxml.SpeakElement(text_prompt))
+        response.add(get_input)
+        # Redirect back to query choice URL if they timed out
         response.add(plivoxml.RedirectElement(abs_action_url, method="POST"))
         return response.to_string()
 

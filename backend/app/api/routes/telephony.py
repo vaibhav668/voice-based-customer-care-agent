@@ -284,45 +284,29 @@ async def handle_agent_turn(
     session = ivr_manager.get_or_create_call(CallUUID, "", db)
     from app.voice.ivr import PROMPTS
     
-    if not Speech or not Speech.strip():
-        choose_prompt = PROMPTS.get(session.language, PROMPTS["en"])["choose_query"]
-        response = plivoxml.ResponseElement()
-        get_input = plivoxml.GetInputElement(
-            action=get_public_url("/api/v1/telephony/plivo/query_choice"),
-            method="POST",
-            input_type="dtmf",
-            num_digits=1,
-            execution_timeout=4
-        )
-        get_input.add(plivoxml.SpeakElement(choose_prompt))
-        response.add(get_input)
-        response.add(plivoxml.RedirectElement(get_public_url("/api/v1/telephony/plivo/query_choice?timeout=1"), method="POST"))
-        return Response(content=response.to_string(), media_type="application/xml")
-
     choose_prompt = PROMPTS.get(session.language, PROMPTS["en"])["choose_query"]
+    
+    if not Speech or not Speech.strip():
+        xml = adapter.generate_query_choice_response(
+            audio_url="",
+            text_prompt=choose_prompt,
+            action_url="/api/v1/telephony/plivo/query_choice",
+        )
+        return Response(content=xml, media_type="application/xml")
+
     res = await session.process_text_agent_turn(Speech, append_text=choose_prompt)
     audio_url = get_public_audio_url(res["audio_path"]) if res.get("audio_path") else ""
     
-    response = plivoxml.ResponseElement()
-    get_input = plivoxml.GetInputElement(
-        action=get_public_url("/api/v1/telephony/plivo/query_choice"),
-        method="POST",
-        input_type="dtmf",
-        num_digits=1,
-        execution_timeout=4
+    xml = adapter.generate_query_choice_response(
+        audio_url=audio_url,
+        text_prompt=f"{res['text']} {choose_prompt}",
+        action_url="/api/v1/telephony/plivo/query_choice",
     )
-    if audio_url:
-        get_input.add(plivoxml.PlayElement(audio_url))
-    else:
-        get_input.add(plivoxml.SpeakElement(f"{res['text']} {choose_prompt}"))
-    response.add(get_input)
-    response.add(plivoxml.RedirectElement(get_public_url("/api/v1/telephony/plivo/query_choice?timeout=1"), method="POST"))
-    return Response(content=response.to_string(), media_type="application/xml")
+    return Response(content=xml, media_type="application/xml")
 
 
 @router.post("/query_choice")
 async def handle_query_choice(
-    request: Request,
     Digits: str = Form(None),
     CallUUID: str = Form(...),
     db: Session = Depends(get_db),
@@ -339,7 +323,7 @@ async def handle_query_choice(
             text_prompt=speak_prompt,
             action_url="/api/v1/telephony/plivo/agent",
         )
-    elif Digits == "0":
+    else:
         session.state = IVRState.FEEDBACK_PENDING
         session._save_to_db()
         
@@ -357,33 +341,6 @@ async def handle_query_choice(
             num_digits=2,
             action_url="/api/v1/telephony/plivo/feedback",
         )
-    else:
-        is_timeout_retry = request.query_params.get("timeout") == "1"
-        if not is_timeout_retry:
-            reminder_prompt = PROMPTS.get(session.language, PROMPTS["en"])["timeout_reminder"]
-            response = plivoxml.ResponseElement()
-            get_input = plivoxml.GetInputElement(
-                action=get_public_url("/api/v1/telephony/plivo/query_choice"),
-                method="POST",
-                input_type="dtmf",
-                num_digits=1,
-                execution_timeout=4
-            )
-            get_input.add(plivoxml.SpeakElement(reminder_prompt))
-            response.add(get_input)
-            response.add(plivoxml.RedirectElement(get_public_url("/api/v1/telephony/plivo/query_choice?timeout=1"), method="POST"))
-            xml = response.to_string()
-        else:
-            session.state = IVRState.FEEDBACK_PENDING
-            session._save_to_db()
-            
-            feedback_prompt = PROMPTS.get(session.language, PROMPTS["en"])["feedback"]
-            xml = adapter.generate_menu_response(
-                prompt=feedback_prompt,
-                expect_input="DTMF",
-                num_digits=2,
-                action_url="/api/v1/telephony/plivo/feedback",
-            )
     return Response(content=xml, media_type="application/xml")
 
 
