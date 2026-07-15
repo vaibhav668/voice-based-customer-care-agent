@@ -21,6 +21,11 @@ let wavePhase = 0;
 let waveAnimationFrame = null;
 let flowAnimationFrame = null;
 
+// Live data tracking
+let currentlyViewedConvId = null;   // ID of conv open in detail panel
+let lastFeedbackLoadMs = 0;          // Timestamp of last feedback load
+const FEEDBACK_STALE_MS = 30_000;    // Reload feedback if >30s old
+
 document.addEventListener("DOMContentLoaded", async () => {
     // 1. Authenticate Admin
     const token = getToken();
@@ -88,14 +93,17 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
-    // 6. Real-time background sync interval (every 4 seconds)
+    // 6. Real-time background sync interval (every 20 seconds)
     setInterval(async () => {
         if (getToken()) {
-            await loadBookings(true);
             await loadConversations(true);
-            await loadFeedbacks(true);
+            await loadBookings(true);
+            // Only reload feedbacks if stale
+            if (Date.now() - lastFeedbackLoadMs > FEEDBACK_STALE_MS) {
+                await loadFeedbacks(true);
+            }
         }
-    }, 4000);
+    }, 20_000);
 
     // 7. Establish real-time WebSocket connection to receive call update events
     const initWebSocket = () => {
@@ -120,18 +128,35 @@ document.addEventListener("DOMContentLoaded", async () => {
             };
             
             socket.onmessage = async (event) => {
-                console.log("WebSocket event received:", event.data);
-                // Trigger immediate updates on live events
-                if (getToken()) {
-                    await loadConversations(true);
-                    await loadBookings(true);
-                    try {
-                        const parsed = JSON.parse(event.data);
-                        if (parsed && parsed.event === "feedback_submitted") {
-                            await loadFeedbacks(true);
-                        }
-                    } catch (e) {}
+                if (!getToken()) return;
+                let parsed = null;
+                try { parsed = JSON.parse(event.data); } catch (e) {}
+
+                const evType = parsed?.event || "";
+                console.log("WS event:", evType, parsed);
+
+                if (evType === "feedback_submitted") {
+                    await loadFeedbacks(true);
+                    return;
                 }
+
+                if (["new_transcript", "call_updated", "call_ended", "call_started"].includes(evType)) {
+                    // Always refresh the conversation list (silent — keeps selection)
+                    await loadConversations(true);
+
+                    // If the affected session is currently open in the detail panel, refresh it
+                    const affectedSession = parsed?.session_id;
+                    if (affectedSession && currentlyViewedConvId) {
+                        const conv = allEnrichedConvs.find(c => c.session_id === affectedSession || c.id === affectedSession);
+                        if (conv && conv.id === currentlyViewedConvId) {
+                            loadEnrichedConversationDetail(currentlyViewedConvId);
+                        }
+                    }
+                    return;
+                }
+
+                // Default: refresh conversations on any other event
+                await loadConversations(true);
             };
             
             socket.onclose = (e) => {
@@ -187,8 +212,13 @@ function switchToTab(tabName) {
     if (tabName === "dashboard") {
         resizeCanvases();
     }
-    if (tabName === "reviews") {
+    // Only reload feedbacks if data is stale
+    if (tabName === "reviews" && Date.now() - lastFeedbackLoadMs > FEEDBACK_STALE_MS) {
         loadFeedbacks();
+    }
+    // Wire analytics when switching to that tab
+    if (tabName === "analytics") {
+        renderAnalyticsFromData();
     }
 }
 
@@ -360,6 +390,7 @@ async function loadConversations(silent = false) {
                 item.addEventListener("click", () => {
                     items.forEach(i => i.classList.remove("active"));
                     item.classList.add("active");
+                    currentlyViewedConvId = item.dataset.convId;
                     loadEnrichedConversationDetail(item.dataset.convId);
                 });
             });
@@ -636,21 +667,46 @@ function renderTicketsFromEnriched(conversations) {
     const listContainer = document.getElementById("tickets-list");
     if (!listContainer) return;
 
+    // Update the tickets tab badge dynamically
+    const escalatedCount = conversations.filter(c => c.resolution_status === "escalated").length;
+    const urgentCount = conversations.filter(c => c.resolution_status === "escalated" || c.resolution_status === "unresolved").length;
+    const badgeEl = document.querySelector('[data-tab="tickets"] ~ .badge-red, #tab-tickets .badge-red');
+    // Find badge in column-header
+    const headerBadge = document.querySelector('#tab-tickets .badge-red');
+    if (headerBadge) {
+        headerBadge.textContent = escalatedCount > 0 ? `${escalatedCount} ESCALATED` : "ALL CLEAR";
+        headerBadge.style.background = escalatedCount > 0 ? "" : "rgba(53,216,182,0.15)";
+        headerBadge.style.color = escalatedCount > 0 ? "" : "var(--teal)";
+        headerBadge.style.borderColor = escalatedCount > 0 ? "" : "var(--teal)";
+    }
+
     if (!conversations || conversations.length === 0) {
         listContainer.innerHTML = `<div style="text-align:center; padding: 20px; color:var(--text-dim)">No ticket/conversation records found.</div>`;
         return;
     }
 
-    listContainer.innerHTML = conversations.map((c, idx) => {
+    // Sort: escalated first, then unresolved, then resolved; newest first within
+    const sorted = [...conversations].sort((a, b) => {
+        const tier = c => c.resolution_status === "escalated" ? 2 : c.resolution_status === "unresolved" ? 1 : 0;
+        const d = tier(b) - tier(a);
+        if (d !== 0) return d;
+        return new Date(b.updated_at || 0) - new Date(a.updated_at || 0);
+    });
+
+    // Preserve selected state across silent refreshes
+    const prevSelected = listContainer.querySelector(".list-item.active")?.dataset.convId;
+
+    listContainer.innerHTML = sorted.map((c, idx) => {
         const dateStr = c.updated_at ? formatRelativeTime(c.updated_at) : "recently";
         const phone = c.user_phone || "Unknown";
         const name = c.user_name || "Guest";
         const resStatus = c.resolution_status || "unresolved";
         const resClass = resStatus === "resolved" ? "badge-resolved" : (resStatus === "escalated" ? "badge-escalated" : "badge-frustration");
         const booking = c.booking_code || "N/A";
+        const isSelected = prevSelected ? (c.id === prevSelected) : (idx === 0);
 
         return `
-            <div class="list-item ${idx === 0 ? 'active' : ''}" data-conv-id="${c.id}">
+            <div class="list-item ${isSelected ? 'active' : ''}" data-conv-id="${c.id}">
                 <div class="item-meta">
                     <span style="font-family:var(--font-mono); color:white; font-size:12.5px;"><i class="fa-solid fa-phone" style="color:var(--teal)"></i> ${phone}</span>
                     <span>${dateStr}</span>
@@ -673,8 +729,10 @@ function renderTicketsFromEnriched(conversations) {
         });
     });
 
-    if (conversations.length > 0) {
-        loadEnrichedTicketDetail(conversations[0].id);
+    // Auto-load detail for selected (or first) item
+    const selectedItem = listContainer.querySelector(".list-item.active");
+    if (selectedItem) {
+        loadEnrichedTicketDetail(selectedItem.dataset.convId);
     }
 }
 
@@ -784,6 +842,7 @@ async function loadEnrichedTicketDetail(convId) {
 
 /* ---- ENRICHED: Live call detail panel ---- */
 async function loadEnrichedConversationDetail(convId) {
+    currentlyViewedConvId = convId; // Track for WebSocket live-push
     const enriched = allEnrichedConvs.find(c => c.id === convId);
     const channel = enriched?.channel || "VOICE";
     const detailContainerId = channel === "CHAT" ? "chat-support-detail" : "call-support-detail";
@@ -1128,48 +1187,10 @@ async function loadTicketDetail(complaintId) {
             badgeClass = "badge-escalated";
         }
 
-        // Search for associated chat transcript in db
+        // Search for associated chat transcript in db (single call — deduplication fix)
         let convoHtml = `<div style="text-align: center; color: var(--text-dim); padding: 20px;"><i class="fa-solid fa-circle-info"></i> No active support chat transcript recorded for this ticket.</div>`;
-        
-        if (c.booking_code) {
-            try {
-                const searchRes = await searchConversations(c.booking_code);
-                const results = searchRes.data.conversations || [];
-                if (results.length > 0) {
-                    const detailRes = await getConversationDetail(results[0].id);
-                    const conv = detailRes.data || detailRes;
-                    const messages = conv.messages || [];
-                    
-                    if (messages.length > 0) {
-                        convoHtml = messages.map(m => {
-                            const isUser = m.sender === "USER";
-                            const rowClass = isUser ? "user" : "ai";
-                            const label = isUser ? "User" : "AI Agent";
-                            const msgTime = m.created_at ? new Date(m.created_at).toLocaleTimeString() : "";
-
-                            let metaTags = [];
-                            if (m.intent) metaTags.push(`<span class="meta-pill">NLU: ${m.intent}</span>`);
-                            if (m.tool_used) metaTags.push(`<span class="meta-pill">Tool: ${m.tool_used}</span>`);
-                            if (m.response_time_ms) metaTags.push(`<span class="meta-pill">${m.response_time_ms} ms</span>`);
-
-                            return `
-                                <div class="bubble-row ${rowClass}">
-                                    <span class="bubble-sender">${label} • ${msgTime}</span>
-                                    <div class="bubble-text">${escapeHTML(m.message)}</div>
-                                    <div class="bubble-meta-tags">
-                                        ${metaTags.join("")}
-                                    </div>
-                                </div>
-                            `;
-                        }).join("");
-                    }
-                }
-            } catch (err) {
-                console.warn("Failed to load associated conversation:", err);
-            }
-        }
-
         let associatedConversation = null;
+
         if (c.booking_code) {
             try {
                 const searchRes = await searchConversations(c.booking_code);
@@ -1178,28 +1199,23 @@ async function loadTicketDetail(complaintId) {
                     const detailRes = await getConversationDetail(results[0].id);
                     associatedConversation = detailRes.data || detailRes;
                     const messages = associatedConversation.messages || [];
-                    
+
                     if (messages.length > 0) {
                         convoHtml = messages.map(m => {
                             const isUser = m.sender === "USER";
                             const rowClass = isUser ? "user" : "ai";
                             const label = isUser ? "User" : "AI Agent";
                             const msgTime = m.created_at ? new Date(m.created_at).toLocaleTimeString() : "";
-
                             let metaTags = [];
                             if (m.intent) metaTags.push(`<span class="meta-pill">NLU: ${m.intent}</span>`);
                             if (m.tool_used) metaTags.push(`<span class="meta-pill">Tool: ${m.tool_used}</span>`);
                             if (m.response_time_ms) metaTags.push(`<span class="meta-pill">${m.response_time_ms} ms</span>`);
-
                             return `
                                 <div class="bubble-row ${rowClass}">
                                     <span class="bubble-sender">${label} • ${msgTime}</span>
                                     <div class="bubble-text">${escapeHTML(m.message)}</div>
-                                    <div class="bubble-meta-tags">
-                                        ${metaTags.join("")}
-                                    </div>
-                                </div>
-                            `;
+                                    <div class="bubble-meta-tags">${metaTags.join("")}</div>
+                                </div>`;
                         }).join("");
                     }
                 }
@@ -1350,6 +1366,113 @@ async function loadTicketDetail(complaintId) {
 }
 
 /* ----------------- DRIVERS TAB COMPONENT ----------------- */
+/* ----------------- ANALYTICS TAB (powered by real data) ----------------- */
+function renderAnalyticsFromData() {
+    if (!allEnrichedConvs || allEnrichedConvs.length === 0) return;
+
+    // --- Intent Distribution ---
+    const intentCounts = {};
+    allEnrichedConvs.forEach(c => {
+        (c.intents_detected || []).forEach(intent => {
+            if (!intent) return;
+            const key = intent.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
+            intentCounts[key] = (intentCounts[key] || 0) + 1;
+        });
+    });
+    const intentTotal = Object.values(intentCounts).reduce((a, b) => a + b, 0) || 1;
+    const topIntents = Object.entries(intentCounts)
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 6);
+
+    const INTENT_COLORS = ["var(--teal)", "var(--blue)", "var(--purple)", "var(--cyan)", "var(--orange, #f97316)", "var(--text-dim)"];
+    const intentChartEl = document.querySelector("#tab-analytics .intent-chart-list");
+    if (intentChartEl) {
+        if (topIntents.length === 0) {
+            intentChartEl.innerHTML = `<div style="color:var(--text-dim); text-align:center; padding:20px; font-size:13px;">No intent data recorded yet.</div>`;
+        } else {
+            intentChartEl.innerHTML = topIntents.map(([intent, count], i) => {
+                const pct = ((count / intentTotal) * 100).toFixed(1);
+                return `
+                    <div class="intent-item">
+                        <span>${intent}</span>
+                        <div class="bar-container">
+                            <div class="fill" style="width: ${pct}%; background: ${INTENT_COLORS[i % INTENT_COLORS.length]}; transition: width 0.6s ease;"></div>
+                        </div>
+                        <span>${pct}%</span>
+                    </div>`;
+            }).join("");
+        }
+    }
+
+    // --- Language Breakdown donut ---
+    const langCounts = {};
+    allEnrichedConvs.forEach(c => {
+        const lang = (c.language || "en").toLowerCase();
+        langCounts[lang] = (langCounts[lang] || 0) + 1;
+    });
+    const langTotal = Object.values(langCounts).reduce((a, b) => a + b, 0) || 1;
+    const LANG_COLORS = { en: "var(--teal)", hi: "var(--blue)", default: "var(--purple)" };
+    const LANG_CIRCUMFERENCE = 2 * Math.PI * 40; // r=40
+
+    const langEntries = Object.entries(langCounts).sort(([, a], [, b]) => b - a);
+    let langOffset = 0;
+    const langSegments = langEntries.map(([lang, count]) => {
+        const fraction = count / langTotal;
+        const dash = fraction * LANG_CIRCUMFERENCE;
+        const segment = { lang, count, fraction, dash, offset: -langOffset, color: LANG_COLORS[lang] || LANG_COLORS.default };
+        langOffset += dash;
+        return segment;
+    });
+
+    const donutSvg = document.querySelector("#tab-analytics .donut-svg");
+    if (donutSvg) {
+        donutSvg.innerHTML = `
+            <circle cx="50" cy="50" r="40" fill="transparent" stroke="var(--surface-light)" stroke-width="10"/>
+            ${langSegments.map(seg => `
+                <circle cx="50" cy="50" r="40" fill="transparent"
+                    stroke="${seg.color}" stroke-width="10"
+                    stroke-dasharray="${seg.dash.toFixed(2)} ${LANG_CIRCUMFERENCE.toFixed(2)}"
+                    stroke-dashoffset="${seg.offset.toFixed(2)}"
+                    style="transition: stroke-dasharray 0.6s ease;"/>
+            `).join("")}`;
+    }
+    const donutLegend = document.querySelector("#tab-analytics .donut-legend");
+    if (donutLegend && langSegments.length > 0) {
+        donutLegend.innerHTML = langSegments.map(seg => `
+            <div><span class="dot" style="background:${seg.color}"></span> ${seg.lang.toUpperCase()} (${(seg.fraction * 100).toFixed(0)}%)</div>
+        `).join("");
+    }
+
+    // --- Response time sparkline (SVG path from message timing data) ---
+    // We use message_count as a proxy for call complexity/response density
+    const voiceConvs = allEnrichedConvs.filter(c => c.channel === "VOICE" && c.duration > 0).slice(-20);
+    if (voiceConvs.length > 1) {
+        const maxDur = Math.max(...voiceConvs.map(c => c.duration), 1);
+        const points = voiceConvs.map((c, i) => {
+            const x = (i / (voiceConvs.length - 1)) * 800;
+            const y = 200 - (c.duration / maxDur) * 180;
+            return [x.toFixed(1), y.toFixed(1)];
+        });
+        const lineD = `M ${points[0][0]} ${points[0][1]} ` + points.slice(1).map(p => `L ${p[0]} ${p[1]}`).join(" ");
+        const fillD = lineD + ` L 800 250 L 0 250 Z`;
+        const sparkSvg = document.querySelector("#tab-analytics .svg-chart");
+        if (sparkSvg) {
+            const h3 = sparkSvg.closest(".analytics-card.large")?.querySelector("h3");
+            if (h3) h3.textContent = `Call Duration Trend (last ${voiceConvs.length} calls)`;
+            sparkSvg.innerHTML = `
+                <defs>
+                    <linearGradient id="chartGrad2" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="var(--teal)" stop-opacity="0.4"/>
+                        <stop offset="100%" stop-color="var(--teal)" stop-opacity="0"/>
+                    </linearGradient>
+                </defs>
+                <path d="${fillD}" fill="url(#chartGrad2)"/>
+                <path d="${lineD}" fill="none" stroke="var(--teal)" stroke-width="2.5"/>
+                ${points.map(p => `<circle cx="${p[0]}" cy="${p[1]}" r="4" fill="var(--teal)"/>`).join("")}`;
+        }
+    }
+}
+
 function initDriversTab() {
     const driversGrid = document.getElementById("drivers-grid");
     if (!driversGrid) return;
@@ -1592,6 +1715,7 @@ function initSettingsTab() {
 let allFeedbacks = [];
 
 async function loadFeedbacks(silent = false) {
+    lastFeedbackLoadMs = Date.now(); // Track when we last loaded
     const feedbackList = document.getElementById("feedback-list");
     const feedbackTotal = document.getElementById("feedback-total-count");
     const feedbackAvg = document.getElementById("feedback-avg-rating");
