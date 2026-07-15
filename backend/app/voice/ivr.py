@@ -248,15 +248,35 @@ class IVRCallSession:
         )
 
         if self.state == IVRState.INCOMING:
-            self.state = IVRState.RECORDING_CONSENT_PENDING
+            self.state = IVRState.LANGUAGE_SELECTION_PENDING
             self._save_to_db()
-            self._log_system_event("Call incoming. Prompting user for recording consent.")
+            self._log_system_event("Call incoming. Greeting caller and prompting for language selection.")
             broadcast_call_event("call_started", self.session_id, "Voice call started.", {"phone_number": self.phone_number})
             
+            # Start call recording automatically (since manual consent prompt is removed)
+            try:
+                import plivo
+                import os
+                auth_id = os.getenv("PLIVO_AUTH_ID")
+                auth_token = os.getenv("PLIVO_AUTH_TOKEN")
+                public_url = os.getenv("PUBLIC_URL")
+                if auth_id and auth_token and public_url:
+                    client = plivo.RestClient(auth_id, auth_token)
+                    recording = client.calls.record_create(
+                        call_uuid=self.call_id,
+                        file_format='mp3',
+                        recording_callback_url=f"{public_url}/api/v1/telephony/plivo/recording-callback",
+                    )
+                    recording_id = getattr(recording, "recording_id", None) or (recording.get("recording_id") if hasattr(recording, "get") else None)
+                    self._log_system_event(f"Call recording started automatically. Recording ID: {recording_id}")
+            except Exception as e:
+                self._log_system_event(f"Notice: Failed to start automatic call recording: {str(e)}")
+
             return {
                 "state": self.state.value,
-                "prompt": "This call may be recorded for quality purposes. Press 1 to consent, or 2 to opt-out.",
+                "prompt": "Hi! Select your preferred language. Press 1 for English, 2 for Hindi, 3 for Telugu, 4 for Kannada, 5 for Marathi, 6 for Tamil, 7 for Gujarati, 8 for Bengali, 9 for Malayalam, or 0 for Urdu.",
                 "expect_input": "DTMF",
+                "num_digits": 1,
             }
 
         elif self.state == IVRState.RECORDING_CONSENT_PENDING:

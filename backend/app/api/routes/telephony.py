@@ -130,7 +130,7 @@ async def handle_incoming(
         prompt=res["prompt"],
         expect_input="DTMF",
         num_digits=1,
-        action_url="/api/v1/telephony/plivo/consent",
+        action_url="/api/v1/telephony/plivo/language",
         audio_url=audio_url,
         language=session.language,
     )

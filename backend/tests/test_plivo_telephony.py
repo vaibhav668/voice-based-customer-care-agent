@@ -124,24 +124,15 @@ async def test_plivo_integration():
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
 
             # ----------------------------------------------------
-            # 1. Incoming Call Webhook (RECORDING_CONSENT_PENDING)
+            # 1. Incoming Call Webhook (Greets and redirects to Language)
             # ----------------------------------------------------
             print("\n--- 1. Testing Incoming Call Webhook ---")
             response = await client.post("/api/v1/telephony/plivo/incoming", data={"CallUUID": call_uuid, "From": caller_phone})
             assert response.status_code == 200
             assert "application/xml" in response.headers["content-type"]
             assert "<GetInput" in response.text
-            assert "consent" in response.text
-            print("-> Incoming call Plivo XML response: PASSED")
-
-            # ----------------------------------------------------
-            # 2. Consent Hook (Redirects to Language Selection)
-            # ----------------------------------------------------
-            print("\n--- 2. Testing Consent Hook (Redirects to Language Selection) ---")
-            response = await client.post("/api/v1/telephony/plivo/consent", data={"CallUUID": call_uuid, "Digits": "1"})
-            assert response.status_code == 200
             assert "language" in response.text
-            print("-> Consent XML redirects to language selection response: PASSED")
+            print("-> Incoming call Plivo XML response: PASSED")
 
             # ----------------------------------------------------
             # 4. Language Selection Hook (VERIFICATION_PENDING)

@@ -186,18 +186,11 @@ def run_tests():
         assert session.state == IVRState.INCOMING
         assert session.user_id == str(user.id)
         
-        # Transition out of incoming
+        # Transition out of incoming (transitions directly to LANGUAGE_SELECTION_PENDING)
         res = session.advance_state("INIT")
         print("State transition response:", res)
-        assert session.state == IVRState.RECORDING_CONSENT_PENDING
-        assert "may be recorded" in res.get("prompt").lower()
-
-        # Test 2.2: Send DTMF 1 for consent (transitions directly to LANGUAGE_SELECTION_PENDING)
-        print("Sending DTMF 1 (consent)...")
-        res = session.advance_state("DTMF", "1")
-        print("State transition response:", res)
         assert session.state == IVRState.LANGUAGE_SELECTION_PENDING
-        assert session.recording_consent is True
+        assert "hi! select your preferred language" in res.get("prompt").lower()
 
         # Test 2.3: Send DTMF 1 for English (transitions to VERIFICATION_PENDING)
         print("Sending DTMF 1 (English language)...")
@@ -225,12 +218,8 @@ def run_tests():
         session_unverified = ivr_manager.get_or_create_call(unverified_call_id, unverified_phone, db)
         assert session_unverified.user_id is None
         
-        # 3.1: Incoming -> Consent
+        # 3.1: Incoming -> Language Selection
         res = session_unverified.advance_state("INIT")
-        assert session_unverified.state == IVRState.RECORDING_CONSENT_PENDING
-        
-        # 3.2: Consent -> Language Selection
-        res = session_unverified.advance_state("DTMF", "1")
         assert session_unverified.state == IVRState.LANGUAGE_SELECTION_PENDING
         
         # 3.3: Language Selection -> Verification Pending (Since user_id is missing)
