@@ -192,18 +192,12 @@ def run_tests():
         assert session.state == IVRState.RECORDING_CONSENT_PENDING
         assert "may be recorded" in res.get("prompt").lower()
 
-        # Test 2.2: Send DTMF 1 for consent (transitions to OTP_PENDING since user is registered)
+        # Test 2.2: Send DTMF 1 for consent (transitions directly to LANGUAGE_SELECTION_PENDING)
         print("Sending DTMF 1 (consent)...")
         res = session.advance_state("DTMF", "1")
         print("State transition response:", res)
-        assert session.state == IVRState.OTP_PENDING
-        assert session.recording_consent is True
-
-        # Test 2.2b: Verify OTP (transitions to LANGUAGE_SELECTION_PENDING)
-        print("Sending DTMF 123456 (OTP)...")
-        res = session.advance_state("DTMF", "123456")
-        print("State transition response:", res)
         assert session.state == IVRState.LANGUAGE_SELECTION_PENDING
+        assert session.recording_consent is True
 
         # Test 2.3: Send DTMF 1 for English (transitions to VERIFICATION_PENDING)
         print("Sending DTMF 1 (English language)...")

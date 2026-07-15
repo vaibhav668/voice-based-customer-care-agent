@@ -288,44 +288,25 @@ class IVRCallSession:
                 
                 broadcast_call_event("call_updated", self.session_id, "Call recording consent updated.", {"recording_consent": self.recording_consent})
 
-                # Check if phone number exists in database
+                # Check if phone number exists in database to pre-identify caller, but skip OTP flow completely
                 user = None
                 if self.phone_number:
                     clean_caller = "".join(filter(str.isdigit, str(self.phone_number)))[-10:]
                     if clean_caller:
                         stmt = select(User).where(User.phone.like(f"%{clean_caller}%"))
                         user = self.db.scalar(stmt)
+                        if user:
+                            self.user_id = str(user.id)
+
+                self.state = IVRState.LANGUAGE_SELECTION_PENDING
+                self._save_to_db()
                 
-                if user:
-                    self.state = IVRState.OTP_PENDING
-                    self._save_to_db()
-                    
-                    from app.auth.service import generate_otp, send_otp_sms
-                    otp = generate_otp(user.phone)
-                    
-                    # Send OTP via SMS
-                    sms_sent = send_otp_sms(self.phone_number or user.phone, otp)
-                    if sms_sent:
-                        self._log_system_event(f"OTP SMS sent to {self.phone_number}. OTP code: {otp}")
-                    else:
-                        self._log_system_event(f"OTP SMS delivery failed. OTP code for testing: {otp}")
-                    
-                    return {
-                        "state": self.state.value,
-                        "prompt": "We have sent a 6-digit OTP to your registered mobile number via SMS. Please check your messages and key in the OTP using your keypad.",
-                        "expect_input": "DTMF",
-                        "num_digits": 6,
-                    }
-                else:
-                    self.state = IVRState.LANGUAGE_SELECTION_PENDING
-                    self._save_to_db()
-                    
-                    return {
-                        "state": self.state.value,
-                        "prompt": "Select your preferred language. Press 1 for English, 2 for Hindi, 3 for Telugu, 4 for Kannada, 5 for Marathi, 6 for Tamil, 7 for Gujarati, 8 for Bengali, 9 for Malayalam, or 0 for Urdu.",
-                        "expect_input": "DTMF",
-                        "num_digits": 1,
-                    }
+                return {
+                    "state": self.state.value,
+                    "prompt": "Select your preferred language. Press 1 for English, 2 for Hindi, 3 for Telugu, 4 for Kannada, 5 for Marathi, 6 for Tamil, 7 for Gujarati, 8 for Bengali, 9 for Malayalam, or 0 for Urdu.",
+                    "expect_input": "DTMF",
+                    "num_digits": 1,
+                }
 
         elif self.state == IVRState.OTP_PENDING:
             entered_otp = data.strip() if (action == "DTMF" and data) else ""

@@ -135,22 +135,13 @@ async def test_plivo_integration():
             print("-> Incoming call Plivo XML response: PASSED")
 
             # ----------------------------------------------------
-            # 2. Consent Hook (OTP_PENDING for registered phone)
+            # 2. Consent Hook (Redirects to Language Selection)
             # ----------------------------------------------------
-            print("\n--- 2. Testing Consent Hook (Redirects to OTP) ---")
+            print("\n--- 2. Testing Consent Hook (Redirects to Language Selection) ---")
             response = await client.post("/api/v1/telephony/plivo/consent", data={"CallUUID": call_uuid, "Digits": "1"})
             assert response.status_code == 200
-            assert "otp" in response.text
-            print("-> Consent XML redirects to OTP response: PASSED")
-
-            # ----------------------------------------------------
-            # 3. OTP Verification Hook (LANGUAGE_SELECTION_PENDING)
-            # ----------------------------------------------------
-            print("\n--- 3. Testing OTP Verification Hook ---")
-            response = await client.post("/api/v1/telephony/plivo/otp", data={"CallUUID": call_uuid, "Digits": "123456"})
-            assert response.status_code == 200
             assert "language" in response.text
-            print("-> OTP verification successful redirects to language selection: PASSED")
+            print("-> Consent XML redirects to language selection response: PASSED")
 
             # ----------------------------------------------------
             # 4. Language Selection Hook (VERIFICATION_PENDING)
