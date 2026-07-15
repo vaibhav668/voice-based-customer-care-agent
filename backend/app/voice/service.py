@@ -54,11 +54,15 @@ class VoiceService:
         )
 
         # ---------------- Text → Speech ---------------- #
+        try:
+            generated_audio = await self.tts.generate(
+                response["response"],
+                language=language,
+            )
+        except Exception as e:
+            print("Notice: Failed to generate TTS via edge-tts in VoiceService:", e)
+            generated_audio = ""
 
-        generated_audio = await self.tts.generate(
-            response["response"],
-            language=language,
-        )
 
         # Update DB AI Message with generated audio path
         if response.get("db_message_id"):

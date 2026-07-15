@@ -609,10 +609,15 @@ class IVRCallSession:
 
         from app.voice.tts import TextToSpeech
         tts = TextToSpeech()
-        generated_audio = await tts.generate(
-            res_chat["response"],
-            language=self.language,
-        )
+        try:
+            generated_audio = await tts.generate(
+                res_chat["response"],
+                language=self.language,
+            )
+        except Exception as e:
+            print("Notice: Failed to generate TTS via edge-tts in ivr.py:", e)
+            generated_audio = ""
+
 
         if res_chat.get("db_message_id"):
             try:

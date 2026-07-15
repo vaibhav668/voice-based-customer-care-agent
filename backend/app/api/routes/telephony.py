@@ -215,8 +215,12 @@ async def handle_verify_code(
     if session.state == IVRState.ACTIVE_AGENT:
         from app.voice.tts import TextToSpeech
         tts = TextToSpeech()
-        audio_file = await tts.generate(res["prompt"], language=session.language)
-        audio_url = get_public_audio_url(audio_file)
+        try:
+            audio_file = await tts.generate(res["prompt"], language=session.language)
+            audio_url = get_public_audio_url(audio_file)
+        except Exception as e:
+            print("Notice: Failed to generate language TTS via edge-tts:", e)
+            audio_url = ""
         
         xml = adapter.generate_voice_agent_response(
             audio_url=audio_url,
@@ -247,8 +251,12 @@ async def handle_verify_phone(
     if session.state == IVRState.ACTIVE_AGENT:
         from app.voice.tts import TextToSpeech
         tts = TextToSpeech()
-        audio_file = await tts.generate(res["prompt"], language=session.language)
-        audio_url = get_public_audio_url(audio_file)
+        try:
+            audio_file = await tts.generate(res["prompt"], language=session.language)
+            audio_url = get_public_audio_url(audio_file)
+        except Exception as e:
+            print("Notice: Failed to generate verify_phone TTS via edge-tts:", e)
+            audio_url = ""
         
         xml = adapter.generate_voice_agent_response(
             audio_url=audio_url,
