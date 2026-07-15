@@ -60,7 +60,7 @@ class RescheduleTool:
         # Perform rescheduling if travel date and confirmation are present
         if travel_date and confirmation and confirmation.strip().lower() in ["yes", "yes reschedule", "confirm", "proceed", "go ahead", "yes cancel"]:
             try:
-                res = self.service.reschedule_booking(booking_code, travel_date)
+                res = self.service.reschedule_booking(booking_code, travel_date, user_id=user_id, session_phone=session_phone)
                 return {
                     "reschedule_eligible": True,
                     "status": "rescheduled",

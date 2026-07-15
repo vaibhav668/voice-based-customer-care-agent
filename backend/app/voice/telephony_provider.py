@@ -8,19 +8,19 @@ class TelephonyProvider(ABC):
     """Abstract interface defining required telephony template responses."""
 
     @abstractmethod
-    def generate_menu_response(self, prompt: str, expect_input: str, num_digits: Optional[int] = None, action_url: str = "") -> str:
+    def generate_menu_response(self, prompt: str, expect_input: str, num_digits: Optional[int] = None, action_url: str = "", audio_url: str = "", language: str = "en") -> str:
         pass
 
     @abstractmethod
-    def generate_voice_agent_response(self, audio_url: str, text_prompt: str, action_url: str) -> str:
+    def generate_voice_agent_response(self, audio_url: str, text_prompt: str, action_url: str, language: str = "en") -> str:
         pass
 
     @abstractmethod
-    def generate_query_choice_response(self, audio_url: str, text_prompt: str, action_url: str) -> str:
+    def generate_query_choice_response(self, audio_url: str, text_prompt: str, action_url: str, language: str = "en") -> str:
         pass
 
     @abstractmethod
-    def generate_completion_response(self, prompt: str) -> str:
+    def generate_completion_response(self, prompt: str, language: str = "en", audio_url: str = "") -> str:
         pass
 
 
@@ -42,6 +42,22 @@ class PlivoAdapter(TelephonyProvider):
             url = f"/{url}"
         return f"{self.public_url}{url}"
 
+    def _map_language(self, language: str) -> str:
+        """Maps internal language codes to Plivo TTS language codes."""
+        mapping = {
+            "en": "en-US",
+            "hi": "hi-IN",
+            "mr": "mr-IN",
+            "te": "te-IN",
+            "ta": "ta-IN",
+            "kn": "kn-IN",
+            "gu": "gu-IN",
+            "bn": "bn-IN",
+            "ml": "ml-IN",
+            "ur": "ur-IN"
+        }
+        return mapping.get((language or "en").lower(), "en-US")
+
     def validate_signature(self, method: str, url: str, nonce: str, signature: str, params: Dict[str, Any]) -> bool:
         """Validates that incoming webhook calls originated from Plivo servers."""
         # Allow disabling signature validation in local/mock environments
@@ -55,7 +71,7 @@ class PlivoAdapter(TelephonyProvider):
         except Exception:
             return False
 
-    def generate_menu_response(self, prompt: str, expect_input: str, num_digits: Optional[int] = None, action_url: str = "") -> str:
+    def generate_menu_response(self, prompt: str, expect_input: str, num_digits: Optional[int] = None, action_url: str = "", audio_url: str = "", language: str = "en") -> str:
         """Generates Plivo XML requesting DTMF keypad inputs, resolving absolute action URL."""
         abs_action_url = self._get_absolute_url(action_url)
         response = plivoxml.ResponseElement()
@@ -66,11 +82,15 @@ class PlivoAdapter(TelephonyProvider):
             num_digits=num_digits or 99,
             execution_timeout=8
         )
-        get_input.add(plivoxml.SpeakElement(prompt))
+        if audio_url:
+            get_input.add(plivoxml.PlayElement(audio_url))
+        else:
+            plivo_lang = self._map_language(language)
+            get_input.add(plivoxml.SpeakElement(prompt, language=plivo_lang))
         response.add(get_input)
         return response.to_string()
 
-    def generate_voice_agent_response(self, audio_url: str, text_prompt: str, action_url: str) -> str:
+    def generate_voice_agent_response(self, audio_url: str, text_prompt: str, action_url: str, language: str = "en") -> str:
         """Generates Plivo XML playing TTS audio and waiting for spoken caller response, resolving absolute action URL."""
         abs_action_url = self._get_absolute_url(action_url)
         response = plivoxml.ResponseElement()
@@ -85,11 +105,12 @@ class PlivoAdapter(TelephonyProvider):
         if audio_url:
             get_input.add(plivoxml.PlayElement(audio_url))
         else:
-            get_input.add(plivoxml.SpeakElement(text_prompt))
+            plivo_lang = self._map_language(language)
+            get_input.add(plivoxml.SpeakElement(text_prompt, language=plivo_lang))
         response.add(get_input)
         return response.to_string()
 
-    def generate_query_choice_response(self, audio_url: str, text_prompt: str, action_url: str) -> str:
+    def generate_query_choice_response(self, audio_url: str, text_prompt: str, action_url: str, language: str = "en") -> str:
         """Generates Plivo XML playing TTS audio and waiting for DTMF choice, resolving absolute action URL."""
         abs_action_url = self._get_absolute_url(action_url)
         response = plivoxml.ResponseElement()
@@ -103,13 +124,18 @@ class PlivoAdapter(TelephonyProvider):
         if audio_url:
             get_input.add(plivoxml.PlayElement(audio_url))
         else:
-            get_input.add(plivoxml.SpeakElement(text_prompt))
+            plivo_lang = self._map_language(language)
+            get_input.add(plivoxml.SpeakElement(text_prompt, language=plivo_lang))
         response.add(get_input)
         return response.to_string()
 
-    def generate_completion_response(self, prompt: str) -> str:
+    def generate_completion_response(self, prompt: str, language: str = "en", audio_url: str = "") -> str:
         """Generates Plivo XML saying goodbye and hanging up."""
         response = plivoxml.ResponseElement()
-        response.add(plivoxml.SpeakElement(prompt))
+        if audio_url:
+            response.add(plivoxml.PlayElement(audio_url))
+        else:
+            plivo_lang = self._map_language(language)
+            response.add(plivoxml.SpeakElement(prompt, language=plivo_lang))
         response.add(plivoxml.HangupElement())
         return response.to_string()

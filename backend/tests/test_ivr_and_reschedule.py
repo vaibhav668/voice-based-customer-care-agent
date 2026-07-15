@@ -117,6 +117,25 @@ def run_tests():
         db.commit()
         db.refresh(booking)
 
+        # Create guest booking BK-GUEST99 for Test 3
+        guest_booking_code = "BK-GUEST99"
+        existing_guest = db.query(Booking).filter_by(booking_code=guest_booking_code).first()
+        if existing_guest:
+            db.delete(existing_guest)
+            db.commit()
+
+        guest_booking = Booking(
+            booking_code=guest_booking_code,
+            user_id=None,
+            trip_id=trip.id,
+            seat_number="A08",
+            booking_status=app.database.models.booking.BookingStatus.CONFIRMED,
+            payment_status=app.database.models.booking.PaymentStatus.PAID
+        )
+        db.add(guest_booking)
+        db.commit()
+        db.refresh(guest_booking)
+
         # Verify initial database state matches setup
         print("-> Setup completed successfully.")
         print(f"-> Booking code: {booking_code}")
@@ -173,20 +192,32 @@ def run_tests():
         assert session.state == IVRState.RECORDING_CONSENT_PENDING
         assert "may be recorded" in res.get("prompt").lower()
 
-        # Test 2.2: Send DTMF 1 for consent
+        # Test 2.2: Send DTMF 1 for consent (transitions to OTP_PENDING since user is registered)
         print("Sending DTMF 1 (consent)...")
         res = session.advance_state("DTMF", "1")
         print("State transition response:", res)
-        assert session.state == IVRState.LANGUAGE_SELECTION_PENDING
+        assert session.state == IVRState.OTP_PENDING
         assert session.recording_consent is True
 
-        # Test 2.3: Send DTMF 1 for English (Auto-Verify matches user)
+        # Test 2.2b: Verify OTP (transitions to LANGUAGE_SELECTION_PENDING)
+        print("Sending DTMF 123456 (OTP)...")
+        res = session.advance_state("DTMF", "123456")
+        print("State transition response:", res)
+        assert session.state == IVRState.LANGUAGE_SELECTION_PENDING
+
+        # Test 2.3: Send DTMF 1 for English (transitions to VERIFICATION_PENDING)
         print("Sending DTMF 1 (English language)...")
         res = session.advance_state("DTMF", "1")
         print("State transition response:", res)
-        assert session.state == IVRState.ACTIVE_AGENT
+        assert session.state == IVRState.VERIFICATION_PENDING
         assert session.language == "en"
-        assert "Welcome back" in res.get("prompt")
+
+        # Test 2.4: Verify booking code (transitions to ACTIVE_AGENT)
+        print(f"Sending booking code {booking_code}...")
+        res = session.advance_state("DTMF", booking_code)
+        print("State transition response:", res)
+        assert session.state == IVRState.ACTIVE_AGENT
+        assert "verified" in res.get("prompt").lower()
         print("-> IVR Call state machine flow: PASSED")
 
         # ----------------------------------------------------
@@ -212,10 +243,10 @@ def run_tests():
         res = session_unverified.advance_state("DTMF", "1")
         print("State transition response:", res)
         assert session_unverified.state == IVRState.VERIFICATION_PENDING
-        assert "key in your 6 digit booking reference" in res.get("prompt").lower()
+        assert "please enter your booking reference" in res.get("prompt").lower()
 
         # 3.4: Verification Pending -> Active Agent
-        res = session_unverified.advance_state("DTMF", booking_code)
+        res = session_unverified.advance_state("DTMF", guest_booking_code)
         print("State transition response:", res)
         assert session_unverified.state == IVRState.ACTIVE_AGENT
         assert "verified" in res.get("prompt").lower()
@@ -225,12 +256,13 @@ def run_tests():
         conv_mgr = ConversationManager()
         entities = conv_mgr.get_session(session_unverified.session_id).entities
         print("Session entities stored:", entities)
-        assert entities.get("booking_code") == booking_code
+        assert entities.get("booking_code") == guest_booking_code
         print("-> Unverified Caller Verification: PASSED")
 
         # Cleanup test records
         print("\nCleaning up database records...")
         db.delete(booking)
+        db.delete(guest_booking)
         # Delete any trips on this route (including the rescheduled one)
         db.query(Trip).filter(Trip.route_id == route.id).delete()
         db.commit()
