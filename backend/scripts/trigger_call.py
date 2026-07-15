@@ -8,14 +8,14 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 load_dotenv(BASE_DIR / ".env")
 
 def trigger_call(to_phone: str):
-    account_sid = os.getenv("TWILIO_ACCOUNT_SID")
-    auth_token = os.getenv("TWILIO_AUTH_TOKEN")
-    from_phone = os.getenv("TWILIO_PHONE_NUMBER")
+    auth_id = os.getenv("PLIVO_AUTH_ID")
+    auth_token = os.getenv("PLIVO_AUTH_TOKEN")
+    from_phone = os.getenv("PLIVO_PHONE_NUMBER")
     public_url = os.getenv("PUBLIC_URL")
 
-    if not all([account_sid, auth_token, from_phone, public_url]):
-        print("[ERROR] Missing required Twilio settings in .env!")
-        print("Please verify TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER, and PUBLIC_URL are defined.")
+    if not all([auth_id, auth_token, from_phone, public_url]):
+        print("[ERROR] Missing required Plivo settings in .env!")
+        print("Please verify PLIVO_AUTH_ID, PLIVO_AUTH_TOKEN, PLIVO_PHONE_NUMBER, and PUBLIC_URL are defined.")
         sys.exit(1)
 
     print("==============================================")
@@ -23,18 +23,21 @@ def trigger_call(to_phone: str):
     print("==============================================")
     print(f"From: {from_phone}")
     print(f"To: {to_phone}")
-    print(f"TwiML Webhook URL: {public_url}/api/v1/telephony/twilio/incoming")
+    print(f"Plivo Webhook URL: {public_url}/api/v1/telephony/plivo/incoming")
 
     try:
-        from twilio.rest import Client
-        client = Client(account_sid, auth_token)
+        import plivo
+        client = plivo.RestClient(auth_id, auth_token)
         call = client.calls.create(
             to=to_phone,
             from_=from_phone,
-            url=f"{public_url}/api/v1/telephony/twilio/incoming"
+            answer_url=f"{public_url}/api/v1/telephony/plivo/incoming",
+            hangup_url=f"{public_url}/api/v1/telephony/plivo/hangup",
+            ring_url=f"{public_url}/api/v1/telephony/plivo/events"
         )
-        print("\n[SUCCESS] Outbound call p laced successfully!")
-        print(f"Call SID: {call.sid}")
+        call_uuid = getattr(call, "call_uuid", None) or (call.get("call_uuid") if hasattr(call, "get") else None)
+        print("\n[SUCCESS] Outbound call placed successfully!")
+        print(f"Call UUID: {call_uuid}")
         print("Please pick up your phone when it rings to test the IVR + Agent flow.")
         print("==============================================")
     except Exception as e:

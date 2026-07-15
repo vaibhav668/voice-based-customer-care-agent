@@ -29,6 +29,12 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     allowed_origins: str = "*"
 
+    telephony_provider: str = "plivo"
+    plivo_auth_id: str = ""
+    plivo_auth_token: str = ""
+    plivo_phone_number: str = ""
+    plivo_validate_signature: bool = False
+
     model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=False,

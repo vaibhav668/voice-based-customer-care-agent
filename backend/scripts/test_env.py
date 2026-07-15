@@ -10,6 +10,6 @@ dotenv_path = BASE_DIR / ".env"
 print("Looking for:", dotenv_path)
 print("Exists:", dotenv_path.exists())
 
-load_dotenv(dotenv_path)
+load_dotenv(dotenv_path) 
 
 print("API KEY:", os.getenv("GROQ_API_KEY"))

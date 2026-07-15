@@ -23,18 +23,18 @@ from app.database.models.customer_feedback import CustomerFeedback
 from app.voice.ivr import ivr_manager, IVRState
 
 
-async def test_twilio_integration():
+async def test_plivo_integration():
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     print("==================================================")
-    print("STARTING TWILIO TELEPHONY INTEGRATION WEBHOOK TESTS")
+    print("STARTING PLIVO TELEPHONY INTEGRATION WEBHOOK TESTS")
     print("==================================================")
 
     try:
         # Seed test customer
         phone_number = "9876543210"
-        email = "twilio_telephony_tester@example.com"
-        booking_code = "BK-TWILI"
+        email = "plivo_telephony_tester@example.com"
+        booking_code = "BK-PLIVO"
 
         user = db.query(User).filter_by(email=email).first()
         if user:
@@ -43,7 +43,7 @@ async def test_twilio_integration():
 
         user = User(
             id=uuid.uuid4(),
-            full_name="Twilio Telephony Tester",
+            full_name="Plivo Telephony Tester",
             email=email,
             phone=phone_number,
             password_hash="pass",
@@ -69,7 +69,7 @@ async def test_twilio_integration():
         db.commit()
         db.refresh(route)
 
-        existing_bus = db.query(Bus).filter_by(bus_number="BUSTWI").first()
+        existing_bus = db.query(Bus).filter_by(bus_number="BUSPLI").first()
         if existing_bus:
             existing_trips = db.query(Trip).filter_by(bus_id=existing_bus.id).all()
             for t in existing_trips:
@@ -78,7 +78,7 @@ async def test_twilio_integration():
             db.delete(existing_bus)
             db.commit()
 
-        bus = Bus(bus_number="BUSTWI", bus_name="Twilio Express", registration_number="TWILIF", capacity=36, bus_type=BusType.AC_SLEEPER)
+        bus = Bus(bus_number="BUSPLI", bus_name="Plivo Express", registration_number="PLIVAF", capacity=36, bus_type=BusType.AC_SLEEPER)
         db.add(bus)
         db.commit()
         db.refresh(bus)
@@ -116,7 +116,7 @@ async def test_twilio_integration():
         print("-> Test entities seeded.")
 
         # Simulate call variables
-        call_sid = f"CA-Test-{uuid.uuid4().hex[:6]}"
+        call_uuid = f"CA-Test-{uuid.uuid4().hex[:6]}"
         caller_phone = phone_number # Registered customer phone
 
         # Instantiate async httpx client
@@ -127,27 +127,27 @@ async def test_twilio_integration():
             # 1. Incoming Call Webhook (RECORDING_CONSENT_PENDING)
             # ----------------------------------------------------
             print("\n--- 1. Testing Incoming Call Webhook ---")
-            response = await client.post("/api/v1/telephony/twilio/incoming", data={"CallSid": call_sid, "From": caller_phone})
+            response = await client.post("/api/v1/telephony/plivo/incoming", data={"CallUUID": call_uuid, "From": caller_phone})
             assert response.status_code == 200
             assert "application/xml" in response.headers["content-type"]
-            assert "<Gather" in response.text
+            assert "<GetInput" in response.text
             assert "consent" in response.text
-            print("-> Incoming call TwiML response: PASSED")
+            print("-> Incoming call Plivo XML response: PASSED")
 
             # ----------------------------------------------------
             # 2. Consent Hook (OTP_PENDING for registered phone)
             # ----------------------------------------------------
             print("\n--- 2. Testing Consent Hook (Redirects to OTP) ---")
-            response = await client.post("/api/v1/telephony/twilio/consent", data={"CallSid": call_sid, "Digits": "1"})
+            response = await client.post("/api/v1/telephony/plivo/consent", data={"CallUUID": call_uuid, "Digits": "1"})
             assert response.status_code == 200
             assert "otp" in response.text
-            print("-> Consent TwiML redirects to OTP response: PASSED")
+            print("-> Consent XML redirects to OTP response: PASSED")
 
             # ----------------------------------------------------
             # 3. OTP Verification Hook (LANGUAGE_SELECTION_PENDING)
             # ----------------------------------------------------
             print("\n--- 3. Testing OTP Verification Hook ---")
-            response = await client.post("/api/v1/telephony/twilio/otp", data={"CallSid": call_sid, "Digits": "123456"})
+            response = await client.post("/api/v1/telephony/plivo/otp", data={"CallUUID": call_uuid, "Digits": "123456"})
             assert response.status_code == 200
             assert "language" in response.text
             print("-> OTP verification successful redirects to language selection: PASSED")
@@ -156,7 +156,7 @@ async def test_twilio_integration():
             # 4. Language Selection Hook (VERIFICATION_PENDING)
             # ----------------------------------------------------
             print("\n--- 4. Testing Language Selection Hook ---")
-            response = await client.post("/api/v1/telephony/twilio/language", data={"CallSid": call_sid, "Digits": "1"})
+            response = await client.post("/api/v1/telephony/plivo/language", data={"CallUUID": call_uuid, "Digits": "1"})
             assert response.status_code == 200
             assert "verify_code" in response.text
             print("-> Language selection redirects to booking verify code: PASSED")
@@ -165,15 +165,15 @@ async def test_twilio_integration():
             # 5. Verify Code (ACTIVE_AGENT)
             # ----------------------------------------------------
             print("\n--- 5. Testing Verify Code Hook (Booking Ownership) ---")
-            response = await client.post("/api/v1/telephony/twilio/verify_code", data={"CallSid": call_sid, "Digits": booking_code})
+            response = await client.post("/api/v1/telephony/plivo/verify_code", data={"CallUUID": call_uuid, "Digits": booking_code})
             assert response.status_code == 200
             assert "agent" in response.text
             
             # Verify call session state is now ACTIVE_AGENT
-            session = ivr_manager.calls[call_sid]
+            session = ivr_manager.calls[call_uuid]
             assert session.state == IVRState.ACTIVE_AGENT
             assert session.user_id == str(user.id)
-            print("-> Booking ownership verification TwiML response: PASSED")
+            print("-> Booking ownership verification XML response: PASSED")
 
             # ----------------------------------------------------
             # 6. Active Agent turn (Speech -> Play AI response + choice menu)
@@ -187,16 +187,16 @@ async def test_twilio_integration():
             db.commit()
 
             # Call agent turn with speech - should ask for continue/end query choice
-            response = await client.post("/api/v1/telephony/twilio/agent", data={"CallSid": call_sid, "SpeechResult": "Check my booking."})
+            response = await client.post("/api/v1/telephony/plivo/agent", data={"CallUUID": call_uuid, "Speech": "Check my booking."})
             assert response.status_code == 200
             assert "query_choice" in response.text
-            print("-> Active agent voice turn choice query redirect TwiML response: PASSED")
+            print("-> Active agent voice turn choice query redirect XML response: PASSED")
 
             # ----------------------------------------------------
             # 7. Query Choice selection (Digits=0 transitions to FEEDBACK_PENDING)
             # ----------------------------------------------------
             print("\n--- 7. Testing Query Choice Hook (digits=0) ---")
-            response = await client.post("/api/v1/telephony/twilio/query_choice", data={"CallSid": call_sid, "Digits": "0"})
+            response = await client.post("/api/v1/telephony/plivo/query_choice", data={"CallUUID": call_uuid, "Digits": "0"})
             assert response.status_code == 200
             assert "feedback" in response.text
             assert session.state == IVRState.FEEDBACK_PENDING
@@ -206,7 +206,7 @@ async def test_twilio_integration():
             # 8. CSAT Rating collection (0 maps to 10, or 10 maps to 10)
             # ----------------------------------------------------
             print("\n--- 8. Testing CSAT Feedback collection ---")
-            response = await client.post("/api/v1/telephony/twilio/feedback", data={"CallSid": call_sid, "Digits": "0"})
+            response = await client.post("/api/v1/telephony/plivo/feedback", data={"CallUUID": call_uuid, "Digits": "0"})
             assert response.status_code == 200
             assert "<Hangup" in response.text
             
@@ -217,16 +217,16 @@ async def test_twilio_integration():
             fb = db.query(CustomerFeedback).filter_by(conversation_id=conv.id).first()
             assert fb is not None
             assert fb.rating == 10
-            print("-> Customer rating persisted as 10 TwiML response: PASSED")
+            print("-> Customer rating persisted as 10 XML response: PASSED")
 
             # ----------------------------------------------------
             # 9. Call Recording Status Callback mapping
             # ----------------------------------------------------
             print("\n--- 9. Testing Recording Completed Callback ---")
-            recording_url = "https://api.twilio.com/2010-04-01/Accounts/AC/Recordings/RE12345"
+            recording_url = "https://api.plivo.com/v1/Account/MA/Recordings/RE12345"
             response = await client.post(
-                "/api/v1/telephony/twilio/recording-callback",
-                data={"CallSid": call_sid, "RecordingUrl": recording_url, "RecordingStatus": "completed"}
+                "/api/v1/telephony/plivo/recording-callback",
+                data={"CallUUID": call_uuid, "RecordingUrl": recording_url}
             )
             assert response.status_code == 200
             
@@ -242,12 +242,12 @@ async def test_twilio_integration():
             session.state = IVRState.ACTIVE_AGENT
             session._save_to_db()
             
-            response = await client.post("/api/v1/telephony/twilio/status", data={"CallSid": call_sid, "CallStatus": "completed"})
+            response = await client.post("/api/v1/telephony/plivo/hangup", data={"CallUUID": call_uuid, "HangupCause": "Normal Hangup"})
             assert response.status_code == 200
             
             # Refresh and check completed
             assert session.state == IVRState.COMPLETED
-            print("-> Status callback completed disconnect flow: PASSED")
+            print("-> Hangup callback completed disconnect flow: PASSED")
 
         # Database Cleanup
         print("\nCleaning up database records...")
@@ -257,14 +257,14 @@ async def test_twilio_integration():
         db.delete(bus)
         db.delete(route)
         db.delete(user)
-        db.query(IvrSession).filter(IvrSession.call_id == call_sid).delete()
+        db.query(IvrSession).filter(IvrSession.call_id == call_uuid).delete()
         db.query(ConversationMessage).filter(ConversationMessage.conversation_id == conv.id).delete()
         db.query(CustomerFeedback).filter(CustomerFeedback.conversation_id == conv.id).delete()
         db.delete(conv)
         db.commit()
         print("Cleanup completed.")
 
-        print("\nALL TWILIO TELEPHONY INTEGRATION TESTS PASSED SUCCESSFULLY! [SUCCESS]")
+        print("\nALL PLIVO TELEPHONY INTEGRATION TESTS PASSED SUCCESSFULLY! [SUCCESS]")
         db.close()
         return True
 
@@ -277,6 +277,6 @@ async def test_twilio_integration():
 
 
 if __name__ == "__main__":
-    success = asyncio.run(test_twilio_integration())
+    success = asyncio.run(test_plivo_integration())
     if not success:
         sys.exit(1)

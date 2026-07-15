@@ -264,21 +264,22 @@ class IVRCallSession:
                 if data == "1":
                     self.recording_consent = True
                     self._log_system_event("Recording consent accepted.")
-                    # Trigger Twilio Call Recording dynamically
+                    # Trigger Plivo Call Recording dynamically
                     try:
-                        from twilio.rest import Client
+                        import plivo
                         import os
-                        account_sid = os.getenv("TWILIO_ACCOUNT_SID")
-                        auth_token = os.getenv("TWILIO_AUTH_TOKEN")
+                        auth_id = os.getenv("PLIVO_AUTH_ID")
+                        auth_token = os.getenv("PLIVO_AUTH_TOKEN")
                         public_url = os.getenv("PUBLIC_URL")
-                        if account_sid and auth_token and public_url:
-                            client = Client(account_sid, auth_token)
-                            recording = client.calls(self.call_id).recordings.create(
-                                recording_status_callback=f"{public_url}/api/v1/telephony/twilio/recording-callback",
-                                recording_status_callback_event=["completed"],
-                                recording_status_callback_method="POST",
+                        if auth_id and auth_token and public_url:
+                            client = plivo.RestClient(auth_id, auth_token)
+                            recording = client.calls.record_create(
+                                call_uuid=self.call_id,
+                                file_format='mp3',
+                                recording_callback_url=f"{public_url}/api/v1/telephony/plivo/recording-callback",
                             )
-                            self._log_system_event(f"Call recording started by system. Recording SID: {recording.sid}")
+                            recording_id = getattr(recording, "recording_id", None) or (recording.get("recording_id") if hasattr(recording, "get") else None)
+                            self._log_system_event(f"Call recording started by system. Recording ID: {recording_id}")
                     except Exception as e:
                         self._log_system_event(f"Notice: Failed to start call recording: {str(e)}")
                 else:
@@ -588,7 +589,7 @@ class IVRCallSession:
         return res
 
     async def process_text_agent_turn(self, text: str) -> dict:
-        """Processes voice turn when transcription is already available (e.g. from Twilio SpeechResult)."""
+        """Processes voice turn when transcription is already available (e.g. from Plivo Speech)."""
         if self.state != IVRState.ACTIVE_AGENT:
             return {"error": "Voice inputs are only allowed during the active agent state."}
 

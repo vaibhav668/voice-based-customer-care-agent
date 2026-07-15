@@ -1,37 +1,46 @@
 import os
 from fastapi import APIRouter, Depends, Form, Request, Header, Response, HTTPException
 from sqlalchemy.orm import Session
+from plivo import plivoxml
+
 from app.database.session import get_db
 from app.voice.ivr import ivr_manager, IVRState
-from app.voice.telephony_provider import TwilioAdapter
+from app.voice.telephony_provider import PlivoAdapter
 
 router = APIRouter(
-    prefix="/api/v1/telephony/twilio",
+    prefix="/api/v1/telephony/plivo",
     tags=["Telephony Call Webhooks"],
 )
 
-adapter = TwilioAdapter()
+adapter = PlivoAdapter()
 
 
 def get_public_audio_url(audio_path: str) -> str:
     public_url = os.getenv("PUBLIC_URL", "http://localhost:8000")
     if audio_path.startswith("/"):
         audio_path = audio_path[1:]
-    # Remove leading folder reference if PUBLIC_URL hosts static files directly
-    # e.g., if generated_audio is mapped as /generated_audio
     return f"{public_url}/{audio_path}"
 
 
-async def validate_signature_dependency(request: Request, x_twilio_signature: str = Header(None)):
-    """Signature validation middleware to verify Twilio request authenticity."""
-    if os.getenv("TWILIO_VALIDATE_SIGNATURE", "false").lower() != "true":
+async def validate_plivo_signature_dependency(
+    request: Request,
+    x_plivo_signature_v3: str = Header(None, alias="X-Plivo-Signature-V3"),
+    x_plivo_signature_v3_nonce: str = Header(None, alias="X-Plivo-Signature-V3-Nonce")
+):
+    """Signature validation middleware to verify Plivo request authenticity."""
+    if os.getenv("PLIVO_VALIDATE_SIGNATURE", "false").lower() != "true":
         return True
     
     url = str(request.url)
+    method = request.method
     form_data = await request.form()
     params = {k: v for k, v in form_data.items()}
-    if not adapter.validate_signature(url, params, x_twilio_signature):
-        raise HTTPException(status_code=400, detail="Invalid Twilio signature.")
+    
+    if not x_plivo_signature_v3 or not x_plivo_signature_v3_nonce:
+        raise HTTPException(status_code=400, detail="Missing Plivo signature headers.")
+        
+    if not adapter.validate_signature(method, url, x_plivo_signature_v3_nonce, x_plivo_signature_v3, params):
+        raise HTTPException(status_code=400, detail="Invalid Plivo signature.")
 
 
 @router.post("/test-outbound")
@@ -40,67 +49,68 @@ async def trigger_test_outbound(
     db: Session = Depends(get_db),
 ):
     """Triggers an outbound test call to the user's phone, linking it to the IVR loop."""
-    account_sid = os.getenv("TWILIO_ACCOUNT_SID")
-    auth_token = os.getenv("TWILIO_AUTH_TOKEN")
-    from_phone = os.getenv("TWILIO_PHONE_NUMBER")
+    auth_id = os.getenv("PLIVO_AUTH_ID")
+    auth_token = os.getenv("PLIVO_AUTH_TOKEN")
+    from_phone = os.getenv("PLIVO_PHONE_NUMBER")
     public_url = os.getenv("PUBLIC_URL")
 
-    if not all([account_sid, auth_token, from_phone, public_url]):
+    if not all([auth_id, auth_token, from_phone, public_url]):
         raise HTTPException(
             status_code=400,
-            detail="Missing required Twilio configuration settings: SID, Token, phone, or PUBLIC_URL."
+            detail="Missing required Plivo configuration settings: ID, Token, phone, or PUBLIC_URL."
         )
 
     try:
-        from twilio.rest import Client
-        client = Client(account_sid, auth_token)
+        import plivo
+        client = plivo.RestClient(auth_id, auth_token)
         call = client.calls.create(
             to=to_phone,
             from_=from_phone,
-            url=f"{public_url}/api/v1/telephony/twilio/incoming"
+            answer_url=f"{public_url}/api/v1/telephony/plivo/incoming",
+            hangup_url=f"{public_url}/api/v1/telephony/plivo/hangup",
+            ring_url=f"{public_url}/api/v1/telephony/plivo/events"
         )
+        call_uuid = getattr(call, "call_uuid", None) or (call.get("call_uuid") if hasattr(call, "get") else None)
         return {
             "status": "success",
             "message": f"Outbound call triggered successfully to {to_phone}.",
-            "call_sid": call.sid
+            "call_uuid": call_uuid
         }
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to initiate outbound Twilio call: {str(e)}"
+            detail=f"Failed to initiate outbound Plivo call: {str(e)}"
         )
 
 
 @router.post("/incoming")
 async def handle_incoming(
     request: Request,
-    CallSid: str = Form(...),
+    CallUUID: str = Form(...),
     From: str = Form(None),
     To: str = Form(None),
     Direction: str = Form(None),
     db: Session = Depends(get_db),
-    _ = Depends(validate_signature_dependency),
+    _ = Depends(validate_plivo_signature_dependency),
 ):
     """Answers inbound/outbound telephone calls, sets up caller verification and consent templates."""
-    twilio_number = os.getenv("TWILIO_PHONE_NUMBER", "").replace("+", "").replace(" ", "")
+    plivo_number = os.getenv("PLIVO_PHONE_NUMBER", "").replace("+", "").replace(" ", "")
     
-    # For outbound calls: From = Twilio number, To = customer number
-    # For inbound calls:  From = customer number, To = Twilio number
     from_digits = (From or "").replace("+", "").replace(" ", "")
-    if twilio_number and from_digits.endswith(twilio_number):
+    if plivo_number and from_digits.endswith(plivo_number):
         # This is an outbound call — customer is in 'To'
         caller_phone = To or From
     else:
         caller_phone = From
     
-    session = ivr_manager.get_or_create_call(CallSid, caller_phone, db)
+    session = ivr_manager.get_or_create_call(CallUUID, caller_phone, db)
     res = session.advance_state("INIT")
     
     xml = adapter.generate_menu_response(
         prompt=res["prompt"],
         expect_input="DTMF",
         num_digits=1,
-        action_url="/api/v1/telephony/twilio/consent",
+        action_url="/api/v1/telephony/plivo/consent",
     )
     return Response(content=xml, media_type="application/xml")
 
@@ -108,12 +118,12 @@ async def handle_incoming(
 @router.post("/consent")
 async def handle_consent(
     Digits: str = Form(None),
-    CallSid: str = Form(...),
+    CallUUID: str = Form(...),
     db: Session = Depends(get_db),
-    _ = Depends(validate_signature_dependency),
+    _ = Depends(validate_plivo_signature_dependency),
 ):
     """Processes customer recording consent digit presses."""
-    session = ivr_manager.get_or_create_call(CallSid, "", db)
+    session = ivr_manager.get_or_create_call(CallUUID, "", db)
     res = session.advance_state("DTMF", Digits or "2")
     
     if session.state == IVRState.OTP_PENDING:
@@ -121,14 +131,14 @@ async def handle_consent(
             prompt=res["prompt"],
             expect_input="DTMF",
             num_digits=6,
-            action_url="/api/v1/telephony/twilio/otp",
+            action_url="/api/v1/telephony/plivo/otp",
         )
     else:
         xml = adapter.generate_menu_response(
             prompt=res["prompt"],
             expect_input="DTMF",
             num_digits=1,
-            action_url="/api/v1/telephony/twilio/language",
+            action_url="/api/v1/telephony/plivo/language",
         )
     return Response(content=xml, media_type="application/xml")
 
@@ -136,12 +146,12 @@ async def handle_consent(
 @router.post("/otp")
 async def handle_otp(
     Digits: str = Form(None),
-    CallSid: str = Form(...),
+    CallUUID: str = Form(...),
     db: Session = Depends(get_db),
-    _ = Depends(validate_signature_dependency),
+    _ = Depends(validate_plivo_signature_dependency),
 ):
     """Processes customer OTP inputs."""
-    session = ivr_manager.get_or_create_call(CallSid, "", db)
+    session = ivr_manager.get_or_create_call(CallUUID, "", db)
     res = session.advance_state("DTMF", Digits)
     
     if session.state == IVRState.LANGUAGE_SELECTION_PENDING:
@@ -149,14 +159,14 @@ async def handle_otp(
             prompt=res["prompt"],
             expect_input="DTMF",
             num_digits=1,
-            action_url="/api/v1/telephony/twilio/language",
+            action_url="/api/v1/telephony/plivo/language",
         )
     else:
         xml = adapter.generate_menu_response(
             prompt=res["prompt"],
             expect_input="DTMF",
             num_digits=6,
-            action_url="/api/v1/telephony/twilio/otp",
+            action_url="/api/v1/telephony/plivo/otp",
         )
     return Response(content=xml, media_type="application/xml")
 
@@ -164,19 +174,19 @@ async def handle_otp(
 @router.post("/language")
 async def handle_language(
     Digits: str = Form(None),
-    CallSid: str = Form(...),
+    CallUUID: str = Form(...),
     db: Session = Depends(get_db),
-    _ = Depends(validate_signature_dependency),
+    _ = Depends(validate_plivo_signature_dependency),
 ):
     """Processes preferred language selections."""
-    session = ivr_manager.get_or_create_call(CallSid, "", db)
+    session = ivr_manager.get_or_create_call(CallUUID, "", db)
     res = session.advance_state("DTMF", Digits or "1")
     
     xml = adapter.generate_menu_response(
         prompt=res["prompt"],
         expect_input="DTMF",
         num_digits=6,
-        action_url="/api/v1/telephony/twilio/verify_code",
+        action_url="/api/v1/telephony/plivo/verify_code",
     )
     return Response(content=xml, media_type="application/xml")
 
@@ -184,12 +194,12 @@ async def handle_language(
 @router.post("/verify_code")
 async def handle_verify_code(
     Digits: str = Form(None),
-    CallSid: str = Form(...),
+    CallUUID: str = Form(...),
     db: Session = Depends(get_db),
-    _ = Depends(validate_signature_dependency),
+    _ = Depends(validate_plivo_signature_dependency),
 ):
     """Collects and validates booking reference code keypad inputs."""
-    session = ivr_manager.get_or_create_call(CallSid, "", db)
+    session = ivr_manager.get_or_create_call(CallUUID, "", db)
     res = session.advance_state("DTMF", Digits)
     
     if session.state == IVRState.ACTIVE_AGENT:
@@ -201,14 +211,14 @@ async def handle_verify_code(
         xml = adapter.generate_voice_agent_response(
             audio_url=audio_url,
             text_prompt=res["prompt"],
-            action_url="/api/v1/telephony/twilio/agent",
+            action_url="/api/v1/telephony/plivo/agent",
         )
     else:
         xml = adapter.generate_menu_response(
             prompt=res["prompt"],
             expect_input="DTMF",
             num_digits=6,
-            action_url="/api/v1/telephony/twilio/verify_code",
+            action_url="/api/v1/telephony/plivo/verify_code",
         )
     return Response(content=xml, media_type="application/xml")
 
@@ -216,12 +226,12 @@ async def handle_verify_code(
 @router.post("/verify_phone")
 async def handle_verify_phone(
     Digits: str = Form(None),
-    CallSid: str = Form(...),
+    CallUUID: str = Form(...),
     db: Session = Depends(get_db),
-    _ = Depends(validate_signature_dependency),
+    _ = Depends(validate_plivo_signature_dependency),
 ):
     """Redirect fallback for verify_phone."""
-    session = ivr_manager.get_or_create_call(CallSid, "", db)
+    session = ivr_manager.get_or_create_call(CallUUID, "", db)
     res = session.advance_state("DTMF", Digits)
     
     if session.state == IVRState.ACTIVE_AGENT:
@@ -233,66 +243,76 @@ async def handle_verify_phone(
         xml = adapter.generate_voice_agent_response(
             audio_url=audio_url,
             text_prompt=res["prompt"],
-            action_url="/api/v1/telephony/twilio/agent",
+            action_url="/api/v1/telephony/plivo/agent",
         )
     else:
         xml = adapter.generate_menu_response(
             prompt=res["prompt"],
             expect_input="DTMF",
             num_digits=6,
-            action_url="/api/v1/telephony/twilio/verify_code",
+            action_url="/api/v1/telephony/plivo/verify_code",
         )
     return Response(content=xml, media_type="application/xml")
 
 
 @router.post("/agent")
 async def handle_agent_turn(
-    CallSid: str = Form(...),
-    SpeechResult: str = Form(None),
+    CallUUID: str = Form(...),
+    Speech: str = Form(None),
     db: Session = Depends(get_db),
-    _ = Depends(validate_signature_dependency),
+    _ = Depends(validate_plivo_signature_dependency),
 ):
     """Receives spoken inputs, feeds them to ChatService, and plays AI response + DTMF choice menu."""
-    session = ivr_manager.get_or_create_call(CallSid, "", db)
+    session = ivr_manager.get_or_create_call(CallUUID, "", db)
     from app.voice.ivr import PROMPTS
     
-    if not SpeechResult or not SpeechResult.strip():
+    if not Speech or not Speech.strip():
         choose_prompt = PROMPTS.get(session.language, PROMPTS["en"])["choose_query"]
-        xml = f'<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n'
-        xml += f'    <Gather action="/api/v1/telephony/twilio/query_choice" method="POST" input="dtmf" numDigits="1" timeout="4">\n'
-        xml += f'        <Say>{choose_prompt}</Say>\n'
-        xml += f'    </Gather>\n'
-        xml += f'    <Redirect method="POST">/api/v1/telephony/twilio/query_choice?timeout=1</Redirect>\n'
-        xml += f'</Response>'
-        return Response(content=xml, media_type="application/xml")
+        response = plivoxml.ResponseElement()
+        get_input = plivoxml.GetInputElement(
+            action="/api/v1/telephony/plivo/query_choice",
+            method="POST",
+            input_type="dtmf",
+            num_digits=1,
+            execution_timeout=4
+        )
+        get_input.add(plivoxml.SpeakElement(choose_prompt))
+        response.add(get_input)
+        response.add(plivoxml.RedirectElement("/api/v1/telephony/plivo/query_choice?timeout=1", method="POST"))
+        return Response(content=response.to_string(), media_type="application/xml")
 
-    res = await session.process_text_agent_turn(SpeechResult)
+    res = await session.process_text_agent_turn(Speech)
     audio_url = get_public_audio_url(res["audio_path"]) if res.get("audio_path") else ""
     choose_prompt = PROMPTS.get(session.language, PROMPTS["en"])["choose_query"]
     
-    xml = f'<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n'
-    xml += f'    <Gather action="/api/v1/telephony/twilio/query_choice" method="POST" input="dtmf" numDigits="1" timeout="4">\n'
+    response = plivoxml.ResponseElement()
+    get_input = plivoxml.GetInputElement(
+        action="/api/v1/telephony/plivo/query_choice",
+        method="POST",
+        input_type="dtmf",
+        num_digits=1,
+        execution_timeout=4
+    )
     if audio_url:
-        xml += f'        <Play>{audio_url}</Play>\n'
+        get_input.add(plivoxml.PlayElement(audio_url))
     else:
-        xml += f'        <Say>{res["text"]}</Say>\n'
-    xml += f'        <Say>{choose_prompt}</Say>\n'
-    xml += f'    </Gather>\n'
-    xml += f'    <Redirect method="POST">/api/v1/telephony/twilio/query_choice?timeout=1</Redirect>\n'
-    xml += f'</Response>'
-    return Response(content=xml, media_type="application/xml")
+        get_input.add(plivoxml.SpeakElement(res["text"]))
+    get_input.add(plivoxml.SpeakElement(choose_prompt))
+    response.add(get_input)
+    response.add(plivoxml.RedirectElement("/api/v1/telephony/plivo/query_choice?timeout=1", method="POST"))
+    return Response(content=response.to_string(), media_type="application/xml")
 
 
 @router.post("/query_choice")
 async def handle_query_choice(
     request: Request,
     Digits: str = Form(None),
-    CallSid: str = Form(...),
+    CallUUID: str = Form(...),
     db: Session = Depends(get_db),
-    _ = Depends(validate_signature_dependency),
+    _ = Depends(validate_plivo_signature_dependency),
 ):
     """Processes caller continue or end conversation choice."""
-    session = ivr_manager.get_or_create_call(CallSid, "", db)
+    session = ivr_manager.get_or_create_call(CallUUID, "", db)
     from app.voice.ivr import PROMPTS
     
     if Digits == "1":
@@ -300,7 +320,7 @@ async def handle_query_choice(
         xml = adapter.generate_voice_agent_response(
             audio_url="",
             text_prompt=speak_prompt,
-            action_url="/api/v1/telephony/twilio/agent",
+            action_url="/api/v1/telephony/plivo/agent",
         )
     elif Digits == "0":
         session.state = IVRState.FEEDBACK_PENDING
@@ -318,18 +338,24 @@ async def handle_query_choice(
             prompt=feedback_prompt,
             expect_input="DTMF",
             num_digits=2,
-            action_url="/api/v1/telephony/twilio/feedback",
+            action_url="/api/v1/telephony/plivo/feedback",
         )
     else:
         is_timeout_retry = request.query_params.get("timeout") == "1"
         if not is_timeout_retry:
             reminder_prompt = PROMPTS.get(session.language, PROMPTS["en"])["timeout_reminder"]
-            xml = f'<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n'
-            xml += f'    <Gather action="/api/v1/telephony/twilio/query_choice" method="POST" input="dtmf" numDigits="1" timeout="4">\n'
-            xml += f'        <Say>{reminder_prompt}</Say>\n'
-            xml += f'    </Gather>\n'
-            xml += f'    <Redirect method="POST">/api/v1/telephony/twilio/query_choice?timeout=1</Redirect>\n'
-            xml += f'</Response>'
+            response = plivoxml.ResponseElement()
+            get_input = plivoxml.GetInputElement(
+                action="/api/v1/telephony/plivo/query_choice",
+                method="POST",
+                input_type="dtmf",
+                num_digits=1,
+                execution_timeout=4
+            )
+            get_input.add(plivoxml.SpeakElement(reminder_prompt))
+            response.add(get_input)
+            response.add(plivoxml.RedirectElement("/api/v1/telephony/plivo/query_choice?timeout=1", method="POST"))
+            xml = response.to_string()
         else:
             session.state = IVRState.FEEDBACK_PENDING
             session._save_to_db()
@@ -339,7 +365,7 @@ async def handle_query_choice(
                 prompt=feedback_prompt,
                 expect_input="DTMF",
                 num_digits=2,
-                action_url="/api/v1/telephony/twilio/feedback",
+                action_url="/api/v1/telephony/plivo/feedback",
             )
     return Response(content=xml, media_type="application/xml")
 
@@ -347,59 +373,69 @@ async def handle_query_choice(
 @router.post("/feedback")
 async def handle_feedback(
     Digits: str = Form(None),
-    CallSid: str = Form(...),
+    CallUUID: str = Form(...),
     db: Session = Depends(get_db),
-    _ = Depends(validate_signature_dependency),
+    _ = Depends(validate_plivo_signature_dependency),
 ):
     """Records customer rating keypad entry, broadcasts outcomes to admin sockets, and hangs up."""
-    session = ivr_manager.get_or_create_call(CallSid, "", db)
+    session = ivr_manager.get_or_create_call(CallUUID, "", db)
     res = session.advance_state("DTMF", Digits)
     
     xml = adapter.generate_completion_response(res["prompt"])
     return Response(content=xml, media_type="application/xml")
 
 
-@router.post("/status")
-async def handle_status_callback(
-    CallSid: str = Form(...),
-    CallStatus: str = Form(...),
+@router.post("/hangup")
+async def handle_hangup(
+    CallUUID: str = Form(...),
+    HangupCause: str = Form(None),
     db: Session = Depends(get_db),
-    _ = Depends(validate_signature_dependency),
+    _ = Depends(validate_plivo_signature_dependency),
 ):
-    """Receives Twilio status notifications to safely shut down hung up call threads."""
-    if CallStatus in ("completed", "failed", "busy", "no-answer"):
-        session = ivr_manager.get_or_create_call(CallSid, "", db)
-        if session.state != IVRState.COMPLETED:
-            session.complete_call()
+    """Receives Plivo hangup status notification to safely shut down hung up call threads."""
+    session = ivr_manager.get_or_create_call(CallUUID, "", db)
+    if session.state != IVRState.COMPLETED:
+        session.complete_call()
+    return {"status": "ok"}
+
+
+@router.post("/events")
+async def handle_events(
+    CallUUID: str = Form(...),
+    CallStatus: str = Form(None),
+    Event: str = Form(None),
+    db: Session = Depends(get_db),
+    _ = Depends(validate_plivo_signature_dependency),
+):
+    """Receives Plivo general call progression events."""
+    import logging
+    logging.getLogger(__name__).info(f"Received Plivo Event: {Event}, Status: {CallStatus} for CallUUID: {CallUUID}")
     return {"status": "ok"}
 
 
 @router.post("/recording-callback")
 async def handle_recording_callback(
     RecordingUrl: str = Form(None),
-    CallSid: str = Form(...),
-    RecordingStatus: str = Form(None),
+    CallUUID: str = Form(...),
     db: Session = Depends(get_db),
 ):
-    """Processes Twilio recording callback and links the completed recording URL to the conversation record."""
+    """Processes Plivo recording callback and links the completed recording URL to the conversation record."""
     from app.database.models.ivr_session import IvrSession
     from app.database.models.conversation import Conversation
     from app.voice.ivr import broadcast_call_event
 
-    ivr_sess = db.query(IvrSession).filter_by(call_id=CallSid).first()
+    ivr_sess = db.query(IvrSession).filter_by(call_id=CallUUID).first()
     if not ivr_sess:
-        return {"status": "ignored", "reason": "No IVR session found for CallSid"}
+        return {"status": "ignored", "reason": "No IVR session found for CallUUID"}
         
-    if RecordingStatus == "completed" and RecordingUrl:
+    if RecordingUrl:
         conv = db.query(Conversation).filter_by(session_id=ivr_sess.session_id).first()
         if conv:
-            # Append .mp3 so the URL is directly playable in browsers without Twilio auth
-            playable_url = RecordingUrl if RecordingUrl.endswith(".mp3") or RecordingUrl.endswith(".wav") else RecordingUrl + ".mp3"
-            conv.recording_url = playable_url
+            conv.recording_url = RecordingUrl
             db.commit()
             broadcast_call_event("call_updated", ivr_sess.session_id, "Call recording is now available.", {
-                "recording_url": playable_url
+                "recording_url": RecordingUrl
             })
             return {"status": "success", "message": "Recording URL mapped to conversation."}
             
-    return {"status": "ignored", "RecordingStatus": RecordingStatus}
+    return {"status": "ignored"}

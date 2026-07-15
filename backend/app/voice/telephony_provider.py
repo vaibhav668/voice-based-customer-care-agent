@@ -1,7 +1,7 @@
 import os
 from abc import ABC, abstractmethod
 from typing import Dict, Optional, Any
-from twilio.request_validator import RequestValidator
+from plivo import plivoxml
 
 
 class TelephonyProvider(ABC):
@@ -20,56 +20,64 @@ class TelephonyProvider(ABC):
         pass
 
 
-class TwilioAdapter(TelephonyProvider):
-    """Concrete adapter mapping unified IVR instructions to XML TwiML responses."""
+class PlivoAdapter(TelephonyProvider):
+    """Concrete adapter mapping unified IVR instructions to XML Plivo responses."""
 
     def __init__(self):
-        self.auth_token = os.getenv("TWILIO_AUTH_TOKEN", "")
-        self.validator = RequestValidator(self.auth_token) if self.auth_token else None
+        self.auth_token = os.getenv("PLIVO_AUTH_TOKEN", "")
 
-    def validate_signature(self, url: str, params: Dict[str, Any], signature: str) -> bool:
-        """Validates that incoming webhook calls originated from Twilio servers."""
+    def validate_signature(self, method: str, url: str, nonce: str, signature: str, params: Dict[str, Any]) -> bool:
+        """Validates that incoming webhook calls originated from Plivo servers."""
         # Allow disabling signature validation in local/mock environments
-        if os.getenv("TWILIO_VALIDATE_SIGNATURE", "false").lower() != "true":
+        if os.getenv("PLIVO_VALIDATE_SIGNATURE", "false").lower() != "true":
             return True
-        if not self.validator or not signature:
+        if not signature or not nonce:
             return False
-        return self.validator.validate(url, params, signature)
+        try:
+            from plivo.utils import validate_v3_signature
+            return validate_v3_signature(method, url, nonce, self.auth_token, signature, params)
+        except Exception:
+            return False
 
     def generate_menu_response(self, prompt: str, expect_input: str, num_digits: Optional[int] = None, action_url: str = "") -> str:
-        """Generates TwiML requesting DTMF keypad inputs."""
-        gather_attrs = f'action="{action_url}" method="POST"'
-        if num_digits:
-            gather_attrs += f' numDigits="{num_digits}"'
-        
-        twiml = f'<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n'
-        twiml += f'    <Gather {gather_attrs} input="dtmf" timeout="8">\n'
-        twiml += f'        <Say>{prompt}</Say>\n'
-        twiml += f'    </Gather>\n'
-        # Redirect back to incoming if they timed out
-        twiml += f'    <Redirect method="POST">{action_url}</Redirect>\n'
-        twiml += f'</Response>'
-        return twiml
+        """Generates Plivo XML requesting DTMF keypad inputs."""
+        response = plivoxml.ResponseElement()
+        get_input = plivoxml.GetInputElement(
+            action=action_url,
+            method="POST",
+            input_type="dtmf",
+            num_digits=num_digits or 99,
+            execution_timeout=8
+        )
+        get_input.add(plivoxml.SpeakElement(prompt))
+        response.add(get_input)
+        # Redirect back to incoming action URL if they timed out
+        response.add(plivoxml.RedirectElement(action_url, method="POST"))
+        return response.to_string()
 
     def generate_voice_agent_response(self, audio_url: str, text_prompt: str, action_url: str) -> str:
-        """Generates TwiML playing TTS audio and waiting for spoken caller response."""
-        twiml = f'<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n'
+        """Generates Plivo XML playing TTS audio and waiting for spoken caller response."""
+        response = plivoxml.ResponseElement()
+        get_input = plivoxml.GetInputElement(
+            action=action_url,
+            method="POST",
+            input_type="speech",
+            speech_model="phone_call",
+            execution_timeout=5,
+            speech_end_timeout=3
+        )
         if audio_url:
-            twiml += f'    <Play>{audio_url}</Play>\n'
+            get_input.add(plivoxml.PlayElement(audio_url))
         else:
-            twiml += f'    <Say>{text_prompt}</Say>\n'
-        
-        # Gather caller spoken response
-        twiml += f'    <Gather action="{action_url}" method="POST" input="speech" timeout="5" speechTimeout="auto" />\n'
+            get_input.add(plivoxml.SpeakElement(text_prompt))
+        response.add(get_input)
         # Redirect back to agent hook if caller is silent
-        twiml += f'    <Redirect method="POST">{action_url}</Redirect>\n'
-        twiml += f'</Response>'
-        return twiml
+        response.add(plivoxml.RedirectElement(action_url, method="POST"))
+        return response.to_string()
 
     def generate_completion_response(self, prompt: str) -> str:
-        """Generates TwiML saying goodbye and hanging up."""
-        twiml = f'<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n'
-        twiml += f'    <Say>{prompt}</Say>\n'
-        twiml += f'    <Hangup />\n'
-        twiml += f'</Response>'
-        return twiml
+        """Generates Plivo XML saying goodbye and hanging up."""
+        response = plivoxml.ResponseElement()
+        response.add(plivoxml.SpeakElement(prompt))
+        response.add(plivoxml.HangupElement())
+        return response.to_string()

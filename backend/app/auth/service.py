@@ -25,13 +25,13 @@ def generate_otp(phone: str) -> str:
 
 
 def send_otp_sms(to_phone: str, otp: str) -> bool:
-    """Sends the OTP to the customer via Twilio SMS. Returns True on success."""
+    """Sends the OTP to the customer via Plivo SMS. Returns True on success."""
     import os
     try:
-        account_sid = os.getenv("TWILIO_ACCOUNT_SID")
-        auth_token = os.getenv("TWILIO_AUTH_TOKEN")
-        from_phone = os.getenv("TWILIO_PHONE_NUMBER")
-        if not all([account_sid, auth_token, from_phone]):
+        auth_id = os.getenv("PLIVO_AUTH_ID")
+        auth_token = os.getenv("PLIVO_AUTH_TOKEN")
+        from_phone = os.getenv("PLIVO_PHONE_NUMBER")
+        if not all([auth_id, auth_token, from_phone]):
             return False
         
         # Normalise to E.164 — prepend +91 if 10 digits
@@ -43,12 +43,12 @@ def send_otp_sms(to_phone: str, otp: str) -> bool:
         else:
             e164 = f"+{digits}"
         
-        from twilio.rest import Client
-        client = Client(account_sid, auth_token)
+        import plivo
+        client = plivo.RestClient(auth_id, auth_token)
         client.messages.create(
-            body=f"Your Support AI verification OTP is: {otp}. Valid for this call only. Do not share it with anyone.",
-            from_=from_phone,
-            to=e164,
+            src=from_phone,
+            dst=e164,
+            text=f"Your Support AI verification OTP is: {otp}. Valid for this call only. Do not share it with anyone."
         )
         return True
     except Exception as e:
