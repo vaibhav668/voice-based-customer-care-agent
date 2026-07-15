@@ -68,8 +68,6 @@ class PlivoAdapter(TelephonyProvider):
         )
         get_input.add(plivoxml.SpeakElement(prompt))
         response.add(get_input)
-        # Redirect back to incoming action URL if they timed out
-        response.add(plivoxml.RedirectElement(abs_action_url, method="POST"))
         return response.to_string()
 
     def generate_voice_agent_response(self, audio_url: str, text_prompt: str, action_url: str) -> str:
@@ -81,16 +79,14 @@ class PlivoAdapter(TelephonyProvider):
             method="POST",
             input_type="speech",
             speech_model="default",
-            execution_timeout=5,
-            speech_end_timeout=3
+            execution_timeout=7,
+            speech_end_timeout=2
         )
         if audio_url:
             get_input.add(plivoxml.PlayElement(audio_url))
         else:
             get_input.add(plivoxml.SpeakElement(text_prompt))
         response.add(get_input)
-        # Redirect back to agent hook if caller is silent
-        response.add(plivoxml.RedirectElement(abs_action_url, method="POST"))
         return response.to_string()
 
     def generate_query_choice_response(self, audio_url: str, text_prompt: str, action_url: str) -> str:
@@ -102,15 +98,13 @@ class PlivoAdapter(TelephonyProvider):
             method="POST",
             input_type="dtmf",
             num_digits=1,
-            execution_timeout=4
+            execution_timeout=8
         )
         if audio_url:
             get_input.add(plivoxml.PlayElement(audio_url))
         else:
             get_input.add(plivoxml.SpeakElement(text_prompt))
         response.add(get_input)
-        # Redirect back to query choice URL if they timed out
-        response.add(plivoxml.RedirectElement(abs_action_url, method="POST"))
         return response.to_string()
 
     def generate_completion_response(self, prompt: str) -> str:
