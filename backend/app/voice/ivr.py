@@ -588,7 +588,7 @@ class IVRCallSession:
 
         return res
 
-    async def process_text_agent_turn(self, text: str) -> dict:
+    async def process_text_agent_turn(self, text: str, append_text: str = "") -> dict:
         """Processes voice turn when transcription is already available (e.g. from Plivo Speech)."""
         if self.state != IVRState.ACTIVE_AGENT:
             return {"error": "Voice inputs are only allowed during the active agent state."}
@@ -609,9 +609,14 @@ class IVRCallSession:
 
         from app.voice.tts import TextToSpeech
         tts = TextToSpeech()
+        
+        tts_text = res_chat["response"]
+        if append_text:
+            tts_text = f"{tts_text} {append_text}"
+
         try:
             generated_audio = await tts.generate(
-                res_chat["response"],
+                tts_text,
                 language=self.language,
             )
         except Exception as e:

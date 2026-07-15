@@ -299,9 +299,9 @@ async def handle_agent_turn(
         response.add(plivoxml.RedirectElement(get_public_url("/api/v1/telephony/plivo/query_choice?timeout=1"), method="POST"))
         return Response(content=response.to_string(), media_type="application/xml")
 
-    res = await session.process_text_agent_turn(Speech)
-    audio_url = get_public_audio_url(res["audio_path"]) if res.get("audio_path") else ""
     choose_prompt = PROMPTS.get(session.language, PROMPTS["en"])["choose_query"]
+    res = await session.process_text_agent_turn(Speech, append_text=choose_prompt)
+    audio_url = get_public_audio_url(res["audio_path"]) if res.get("audio_path") else ""
     
     response = plivoxml.ResponseElement()
     get_input = plivoxml.GetInputElement(
@@ -314,8 +314,7 @@ async def handle_agent_turn(
     if audio_url:
         get_input.add(plivoxml.PlayElement(audio_url))
     else:
-        get_input.add(plivoxml.SpeakElement(res["text"]))
-    get_input.add(plivoxml.SpeakElement(choose_prompt))
+        get_input.add(plivoxml.SpeakElement(f"{res['text']} {choose_prompt}"))
     response.add(get_input)
     response.add(plivoxml.RedirectElement(get_public_url("/api/v1/telephony/plivo/query_choice?timeout=1"), method="POST"))
     return Response(content=response.to_string(), media_type="application/xml")
@@ -407,10 +406,12 @@ async def handle_feedback(
 async def handle_hangup(
     CallUUID: str = Form(...),
     HangupCause: str = Form(None),
+    HangupSource: str = Form(None),
     db: Session = Depends(get_db),
     _ = Depends(validate_plivo_signature_dependency),
 ):
     """Receives Plivo hangup status notification to safely shut down hung up call threads."""
+    print(f"[{CallUUID}] Hangup webhook received. Cause: {HangupCause}, Source: {HangupSource}")
     session = ivr_manager.get_or_create_call(CallUUID, "", db)
     if session.state != IVRState.COMPLETED:
         session.complete_call()
