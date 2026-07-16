@@ -117,7 +117,6 @@ class PlivoAdapter(TelephonyProvider):
             action=abs_action_url,
             method="POST",
             input_type="speech",
-            speech_model="default",
             execution_timeout=30,
             speech_end_timeout=2,
             language=asr_lang,
