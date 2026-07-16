@@ -59,14 +59,6 @@ class PlivoAdapter(TelephonyProvider):
         mapping = {
             "en": "en-US",
             "hi": "hi-IN",
-            "te": "te-IN",
-            "ta": "ta-IN",
-            "mr": "mr-IN",
-            "kn": "kn-IN",
-            "gu": "gu-IN",
-            "bn": "bn-IN",
-            "ml": "ml-IN",
-            "ur": "ur-IN",
         }
         return mapping.get((language or "en").lower(), "en-US")
 
