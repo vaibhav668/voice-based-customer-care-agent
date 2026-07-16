@@ -439,13 +439,6 @@ class IVRCallSession:
                             # Also set user_id now that we know who this is
                             self.user_id = str(booking.user_id)
                             self._log_system_event(f"Caller authorized via phone number match for booking {booking_code}.")
-                        else:
-                            # Auto-link the caller's phone number to the booking owner for testing/onboarding
-                            booking.user.phone = self.phone_number
-                            self.db.commit()
-                            authorized = True
-                            self.user_id = str(booking.user_id)
-                            self._log_system_event(f"Caller dynamically authorized and linked to booking {booking_code} user account.")
                     
                     if not authorized:
                         self._log_system_event(f"Caller unauthorized for booking {booking_code}. Owned by different customer.")

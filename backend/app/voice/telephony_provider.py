@@ -93,7 +93,8 @@ class PlivoAdapter(TelephonyProvider):
             method="POST",
             input_type="dtmf",
             num_digits=num_digits or 99,
-            execution_timeout=20
+            execution_timeout=20,
+            finish_on_key="#"
         )
         if audio_url:
             get_input.add(plivoxml.PlayElement(audio_url))
