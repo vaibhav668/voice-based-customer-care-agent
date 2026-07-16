@@ -58,6 +58,14 @@ class PlivoAdapter(TelephonyProvider):
         }
         return mapping.get((language or "en").lower(), "en-US")
 
+    def _map_asr_language(self, language: str) -> Optional[str]:
+        """Maps internal language codes to Plivo ASR supported language codes, or returns None if unsupported."""
+        mapping = {
+            "en": "en-US",
+            "hi": "hi-IN",
+        }
+        return mapping.get((language or "en").lower(), None)
+
     def validate_signature(self, method: str, url: str, nonce: str, signature: str, params: Dict[str, Any]) -> bool:
         """Validates that incoming webhook calls originated from Plivo servers."""
         # Allow disabling signature validation in local/mock environments
@@ -94,16 +102,23 @@ class PlivoAdapter(TelephonyProvider):
         """Generates Plivo XML playing TTS audio and waiting for spoken caller response, resolving absolute action URL."""
         abs_action_url = self._get_absolute_url(action_url)
         response = plivoxml.ResponseElement()
+        
+        # Omit language attribute for unsupported ASR locales to prevent Plivo XML parsing errors
+        plivo_asr_lang = self._map_asr_language(language)
+        kwargs = {
+            "action": abs_action_url,
+            "method": "POST",
+            "input_type": "speech",
+            "speech_model": "default",
+            "execution_timeout": 7,
+            "speech_end_timeout": 2
+        }
+        if plivo_asr_lang:
+            kwargs["language"] = plivo_asr_lang
+            
+        get_input = plivoxml.GetInputElement(**kwargs)
+        
         plivo_lang = self._map_language(language)
-        get_input = plivoxml.GetInputElement(
-            action=abs_action_url,
-            method="POST",
-            input_type="speech",
-            speech_model="default",
-            execution_timeout=7,
-            speech_end_timeout=2,
-            language=plivo_lang
-        )
         if audio_url:
             get_input.add(plivoxml.PlayElement(audio_url))
         else:
