@@ -94,18 +94,19 @@ class PlivoAdapter(TelephonyProvider):
         """Generates Plivo XML playing TTS audio and waiting for spoken caller response, resolving absolute action URL."""
         abs_action_url = self._get_absolute_url(action_url)
         response = plivoxml.ResponseElement()
+        plivo_lang = self._map_language(language)
         get_input = plivoxml.GetInputElement(
             action=abs_action_url,
             method="POST",
             input_type="speech",
             speech_model="default",
             execution_timeout=7,
-            speech_end_timeout=2
+            speech_end_timeout=2,
+            language=plivo_lang
         )
         if audio_url:
             get_input.add(plivoxml.PlayElement(audio_url))
         else:
-            plivo_lang = self._map_language(language)
             get_input.add(plivoxml.SpeakElement(text_prompt, language=plivo_lang))
         response.add(get_input)
         return response.to_string()
