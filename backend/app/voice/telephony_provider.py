@@ -105,9 +105,9 @@ class PlivoAdapter(TelephonyProvider):
             "action": abs_action_url,
             "method": "POST",
             "input_type": "speech",
-            "speech_model": "default",
-            "execution_timeout": 7,
-            "speech_end_timeout": 2
+            "speech_model": "phone_call",
+            "execution_timeout": 5,
+            "speech_end_timeout": 3
         }
         if plivo_asr_lang:
             kwargs["language"] = plivo_asr_lang
