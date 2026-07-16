@@ -339,7 +339,22 @@ async def handle_agent_turn(
         return Response(content=xml, media_type="application/xml")
 
     res = await session.process_text_agent_turn(user_speech, append_text=choose_prompt)
-    audio_url = get_public_audio_url(res["audio_path"]) if res.get("audio_path") and res.get("audio_path") else ""
+    
+    # Use safe path resolution - verify TTS file actually exists on disk before passing to Plivo
+    audio_url = ""
+    raw_path = res.get("audio_path", "")
+    if raw_path:
+        try:
+            from app.voice.tts import TextToSpeech
+            tts_svc = TextToSpeech()
+            filename = raw_path.split("/")[-1]
+            full_path = tts_svc.output_dir / filename
+            if full_path.exists():
+                audio_url = get_public_audio_url(raw_path)
+            else:
+                print(f"Warning: Agent TTS file not found on disk: {full_path}")
+        except Exception as e:
+            print(f"Notice: Audio path resolve failed: {e}")
     
     xml = adapter.generate_query_choice_response(
         audio_url=audio_url,
@@ -384,7 +399,18 @@ async def handle_query_choice(
         # User directly spoke their next query! Process it.
         choose_prompt = PROMPTS.get(session.language, PROMPTS["en"])["choose_query"]
         res = await session.process_text_agent_turn(user_speech, append_text=choose_prompt)
-        audio_url = get_public_audio_url(res["audio_path"]) if res.get("audio_path") and res.get("audio_path") else ""
+        audio_url = ""
+        raw_path = res.get("audio_path", "")
+        if raw_path:
+            try:
+                from app.voice.tts import TextToSpeech
+                tts_svc = TextToSpeech()
+                filename = raw_path.split("/")[-1]
+                full_path = tts_svc.output_dir / filename
+                if full_path.exists():
+                    audio_url = get_public_audio_url(raw_path)
+            except Exception:
+                pass
         xml = adapter.generate_query_choice_response(
             audio_url=audio_url,
             text_prompt=f"{res['text']} {choose_prompt}",
