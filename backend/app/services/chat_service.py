@@ -296,7 +296,10 @@ class ChatService:
 
         if result.requires_booking_code:
             session.current_intent = understanding.intent
-            localized_booking_msg = self.generator.request_booking_code(language=language)
+            localized_booking_msg = self.generator.request_booking_code(
+                language=language,
+                user_message=request.message,
+            )
 
             elapsed_ms = round((time.time() - start_time) * 1000, 2)
             ai_msg = self.msg_repo.add_message(

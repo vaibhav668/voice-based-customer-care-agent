@@ -168,8 +168,8 @@ async def test_plivo_integration():
             conv.resolution_status = "resolved"
             db.commit()
 
-            # Call agent turn with speech - should ask for continue/end query choice
-            response = await client.post("/api/v1/telephony/plivo/agent", data={"CallUUID": call_uuid, "Speech": "Check my booking."})
+            # Call agent turn with speech - should ask for continue/end query choice (test using SpeechResult parameter)
+            response = await client.post("/api/v1/telephony/plivo/agent", data={"CallUUID": call_uuid, "SpeechResult": "Check my booking."})
             assert response.status_code == 200
             assert "query_choice" in response.text
             print("-> Active agent voice turn choice query redirect XML response: PASSED")

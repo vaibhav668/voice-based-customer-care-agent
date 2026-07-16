@@ -2,7 +2,28 @@ import logging
 from pathlib import Path
 
 from langchain_core.documents import Document
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+try:
+    from langchain_text_splitters import RecursiveCharacterTextSplitter
+except ImportError:
+    class RecursiveCharacterTextSplitter:
+        def __init__(self, chunk_size: int = 500, chunk_overlap: int = 100):
+            self.chunk_size = chunk_size
+            self.chunk_overlap = chunk_overlap
+
+        def split_documents(self, documents):
+            chunks = []
+            for doc in documents:
+                text = doc.page_content
+                start = 0
+                while start < len(text):
+                    end = start + self.chunk_size
+                    chunk_text = text[start:end]
+                    chunks.append(Document(
+                        page_content=chunk_text,
+                        metadata=doc.metadata,
+                    ))
+                    start += self.chunk_size - self.chunk_overlap
+            return chunks
 
 from app.ai.rag.vectordb import vectordb
 

@@ -316,6 +316,7 @@ async def handle_verify_phone(
 async def handle_agent_turn(
     CallUUID: str = Form(...),
     Speech: str = Form(None),
+    SpeechResult: str = Form(None),
     db: Session = Depends(get_db),
     _ = Depends(validate_plivo_signature_dependency),
 ):
@@ -323,9 +324,10 @@ async def handle_agent_turn(
     session = ivr_manager.get_or_create_call(CallUUID, "", db)
     from app.voice.ivr import PROMPTS
     
+    user_speech = Speech or SpeechResult
     choose_prompt = PROMPTS.get(session.language, PROMPTS["en"])["choose_query"]
     
-    if not Speech or not Speech.strip():
+    if not user_speech or not user_speech.strip():
         audio_url = await safe_tts_audio_url(choose_prompt, language=session.language)
 
         xml = adapter.generate_query_choice_response(
@@ -336,7 +338,7 @@ async def handle_agent_turn(
         )
         return Response(content=xml, media_type="application/xml")
 
-    res = await session.process_text_agent_turn(Speech, append_text=choose_prompt)
+    res = await session.process_text_agent_turn(user_speech, append_text=choose_prompt)
     audio_url = get_public_audio_url(res["audio_path"]) if res.get("audio_path") and res.get("audio_path") else ""
     
     xml = adapter.generate_query_choice_response(
