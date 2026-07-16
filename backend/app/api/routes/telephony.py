@@ -32,21 +32,15 @@ async def safe_tts_audio_url(text: str, language: str = "en") -> str:
     """
     try:
         from app.voice.tts import TextToSpeech
-        from pathlib import Path
         tts = TextToSpeech()
         audio_file = await tts.generate(text, language=language)
         if not audio_file:
             return ""
-        # Verify the file was actually created on disk
-        base_dir = Path(__file__).parent.parent.parent.parent.parent
-        full_path = base_dir / "backend" / audio_file
+        # Resolve path using the TextToSpeech absolute output directory
+        filename = audio_file.split("/")[-1]
+        full_path = tts.output_dir / filename
         if not full_path.exists():
-            # Try relative path from backend dir
-            import os as _os
-            backend_dir = _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))))
-            full_path = Path(backend_dir) / audio_file
-        if not full_path.exists():
-            print(f"Warning: TTS audio file not found on disk: {audio_file}")
+            print(f"Warning: TTS audio file not found on disk at: {full_path}")
             return ""
         return get_public_audio_url(audio_file)
     except Exception as e:

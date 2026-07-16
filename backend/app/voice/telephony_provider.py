@@ -43,18 +43,14 @@ class PlivoAdapter(TelephonyProvider):
         return f"{self.public_url}{url}"
 
     def _map_language(self, language: str) -> str:
-        """Maps internal language codes to Plivo TTS language codes."""
+        """Maps internal language codes to Plivo TTS language codes.
+        
+        Only returns languages natively supported by Plivo standard/Polly TTS
+        (en-US and hi-IN) to prevent XML validation crashes on unsupported locales.
+        """
         mapping = {
             "en": "en-US",
             "hi": "hi-IN",
-            "mr": "mr-IN",
-            "te": "te-IN",
-            "ta": "ta-IN",
-            "kn": "kn-IN",
-            "gu": "gu-IN",
-            "bn": "bn-IN",
-            "ml": "ml-IN",
-            "ur": "ur-IN"
         }
         return mapping.get((language or "en").lower(), "en-US")
 
