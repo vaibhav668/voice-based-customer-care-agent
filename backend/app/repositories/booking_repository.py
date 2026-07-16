@@ -50,7 +50,8 @@ class BookingRepository(BaseRepository):
             select(Booking)
             .options(
                 joinedload(Booking.trip).joinedload(Trip.bus),
-                joinedload(Booking.trip).joinedload(Trip.route)
+                joinedload(Booking.trip).joinedload(Trip.route),
+                joinedload(Booking.user)
             )
             .where(Booking.booking_code == booking_code)
         )

@@ -110,8 +110,8 @@ class PlivoAdapter(TelephonyProvider):
         response = plivoxml.ResponseElement()
         
         asr_lang = self._map_asr_language(language)
-        # input_type=speech only - num_digits is not valid with speech type
-        # speech_end_timeout=1 means Plivo stops listening 1s after the caller stops talking
+        # input_type=speech only
+        # speech_end_timeout=2 is the minimum allowed by Plivo (less than 2 causes XML validation failure)
         # execution_timeout=30 gives caller up to 30s total to speak their query
         get_input = plivoxml.GetInputElement(
             action=abs_action_url,
@@ -119,7 +119,7 @@ class PlivoAdapter(TelephonyProvider):
             input_type="speech",
             speech_model="default",
             execution_timeout=30,
-            speech_end_timeout=1,
+            speech_end_timeout=2,
             language=asr_lang,
         )
         
@@ -136,15 +136,14 @@ class PlivoAdapter(TelephonyProvider):
         abs_action_url = self._get_absolute_url(action_url)
         response = plivoxml.ResponseElement()
         asr_lang = self._map_asr_language(language)
-        # IMPORTANT: When input_type is "dtmf,speech" (mixed), num_digits MUST NOT be set.
-        # num_digits is only valid for pure "dtmf" input_type.
-        # Setting num_digits with mixed input causes Plivo to throw "Invalid Action XML" and hang up.
+        # IMPORTANT: When input_type is mixed (DTMF and speech), we must use space separation "dtmf speech"
+        # and we must not set num_digits. Also, speech_end_timeout must be >= 2.
         get_input = plivoxml.GetInputElement(
             action=abs_action_url,
             method="POST",
-            input_type="dtmf,speech",
-            execution_timeout=10,
-            speech_end_timeout=1,
+            input_type="dtmf speech",
+            execution_timeout=15,
+            speech_end_timeout=2,
             language=asr_lang,
         )
         if audio_url:
