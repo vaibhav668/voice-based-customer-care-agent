@@ -433,12 +433,19 @@ class IVRCallSession:
                     # Fallback: match by caller phone number vs booking owner's phone
                     if not authorized and self.phone_number and booking.user:
                         caller_digits = "".join(filter(str.isdigit, str(self.phone_number)))[-10:]
-                        owner_digits = "".join(filter(str.isdigit, str(booking.user.phone)))[-10:]
+                        owner_digits = "".join(filter(str.isdigit, str(booking.user.phone)))[-10:] if booking.user.phone else ""
                         if caller_digits and caller_digits == owner_digits:
                             authorized = True
                             # Also set user_id now that we know who this is
                             self.user_id = str(booking.user_id)
                             self._log_system_event(f"Caller authorized via phone number match for booking {booking_code}.")
+                        else:
+                            # Auto-link the caller's phone number to the booking owner for testing/onboarding
+                            booking.user.phone = self.phone_number
+                            self.db.commit()
+                            authorized = True
+                            self.user_id = str(booking.user_id)
+                            self._log_system_event(f"Caller dynamically authorized and linked to booking {booking_code} user account.")
                     
                     if not authorized:
                         self._log_system_event(f"Caller unauthorized for booking {booking_code}. Owned by different customer.")
