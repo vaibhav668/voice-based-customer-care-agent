@@ -56,19 +56,13 @@ class PlivoAdapter(TelephonyProvider):
 
     def _map_asr_language(self, language: str) -> str:
         """Maps internal language codes to standard BCP 47 language tags for ASR recognition."""
-        mapping = {
-            "en": "en-US",
-            "hi": "hi-IN",
-            "te": "te-IN",
-            "ta": "ta-IN",
-            "mr": "mr-IN",
-            "kn": "kn-IN",
-            "gu": "gu-IN",
-            "bn": "bn-IN",
-            "ml": "ml-IN",
-            "ur": "ur-IN",
-        }
-        return mapping.get((language or "en").lower(), "en-US")
+        # Standardize all non-English regional Indian languages to 'en-IN' (Indian English) for ASR.
+        # This is natively supported by Plivo (preventing Invalid Action XML validation crashes)
+        # and optimized for Indian accents and mixed dialect pronunciations.
+        lang_lower = (language or "en").lower()
+        if lang_lower == "en":
+            return "en-US"
+        return "en-IN"
 
 
     def validate_signature(self, method: str, url: str, nonce: str, signature: str, params: Dict[str, Any]) -> bool:
