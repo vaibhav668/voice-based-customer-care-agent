@@ -17,9 +17,41 @@ adapter = PlivoAdapter()
 
 def get_public_audio_url(audio_path: str) -> str:
     public_url = os.getenv("PUBLIC_URL", "http://localhost:8000")
+    if public_url.endswith("/"):
+        public_url = public_url[:-1]
     if audio_path.startswith("/"):
         audio_path = audio_path[1:]
     return f"{public_url}/{audio_path}"
+
+
+async def safe_tts_audio_url(text: str, language: str = "en") -> str:
+    """Generates TTS audio and returns its public URL, or empty string on failure.
+    
+    Returns empty string when TTS fails so callers can fall back to Plivo's
+    built-in Speak TTS, avoiding broken Play URLs that cause Invalid Action XML errors.
+    """
+    try:
+        from app.voice.tts import TextToSpeech
+        from pathlib import Path
+        tts = TextToSpeech()
+        audio_file = await tts.generate(text, language=language)
+        if not audio_file:
+            return ""
+        # Verify the file was actually created on disk
+        base_dir = Path(__file__).parent.parent.parent.parent.parent
+        full_path = base_dir / "backend" / audio_file
+        if not full_path.exists():
+            # Try relative path from backend dir
+            import os as _os
+            backend_dir = _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))))
+            full_path = Path(backend_dir) / audio_file
+        if not full_path.exists():
+            print(f"Warning: TTS audio file not found on disk: {audio_file}")
+            return ""
+        return get_public_audio_url(audio_file)
+    except Exception as e:
+        print(f"Notice: TTS generation failed, using Speak fallback: {e}")
+        return ""
 
 
 def get_public_url(path: str) -> str:
@@ -116,15 +148,7 @@ async def handle_incoming(
     session = ivr_manager.get_or_create_call(CallUUID, caller_phone, db)
     res = session.advance_state("INIT")
     
-    # Generate high quality Neural TTS for consent prompt
-    from app.voice.tts import TextToSpeech
-    tts = TextToSpeech()
-    try:
-        audio_file = await tts.generate(res["prompt"], language=session.language)
-        audio_url = get_public_audio_url(audio_file)
-    except Exception as e:
-        print("Notice: Failed to generate incoming TTS:", e)
-        audio_url = ""
+    audio_url = await safe_tts_audio_url(res["prompt"], language=session.language)
 
     xml = adapter.generate_menu_response(
         prompt=res["prompt"],
@@ -148,14 +172,7 @@ async def handle_consent(
     session = ivr_manager.get_or_create_call(CallUUID, "", db)
     res = session.advance_state("DTMF", Digits or "2")
     
-    from app.voice.tts import TextToSpeech
-    tts = TextToSpeech()
-    try:
-        audio_file = await tts.generate(res["prompt"], language=session.language)
-        audio_url = get_public_audio_url(audio_file)
-    except Exception as e:
-        print("Notice: Failed to generate consent response TTS:", e)
-        audio_url = ""
+    audio_url = await safe_tts_audio_url(res["prompt"], language=session.language)
 
     if session.state == IVRState.OTP_PENDING:
         xml = adapter.generate_menu_response(
@@ -189,14 +206,7 @@ async def handle_otp(
     session = ivr_manager.get_or_create_call(CallUUID, "", db)
     res = session.advance_state("DTMF", Digits)
     
-    from app.voice.tts import TextToSpeech
-    tts = TextToSpeech()
-    try:
-        audio_file = await tts.generate(res["prompt"], language=session.language)
-        audio_url = get_public_audio_url(audio_file)
-    except Exception as e:
-        print("Notice: Failed to generate otp response TTS:", e)
-        audio_url = ""
+    audio_url = await safe_tts_audio_url(res["prompt"], language=session.language)
 
     if session.state == IVRState.LANGUAGE_SELECTION_PENDING:
         xml = adapter.generate_menu_response(
@@ -230,15 +240,7 @@ async def handle_language(
     session = ivr_manager.get_or_create_call(CallUUID, "", db)
     res = session.advance_state("DTMF", Digits or "1")
     
-    # Generate high quality Neural TTS for language specific prompt (ask_booking)
-    from app.voice.tts import TextToSpeech
-    tts = TextToSpeech()
-    try:
-        audio_file = await tts.generate(res["prompt"], language=session.language)
-        audio_url = get_public_audio_url(audio_file)
-    except Exception as e:
-        print("Notice: Failed to generate language prompt TTS:", e)
-        audio_url = ""
+    audio_url = await safe_tts_audio_url(res["prompt"], language=session.language)
 
     xml = adapter.generate_menu_response(
         prompt=res["prompt"],
@@ -262,16 +264,9 @@ async def handle_verify_code(
     session = ivr_manager.get_or_create_call(CallUUID, "", db)
     res = session.advance_state("DTMF", Digits)
     
+    audio_url = await safe_tts_audio_url(res["prompt"], language=session.language)
+
     if session.state == IVRState.ACTIVE_AGENT:
-        from app.voice.tts import TextToSpeech
-        tts = TextToSpeech()
-        try:
-            audio_file = await tts.generate(res["prompt"], language=session.language)
-            audio_url = get_public_audio_url(audio_file)
-        except Exception as e:
-            print("Notice: Failed to generate language TTS via edge-tts:", e)
-            audio_url = ""
-        
         xml = adapter.generate_voice_agent_response(
             audio_url=audio_url,
             text_prompt=res["prompt"],
@@ -279,14 +274,6 @@ async def handle_verify_code(
             language=session.language,
         )
     else:
-        from app.voice.tts import TextToSpeech
-        tts = TextToSpeech()
-        try:
-            audio_file = await tts.generate(res["prompt"], language=session.language)
-            audio_url = get_public_audio_url(audio_file)
-        except Exception as e:
-            print("Notice: Failed to generate verify_code retry prompt TTS:", e)
-            audio_url = ""
 
         xml = adapter.generate_menu_response(
             prompt=res["prompt"],
@@ -310,16 +297,9 @@ async def handle_verify_phone(
     session = ivr_manager.get_or_create_call(CallUUID, "", db)
     res = session.advance_state("DTMF", Digits)
     
+    audio_url = await safe_tts_audio_url(res["prompt"], language=session.language)
+    
     if session.state == IVRState.ACTIVE_AGENT:
-        from app.voice.tts import TextToSpeech
-        tts = TextToSpeech()
-        try:
-            audio_file = await tts.generate(res["prompt"], language=session.language)
-            audio_url = get_public_audio_url(audio_file)
-        except Exception as e:
-            print("Notice: Failed to generate verify_phone TTS via edge-tts:", e)
-            audio_url = ""
-        
         xml = adapter.generate_voice_agent_response(
             audio_url=audio_url,
             text_prompt=res["prompt"],
@@ -327,15 +307,6 @@ async def handle_verify_phone(
             language=session.language,
         )
     else:
-        from app.voice.tts import TextToSpeech
-        tts = TextToSpeech()
-        try:
-            audio_file = await tts.generate(res["prompt"], language=session.language)
-            audio_url = get_public_audio_url(audio_file)
-        except Exception as e:
-            print("Notice: Failed to generate verify_phone retry prompt TTS:", e)
-            audio_url = ""
-
         xml = adapter.generate_menu_response(
             prompt=res["prompt"],
             expect_input="DTMF",
@@ -361,14 +332,7 @@ async def handle_agent_turn(
     choose_prompt = PROMPTS.get(session.language, PROMPTS["en"])["choose_query"]
     
     if not Speech or not Speech.strip():
-        from app.voice.tts import TextToSpeech
-        tts = TextToSpeech()
-        try:
-            audio_file = await tts.generate(choose_prompt, language=session.language)
-            audio_url = get_public_audio_url(audio_file)
-        except Exception as e:
-            print("Notice: Failed to generate empty speech choose prompt TTS:", e)
-            audio_url = ""
+        audio_url = await safe_tts_audio_url(choose_prompt, language=session.language)
 
         xml = adapter.generate_query_choice_response(
             audio_url=audio_url,
@@ -379,7 +343,7 @@ async def handle_agent_turn(
         return Response(content=xml, media_type="application/xml")
 
     res = await session.process_text_agent_turn(Speech, append_text=choose_prompt)
-    audio_url = get_public_audio_url(res["audio_path"]) if res.get("audio_path") else ""
+    audio_url = get_public_audio_url(res["audio_path"]) if res.get("audio_path") and res.get("audio_path") else ""
     
     xml = adapter.generate_query_choice_response(
         audio_url=audio_url,
@@ -404,14 +368,7 @@ async def handle_query_choice(
     if Digits == "1":
         speak_prompt = PROMPTS.get(session.language, PROMPTS["en"])["speak_query"]
         
-        from app.voice.tts import TextToSpeech
-        tts = TextToSpeech()
-        try:
-            audio_file = await tts.generate(speak_prompt, language=session.language)
-            audio_url = get_public_audio_url(audio_file)
-        except Exception as e:
-            print("Notice: Failed to generate speak query prompt TTS:", e)
-            audio_url = ""
+        audio_url = await safe_tts_audio_url(speak_prompt, language=session.language)
 
         xml = adapter.generate_voice_agent_response(
             audio_url=audio_url,
@@ -432,14 +389,7 @@ async def handle_query_choice(
             
         feedback_prompt = PROMPTS.get(session.language, PROMPTS["en"])["feedback"]
         
-        from app.voice.tts import TextToSpeech
-        tts = TextToSpeech()
-        try:
-            audio_file = await tts.generate(feedback_prompt, language=session.language)
-            audio_url = get_public_audio_url(audio_file)
-        except Exception as e:
-            print("Notice: Failed to generate feedback prompt TTS:", e)
-            audio_url = ""
+        audio_url = await safe_tts_audio_url(feedback_prompt, language=session.language)
 
         xml = adapter.generate_menu_response(
             prompt=feedback_prompt,
@@ -463,14 +413,7 @@ async def handle_feedback(
     session = ivr_manager.get_or_create_call(CallUUID, "", db)
     res = session.advance_state("DTMF", Digits)
     
-    from app.voice.tts import TextToSpeech
-    tts = TextToSpeech()
-    try:
-        audio_file = await tts.generate(res["prompt"], language=session.language)
-        audio_url = get_public_audio_url(audio_file)
-    except Exception as e:
-        print("Notice: Failed to generate goodbye completion TTS:", e)
-        audio_url = ""
+    audio_url = await safe_tts_audio_url(res["prompt"], language=session.language)
 
     xml = adapter.generate_completion_response(
         prompt=res["prompt"],
