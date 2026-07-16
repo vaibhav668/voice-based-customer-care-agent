@@ -112,13 +112,13 @@ class PlivoAdapter(TelephonyProvider):
         return response.to_string()
 
     def generate_query_choice_response(self, audio_url: str, text_prompt: str, action_url: str, language: str = "en") -> str:
-        """Generates Plivo XML playing TTS audio and waiting for DTMF choice, resolving absolute action URL."""
+        """Generates Plivo XML playing TTS audio and waiting for DTMF or speech choice, resolving absolute action URL."""
         abs_action_url = self._get_absolute_url(action_url)
         response = plivoxml.ResponseElement()
         get_input = plivoxml.GetInputElement(
             action=abs_action_url,
             method="POST",
-            input_type="dtmf",
+            input_type="dtmf,speech",
             num_digits=1,
             execution_timeout=8
         )

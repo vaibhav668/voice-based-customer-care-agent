@@ -353,26 +353,46 @@ async def handle_agent_turn(
 @router.post("/query_choice")
 async def handle_query_choice(
     Digits: str = Form(None),
+    Speech: str = Form(None),
+    SpeechResult: str = Form(None),
     CallUUID: str = Form(...),
     db: Session = Depends(get_db),
     _ = Depends(validate_plivo_signature_dependency),
 ):
-    """Processes caller continue or end conversation choice."""
+    """Processes caller continue or end conversation choice, or directly processes spoken query."""
     session = ivr_manager.get_or_create_call(CallUUID, "", db)
     from app.voice.ivr import PROMPTS
     
-    if Digits == "1":
-        speak_prompt = PROMPTS.get(session.language, PROMPTS["en"])["speak_query"]
-        
-        audio_url = await safe_tts_audio_url(speak_prompt, language=session.language)
+    user_speech = Speech or SpeechResult
+    
+    from app.conversation.manager import ConversationManager
+    conv_manager = ConversationManager()
+    mem_session = conv_manager.get_session(session.session_id)
 
+    if Digits == "1":
+        mem_session.entities["query_choice_timeouts"] = 0
+        speak_prompt = PROMPTS.get(session.language, PROMPTS["en"])["speak_query"]
+        audio_url = await safe_tts_audio_url(speak_prompt, language=session.language)
         xml = adapter.generate_voice_agent_response(
             audio_url=audio_url,
             text_prompt=speak_prompt,
             action_url="/api/v1/telephony/plivo/agent",
             language=session.language,
         )
-    else:
+    elif user_speech and user_speech.strip():
+        mem_session.entities["query_choice_timeouts"] = 0
+        # User directly spoke their next query! Process it.
+        choose_prompt = PROMPTS.get(session.language, PROMPTS["en"])["choose_query"]
+        res = await session.process_text_agent_turn(user_speech, append_text=choose_prompt)
+        audio_url = get_public_audio_url(res["audio_path"]) if res.get("audio_path") and res.get("audio_path") else ""
+        xml = adapter.generate_query_choice_response(
+            audio_url=audio_url,
+            text_prompt=f"{res['text']} {choose_prompt}",
+            action_url="/api/v1/telephony/plivo/query_choice",
+            language=session.language,
+        )
+    elif Digits == "0":
+        mem_session.entities["query_choice_timeouts"] = 0
         session.state = IVRState.FEEDBACK_PENDING
         session._save_to_db()
         
@@ -384,9 +404,7 @@ async def handle_query_choice(
             db.commit()
             
         feedback_prompt = PROMPTS.get(session.language, PROMPTS["en"])["feedback"]
-        
         audio_url = await safe_tts_audio_url(feedback_prompt, language=session.language)
-
         xml = adapter.generate_menu_response(
             prompt=feedback_prompt,
             expect_input="DTMF",
@@ -395,6 +413,43 @@ async def handle_query_choice(
             audio_url=audio_url,
             language=session.language,
         )
+    else:
+        # Silence/Timeout (no DTMF or speech input)
+        timeouts = mem_session.entities.get("query_choice_timeouts", 0)
+        if timeouts < 1:
+            mem_session.entities["query_choice_timeouts"] = timeouts + 1
+            timeout_prompt = PROMPTS.get(session.language, PROMPTS["en"])["timeout_reminder"]
+            audio_url = await safe_tts_audio_url(timeout_prompt, language=session.language)
+            xml = adapter.generate_query_choice_response(
+                audio_url=audio_url,
+                text_prompt=timeout_prompt,
+                action_url="/api/v1/telephony/plivo/query_choice",
+                language=session.language,
+            )
+        else:
+            # Second timeout: gracefully finalize and transfer to feedback
+            mem_session.entities["query_choice_timeouts"] = 0
+            session.state = IVRState.FEEDBACK_PENDING
+            session._save_to_db()
+            
+            from app.repositories.conversation_repository import ConversationRepository
+            conv_repo = ConversationRepository(db)
+            conv = conv_repo.get_by_session_id(session.session_id)
+            if conv:
+                conv.resolution_status = "resolved"
+                db.commit()
+                
+            feedback_prompt = PROMPTS.get(session.language, PROMPTS["en"])["feedback"]
+            audio_url = await safe_tts_audio_url(feedback_prompt, language=session.language)
+            xml = adapter.generate_menu_response(
+                prompt=feedback_prompt,
+                expect_input="DTMF",
+                num_digits=2,
+                action_url="/api/v1/telephony/plivo/feedback",
+                audio_url=audio_url,
+                language=session.language,
+            )
+            
     return Response(content=xml, media_type="application/xml")
 
 
