@@ -54,13 +54,6 @@ class PlivoAdapter(TelephonyProvider):
         }
         return mapping.get((language or "en").lower(), "en-US")
 
-    def _map_asr_language(self, language: str) -> Optional[str]:
-        """Maps internal language codes to Plivo ASR supported language codes, or returns None if unsupported."""
-        mapping = {
-            "en": "en-US",
-            "hi": "hi-IN",
-        }
-        return mapping.get((language or "en").lower(), None)
 
     def validate_signature(self, method: str, url: str, nonce: str, signature: str, params: Dict[str, Any]) -> bool:
         """Validates that incoming webhook calls originated from Plivo servers."""
@@ -99,8 +92,6 @@ class PlivoAdapter(TelephonyProvider):
         abs_action_url = self._get_absolute_url(action_url)
         response = plivoxml.ResponseElement()
         
-        # Omit language attribute for unsupported ASR locales to prevent Plivo XML parsing errors
-        plivo_asr_lang = self._map_asr_language(language)
         kwargs = {
             "action": abs_action_url,
             "method": "POST",
@@ -109,9 +100,7 @@ class PlivoAdapter(TelephonyProvider):
             "execution_timeout": 5,
             "speech_end_timeout": 3
         }
-        if plivo_asr_lang:
-            kwargs["language"] = plivo_asr_lang
-            
+        # Do NOT pass language attribute to GetInputElement as it is not supported in standard Plivo XML and causes validation failures
         get_input = plivoxml.GetInputElement(**kwargs)
         
         plivo_lang = self._map_language(language)
