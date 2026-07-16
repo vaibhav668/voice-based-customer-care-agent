@@ -49,14 +49,14 @@ def auto_seed_database():
         # IMPORTANT: Use phone numbers that don't conflict with existing DB entries.
         # These are the authoritative phone numbers for seeded accounts.
         test_users_data = [
-            {"email": "vaibhav@gmail.com", "name": "Vaibhav Pokhriyal", "pw": "vaibhav123", "phone": "9568987360", "role": UserRole.CUSTOMER},
+            {"email": "vaibhav@gmail.com", "name": "Vaibhav Pokhriyal", "pw": "vaibhav123", "phone": "8266894170", "role": UserRole.CUSTOMER},
             {"email": "admin@gmail.com", "name": "Admin User", "pw": "admin123", "phone": "9568987369", "role": UserRole.ADMIN},
             {"email": "mnc@gmail.com", "name": "mnc", "pw": "mnc123", "phone": "9568987361", "role": UserRole.CUSTOMER},
             {"email": "vpokhriyal35@gmail.com", "name": "vaibhav", "pw": "vpokhriyal35123", "phone": "9568987362", "role": UserRole.CUSTOMER},
             {"email": "vaibhav100@example.com", "name": "Vaibhav", "pw": "vaibhav100123", "phone": "9568987363", "role": UserRole.CUSTOMER},
             {"email": "user@example.com", "name": "string", "pw": "user123", "phone": "9568987364", "role": UserRole.CUSTOMER},
             {"email": "demo@example.com", "name": "Demo User", "pw": "password123", "phone": "9876543999", "role": UserRole.CUSTOMER},
-            {"email": "other@example.com", "name": "Other User", "pw": "password123", "phone": "9998887999", "role": UserRole.CUSTOMER},
+            {"email": "other@example.com", "name": "Other User", "pw": "password123", "phone": "8178265989", "role": UserRole.CUSTOMER},
             {"email": "admin@example.com", "name": "System Admin", "pw": "admin123", "phone": "9990001112", "role": UserRole.ADMIN},
         ]
 
@@ -88,9 +88,10 @@ def auto_seed_database():
                 db.refresh(user)
                 logger.info(f"Created test user: {ud['email']}")
             else:
-                # Always sync password hash and role to the authoritative values
+                # Always sync password hash, phone number, and role to the authoritative values
                 user.password_hash = hashed_pw
                 user.role = role_val
+                user.phone = ud["phone"]
                 db.commit()
                 db.refresh(user)
             users_dict[ud["email"]] = user
