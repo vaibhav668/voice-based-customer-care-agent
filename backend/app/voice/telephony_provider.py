@@ -54,6 +54,22 @@ class PlivoAdapter(TelephonyProvider):
         }
         return mapping.get((language or "en").lower(), "en-US")
 
+    def _map_asr_language(self, language: str) -> str:
+        """Maps internal language codes to standard BCP 47 language tags for ASR recognition."""
+        mapping = {
+            "en": "en-US",
+            "hi": "hi-IN",
+            "te": "te-IN",
+            "ta": "ta-IN",
+            "mr": "mr-IN",
+            "kn": "kn-IN",
+            "gu": "gu-IN",
+            "bn": "bn-IN",
+            "ml": "ml-IN",
+            "ur": "ur-IN",
+        }
+        return mapping.get((language or "en").lower(), "en-US")
+
 
     def validate_signature(self, method: str, url: str, nonce: str, signature: str, params: Dict[str, Any]) -> bool:
         """Validates that incoming webhook calls originated from Plivo servers."""
@@ -77,7 +93,7 @@ class PlivoAdapter(TelephonyProvider):
             method="POST",
             input_type="dtmf",
             num_digits=num_digits or 99,
-            execution_timeout=8
+            execution_timeout=20
         )
         if audio_url:
             get_input.add(plivoxml.PlayElement(audio_url))
@@ -92,15 +108,16 @@ class PlivoAdapter(TelephonyProvider):
         abs_action_url = self._get_absolute_url(action_url)
         response = plivoxml.ResponseElement()
         
+        asr_lang = self._map_asr_language(language)
         kwargs = {
             "action": abs_action_url,
             "method": "POST",
             "input_type": "speech",
             "speech_model": "default",
-            "execution_timeout": 7,
-            "speech_end_timeout": 2
+            "execution_timeout": 20,
+            "speech_end_timeout": 2,
+            "language": asr_lang
         }
-        # Do NOT pass language attribute to GetInputElement as it is not supported in standard Plivo XML and causes validation failures
         get_input = plivoxml.GetInputElement(**kwargs)
         
         plivo_lang = self._map_language(language)
@@ -115,12 +132,14 @@ class PlivoAdapter(TelephonyProvider):
         """Generates Plivo XML playing TTS audio and waiting for DTMF or speech choice, resolving absolute action URL."""
         abs_action_url = self._get_absolute_url(action_url)
         response = plivoxml.ResponseElement()
+        asr_lang = self._map_asr_language(language)
         get_input = plivoxml.GetInputElement(
             action=abs_action_url,
             method="POST",
             input_type="dtmf,speech",
             num_digits=1,
-            execution_timeout=8
+            execution_timeout=20,
+            language=asr_lang
         )
         if audio_url:
             get_input.add(plivoxml.PlayElement(audio_url))
