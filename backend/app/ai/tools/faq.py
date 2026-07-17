@@ -9,9 +9,10 @@ class FAQTool:
     def execute(
         self,
         question,
+        history=None,
     ):
 
-        docs = retriever.invoke(question)
+        docs = retriever.invoke(question, history=history)
 
         context = "\n\n".join(
             d.page_content

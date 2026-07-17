@@ -11,23 +11,12 @@ llm = get_llm()
 class ContextResolver:
 
     FOLLOW_UP_KEYWORDS = [
-        "destination",
-        "source",
-        "seat",
-        "arrival",
-        "departure",
-        "bus number",
-        "bus",
-        "delay",
-        "refund",
-        "status",
-        "cancel it",
-        "cancel",
-        "driver",
-        "eta",
-        "time",
-        "where",
-        "when",
+        # English terms
+        "destination", "source", "seat", "arrival", "departure", "bus number", "bus",
+        "delay", "refund", "status", "cancel it", "cancel", "driver", "eta", "time", "where", "when",
+        # Hindi / Hinglish / Regional terms
+        "samay", "kab", "kahan", "kaha", "aagman", "prashthan", "der", "late", "gaadi", "gadi",
+        "pahuchegi", "timing", "seet", "seat", "vapis", "wapasi", "paisa", "paise", "rut", "route"
     ]
 
     def resolve(
@@ -58,19 +47,26 @@ class ContextResolver:
         ):
             return None
 
+        lang_code = getattr(session, "language", "en")
+        hindi_rule = ""
+        if lang_code.lower() == "hi":
+            hindi_rule = "\n\nCRITICAL HINDI GRAMMAR REQUIREMENT: Since the assistant voice is FEMALE, you MUST consistently use feminine grammatical structures throughout your response (e.g., 'karungi', 'sakti', 'bataungi' instead of 'karunga', 'sakta', 'bataunga'). Never use masculine verb endings for your own actions.\n"
+
         prompt = CONTEXT_PROMPT.format(
             context=json.dumps(
-            session.last_result,
-            indent=2,
-            default=str,
-        ),
+                session.last_result,
+                indent=2,
+                default=str,
+            ),
             question=question,
         )
+        if hindi_rule:
+            prompt += hindi_rule
 
         response = llm.invoke(
             [
                 SystemMessage(content=prompt),
-                HumanMessage(content=question),
+                HumanMessage(content=f"Answering in language: {lang_code}\nQuestion: {question}"),
             ]
         )
 

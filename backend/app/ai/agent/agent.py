@@ -24,6 +24,7 @@ class SupportAgent:
         session_id: str | None = None,
         language: str | None = None,
         session_phone: str | None = None,
+        history: list | None = None,
     ) -> ToolResult:
 
         # ----------------------------------------------------
@@ -150,7 +151,7 @@ class SupportAgent:
                     },
                 )
 
-            answer = tool.execute(question)
+            answer = tool.execute(question, history=history)
 
             return ToolResult(
                 success=True,

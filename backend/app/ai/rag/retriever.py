@@ -12,12 +12,51 @@ class KeywordBasedRetriever:
         self.backend_dir = Path(__file__).parent.parent.parent.parent.resolve()
         self.knowledge_path = self.backend_dir / "knowledge"
 
-    def invoke(self, query: str) -> list[Document]:
+    def invoke(self, query: str, history: list = None) -> list[Document]:
         if not self.knowledge_path.exists():
             return []
 
+        # Use LLM to translate regional queries and expand them to clean English keywords
+        search_terms = query
+        try:
+            from app.ai.llm.factory import get_llm
+            from langchain_core.messages import SystemMessage
+            llm = get_llm()
+            
+            history_str = ""
+            if history:
+                history_str = "\n".join(
+                    f"{'Customer' if msg.get('role') == 'user' else 'Assistant'}: {msg.get('message')}"
+                    for msg in history[-5:]
+                )
+                
+            prompt = f"""
+            You are a translation and keyword-expansion assistant for a RAG retrieval system.
+            The knowledge base documents are written in English and cover bus policies (baggage, cancellation, refund, rescheduling, payment, faq).
+            Your goal is to rewrite the user's message into a concise list of 2-5 English keywords to search these policy documents.
+            
+            Guidelines:
+            - If the message is in Hindi, Telugu, Tamil, Marathi, or other languages, translate the core terms to English.
+            - Resolve any pronouns/references using the Conversation History.
+            - Output ONLY space-separated English search keywords. Do not explain, greet, or use markdown.
+            
+            Conversation History:
+            {history_str}
+            
+            User's Message:
+            {query}
+            
+            Search Keywords:
+            """
+            response = llm.invoke([SystemMessage(content=prompt)])
+            rewritten = response.content.strip() if hasattr(response, "content") else str(response).strip()
+            if rewritten:
+                search_terms = rewritten
+        except Exception as e:
+            print(f"Notice: RAG query rewrite failed: {e}")
+
         # Clean query: lowercase and remove special characters
-        clean_query = re.sub(r'[^a-zA-Z0-9\s]', '', query.lower())
+        clean_query = re.sub(r'[^a-zA-Z0-9\s]', '', search_terms.lower())
         query_words = set(clean_query.split())
 
         # Simple stop words to filter out noise

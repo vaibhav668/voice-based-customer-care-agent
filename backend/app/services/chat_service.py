@@ -78,7 +78,7 @@ class ChatService:
         # Understand current message
         # ----------------------------------------
 
-        understanding = understand(request.message)
+        understanding = understand(request.message, history=session.history)
 
         # ----------------------------------------
         # Save Extracted Entities to Session
@@ -152,6 +152,7 @@ class ChatService:
             response = self.generator.general_chat(
                 request.message,
                 language=language,
+                history=session.history,
             )
             elapsed_ms = round((time.time() - start_time) * 1000, 2)
             ai_msg = self.msg_repo.add_message(
@@ -277,6 +278,7 @@ class ChatService:
             session_id=session_id,
             language=understanding.language or language,
             session_phone=session_phone,
+            history=session.history,
         )
 
         print("=" * 60)
@@ -299,6 +301,7 @@ class ChatService:
             localized_booking_msg = self.generator.request_booking_code(
                 language=language,
                 user_message=request.message,
+                history=session.history,
             )
 
             elapsed_ms = round((time.time() - start_time) * 1000, 2)
@@ -353,11 +356,24 @@ class ChatService:
         # Generate Final Response
         # ----------------------------------------
 
+        # Retrieve RAG context if the query pertains to policies/FAQs or booking changes
+        rag_context = None
+        if result.tool in ("booking_cancel", "cancellation", "reschedule", "refund", "refund_status", "payment", "faq"):
+            try:
+                from app.ai.rag.retriever import retriever
+                docs = retriever.invoke(request.message, history=session.history)
+                if docs:
+                    rag_context = "\n\n".join(d.page_content for d in docs)
+            except Exception:
+                pass
+
         response = self.generator.generate(
             result.tool,
             result.data,
             user_message=request.message,
             language=language,
+            rag_context=rag_context,
+            history=session.history,
         )
 
         print("=" * 60)

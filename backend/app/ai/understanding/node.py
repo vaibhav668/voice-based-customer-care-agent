@@ -9,10 +9,21 @@ from app.ai.intent.schemas import Intent
 llm = get_llm()
 
 
-def understand(message: str) -> UnderstandingResult:
+def understand(message: str, history: list = None) -> UnderstandingResult:
+    formatted_history = ""
+    if history:
+        history_msgs = []
+        for msg in history[-5:]:  # look at last 5 messages for context
+            role = "Customer" if msg.get("role") == "user" else "Assistant"
+            history_msgs.append(f"{role}: {msg.get('message')}")
+        formatted_history = "\n".join(history_msgs)
+
+    system_content = UNDERSTANDING_PROMPT
+    if formatted_history:
+        system_content += f"\n\nRecent Conversation History:\n{formatted_history}\n"
 
     messages = [
-        SystemMessage(content=UNDERSTANDING_PROMPT),
+        SystemMessage(content=system_content),
         HumanMessage(content=message),
     ]
 
