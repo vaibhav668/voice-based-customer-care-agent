@@ -28,18 +28,32 @@ class ResponseGenerator:
     def _get_hindi_feminine_rule(self, language: str) -> str:
         if (language or "en").lower() == "hi":
             return """
-            CRITICAL HINDI GRAMMAR REQUIREMENT:
-            Since the assistant voice is FEMALE, you MUST consistently use feminine grammatical structures throughout the entire conversation.
-            - Always use verb endings like "karungi" (करूंगी) instead of "karunga" (करूंगा) when saying how you will help.
-            - Always use verb endings like "sakti" (सकती) instead of "sakta" (सकता) (e.g., "Main aapki sahayata kar sakti hoon").
-            - Always use verb endings like "bataungi" (बताऊंगी) instead of "bataunga" (बताऊंगा).
-            - Ensure all other verbs, adjectives, and pronouns conform strictly to the feminine gender in Hindi. Never use masculine verb endings for the assistant's actions.
+            CRITICAL HINDI SPEECH REQUIREMENTS (this is a VOICE call — the response will be read aloud by a TTS engine):
+            1. Write ONLY in Devanagari script (हिंदी). Do NOT mix English words or Roman script into the response.
+               - WRONG: "Aapka arrival time 6:30 PM hai" (mixing Roman + Devanagari)
+               - CORRECT: "आपका आगमन का समय शाम छह बजकर तीस मिनट है"
+            2. Since the assistant voice is FEMALE, ALWAYS use feminine grammatical structures:
+               - Use "करूंगी" not "करूंगा", "सकती हूं" not "सकता हूं", "बताऊंगी" not "बताऊंगा".
+            3. Speak conversationally — like a friendly human call center agent. Do NOT sound like you're reading a document.
+               - Short, warm, clear sentences. No bullet points or formal lists.
+            4. Never use awkward formal Sanskrit-heavy words when simpler Hindi exists. Prefer everyday spoken Hindi.
             """
         return ""
+
+    def _get_voice_speech_rule(self, language: str) -> str:
+        """Returns a spoken-language clarity rule for TTS output in any language."""
+        return f"""
+        IMPORTANT — THIS RESPONSE WILL BE SPOKEN ALOUD ON A PHONE CALL:
+        - Write in natural spoken {self._get_lang_name(language)} only. Do NOT mix scripts or languages.
+        - Use short, conversational sentences. Avoid bullet points, numbered lists, or formal document-style prose.
+        - Spell out numbers and times naturally as words (e.g. "six thirty in the evening", not "6:30 PM").
+        - Do not use special characters or symbols (&, *, #, etc.) that a TTS engine cannot pronounce.
+        """
 
     def general_chat(self, message: str, language: str = "en", history: list = None) -> str:
         lang_name = self._get_lang_name(language)
         hindi_rule = self._get_hindi_feminine_rule(language)
+        voice_rule = self._get_voice_speech_rule(language)
 
         history_str = ""
         if history:
@@ -66,6 +80,7 @@ CRITICAL REQUIREMENTS:
 2. Speak like a professional travel support executive. Avoid repeating greetings or introductory phrases (like "Hello", "How can I help you today?") if the message history indicates the conversation is already in progress.
 3. Be concise, polite, and context-aware. Never sound robotic.
 {hindi_rule}
+{voice_rule}
 
 Recent Conversation History:
 {history_str}
@@ -92,6 +107,7 @@ Recent Conversation History:
     ) -> str:
         lang_name = self._get_lang_name(language)
         hindi_rule = self._get_hindi_feminine_rule(language)
+        voice_rule = self._get_voice_speech_rule(language)
 
         history_str = ""
         if history:
@@ -133,6 +149,7 @@ CRITICAL REQUIREMENTS:
 1. You MUST generate your response ONLY in the following language: {lang_name}.
 2. Do not invent information. Only use the supplied data.
 {hindi_rule}
+{voice_rule}
 
 Recent Conversation History:
 {history_str}
@@ -151,6 +168,7 @@ Recent Conversation History:
     def request_booking_code(self, language: str = "en", user_message: str | None = None, history: list = None) -> str:
         lang_name = self._get_lang_name(language)
         hindi_rule = self._get_hindi_feminine_rule(language)
+        voice_rule = self._get_voice_speech_rule(language)
 
         history_str = ""
         if history:
@@ -173,6 +191,7 @@ CRITICAL REQUIREMENTS:
 2. Speak like a professional travel support executive. Avoid repeating greetings or introductory phrases (like "Hello", "How can I help you today?") if the message history indicates the conversation is already in progress.
 3. Be concise, polite, and context-aware. Never sound robotic.
 {hindi_rule}
+{voice_rule}
 
 Recent Conversation History:
 {history_str}

@@ -66,16 +66,20 @@ class PlivoAdapter(TelephonyProvider):
 
 
     def _map_voice(self, language: str) -> str:
-        """Maps language code to premium Amazon Polly voice."""
+        """Maps language code to premium Amazon Polly neural voice for natural, conversational output."""
         mapping = {
-            "en": "Polly.Raveena", # Indian English Female
-            "hi": "Polly.Aditi",   # Hindi Female (also excellent for mixed Hindi/English)
-            "te": "Polly.Chitra",  # Telugu Female
-            "ta": "Polly.Madhavi", # Tamil Female
+            "en": "Polly.Raveena",   # Indian English Female
+            "hi": "Polly.Kajal",     # Hindi Neural Female - warm, modern, natural (not robotic)
+            "te": "Polly.Chitra",    # Telugu Female
+            "ta": "Polly.Madhavi",   # Tamil Female
+            "mr": "Polly.Kajal",     # Marathi - use Kajal (Hindi/Indian neural) as closest option
+            "kn": "Polly.Chitra",    # Kannada - use Chitra (Dravidian family)
+            "gu": "Polly.Raveena",   # Gujarati - use Indian English voice
+            "bn": "Polly.Raveena",   # Bengali - use Indian English voice
+            "ml": "Polly.Chitra",    # Malayalam - Dravidian family
+            "ur": "Polly.Kajal",     # Urdu - same script/phonetics as Hindi, Kajal works well
         }
-        # Fallback to Polly.Aditi for regional Indian languages as it is multilingual
-        # and has a warm, natural Indian accent, unlike legacy WOMAN/MAN.
-        return mapping.get((language or "en").lower(), "Polly.Aditi")
+        return mapping.get((language or "en").lower(), "Polly.Kajal")
 
     def validate_signature(self, method: str, url: str, nonce: str, signature: str, params: Dict[str, Any]) -> bool:
         """Validates that incoming webhook calls originated from Plivo servers."""
