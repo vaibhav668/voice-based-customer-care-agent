@@ -23,6 +23,10 @@ if "postgresql" in db_url:
         engine = temp_engine
         print("Connected to PostgreSQL successfully.")
     except Exception as e:
+        if settings.app_env.lower() == "production":
+            raise RuntimeError(
+                "PostgreSQL connection failed in production; refusing to fall back to SQLite."
+            ) from e
         sqlite_path = Path(__file__).parent.parent.parent / "supportai.db"
         print(f"Warning: PostgreSQL connection failed ({e}). Falling back to SQLite at {sqlite_path}")
         db_url = f"sqlite:///{sqlite_path}"

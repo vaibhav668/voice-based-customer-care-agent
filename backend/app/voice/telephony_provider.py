@@ -51,6 +51,14 @@ class PlivoAdapter(TelephonyProvider):
         mapping = {
             "en": "en-US",
             "hi": "hi-IN",
+            "mr": "mr-IN",
+            "te": "te-IN",
+            "ta": "ta-IN",
+            "kn": "kn-IN",
+            "gu": "gu-IN",
+            "bn": "bn-IN",
+            "ml": "ml-IN",
+            "ur": "hi-IN",
         }
         return mapping.get((language or "en").lower(), "en-US")
 
@@ -60,9 +68,19 @@ class PlivoAdapter(TelephonyProvider):
         # This is natively supported by Plivo (preventing Invalid Action XML validation crashes)
         # and optimized for Indian accents and mixed dialect pronunciations.
         lang_lower = (language or "en").lower()
-        if lang_lower == "en":
-            return "en-US"
-        return "en-IN"
+        mapping = {
+            "en": "en-US",
+            "hi": "hi-IN",
+            "mr": "mr-IN",
+            "te": "te-IN",
+            "ta": "ta-IN",
+            "kn": "kn-IN",
+            "gu": "gu-IN",
+            "bn": "bn-IN",
+            "ml": "ml-IN",
+            "ur": "hi-IN",
+        }
+        return mapping.get(lang_lower, "en-IN")
 
 
     def _map_voice(self, language: str) -> str:

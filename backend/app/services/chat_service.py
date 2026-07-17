@@ -26,6 +26,51 @@ class ChatService:
         self.conv_repo = ConversationRepository(self.db)
         self.msg_repo = ConversationMessageRepository(self.db)
 
+    def _hydrate_voice_context(self, session_id: str, session, user_id, language: str):
+        """Load verified IVR context from the database before each voice turn."""
+        if not session_id or not str(session_id).startswith("ivr-"):
+            return user_id, language
+
+        try:
+            from app.database.models.ivr_session import IvrSession
+
+            ivr_session = (
+                self.db.query(IvrSession)
+                .filter(IvrSession.session_id == session_id)
+                .first()
+            )
+            if not ivr_session:
+                return user_id, language
+
+            if ivr_session.booking_code:
+                session.entities["booking_code"] = ivr_session.booking_code
+            if ivr_session.phone_number:
+                session.entities["phone_number"] = ivr_session.phone_number
+            if ivr_session.user_id:
+                session.entities["user_id"] = ivr_session.user_id
+                user_id = user_id or ivr_session.user_id
+            if ivr_session.language:
+                session.language = ivr_session.language
+                language = ivr_session.language
+
+            return user_id, language
+        except Exception as e:
+            print("Voice context hydration notice:", e)
+            return user_id, language
+
+    @staticmethod
+    def _is_booking_detail_question(message: str) -> bool:
+        text = (message or "").lower()
+        keywords = (
+            "arrival", "arrive", "reach", "reaching", "arrival time",
+            "departure", "depart", "boarding", "drop", "destination",
+            "source", "seat", "bus", "status", "time", "timing", "eta",
+            "kab", "kahan", "kaha", "samay", "pahuche", "pahuchegi",
+            "aagman", "prashthan", "seat", "seet", "gaadi", "gadi",
+            "पहुँच", "आगमन", "समय", "कब", "बस", "सीट",
+        )
+        return any(keyword in text for keyword in keywords)
+
     def process(
         self,
         request: ChatRequest,
@@ -41,6 +86,12 @@ class ChatService:
             session.language = request.language.lower()
 
         language = getattr(session, "language", "en")
+        user_id, language = self._hydrate_voice_context(
+            session_id=session_id,
+            session=session,
+            user_id=user_id,
+            language=language,
+        )
 
         # ----------------------------------------
         # Permanent Database Conversation Session
@@ -101,6 +152,14 @@ class ChatService:
             session.entities["seat_number"] = understanding.seat_number
         if understanding.phone_number:
             session.entities["phone_number"] = understanding.phone_number
+
+        verified_booking_code = understanding.booking_code or session.entities.get("booking_code")
+        if (
+            verified_booking_code
+            and understanding.intent in (Intent.GENERAL, Intent.FOLLOW_UP, None)
+            and self._is_booking_detail_question(request.message)
+        ):
+            understanding.intent = Intent.BOOKING_STATUS
 
         # ----------------------------------------
         # Context Follow-up
