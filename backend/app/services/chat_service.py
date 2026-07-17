@@ -156,7 +156,7 @@ class ChatService:
         verified_booking_code = understanding.booking_code or session.entities.get("booking_code")
         if (
             verified_booking_code
-            and understanding.intent in (Intent.GENERAL, Intent.FOLLOW_UP, None)
+            and understanding.intent in (Intent.GENERAL, Intent.FOLLOW_UP, Intent.FAQ, Intent.LIST_BOOKINGS, None)
             and self._is_booking_detail_question(request.message)
         ):
             understanding.intent = Intent.BOOKING_STATUS

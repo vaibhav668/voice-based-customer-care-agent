@@ -243,6 +243,49 @@ def run_tests():
         assert db_conv_esc.resolution_status == "escalated"
         print("-> SUCCESS: Resolution status updated to 'escalated' in DB!")
 
+        # --------------------------------------------------
+        # 4. Intent Override for Booking-Specific Queries
+        # --------------------------------------------------
+        print("\n--- 4. Testing Intent Override for Booking-Specific Queries ---")
+        override_sess = f"test-sess-{uuid.uuid4().hex[:6]}"
+        
+        # Hydrate the session with a verified booking code BK-1234 (must first verify ownership using registered phone number)
+        owner_phone = user.phone or "9568987360"
+        chat_service.process(
+            request=ChatRequest(session_id=override_sess, message=f"My phone number is {owner_phone}"),
+            user_id=None,
+            channel="VOICE"
+        )
+        chat_service.process(
+            request=ChatRequest(session_id=override_sess, message="Check booking BK-1234"),
+            user_id=None,
+            channel="VOICE"
+        )
+        
+        # Now ask: "arrival time" (which normally classifies as Intent.FAQ)
+        resp_arrival = chat_service.process(
+            request=ChatRequest(session_id=override_sess, message="arrival time"),
+            user_id=None,
+            channel="VOICE"
+        )
+        print(f"Arrival Time Query Response: {resp_arrival.get('response')}")
+        response_text = resp_arrival.get("response").lower()
+        assert "arrival" in response_text or "arrive" in response_text or "23:45" in response_text or "11:45" in response_text or "pm" in response_text
+        
+        # Now ask: "I want to know my destination" (which normally classifies as Intent.LIST_BOOKINGS or Intent.GENERAL)
+        resp_dest = chat_service.process(
+            request=ChatRequest(session_id=override_sess, message="I want to know my destination"),
+            user_id=None,
+            channel="VOICE"
+        )
+        print(f"Destination Query Response: {resp_dest.get('response')}")
+        assert "jaipur" in resp_dest.get("response").lower()
+        
+        # Verify the DB message has intent == BOOKING_STATUS
+        db_conv_override = db.query(Conversation).filter_by(session_id=override_sess).first()
+        assert db_conv_override.current_intent == "Intent.BOOKING_STATUS" or db_conv_override.current_intent == "BOOKING_STATUS"
+        print("-> SUCCESS: Intent override for booking-specific queries verified successfully!")
+
         print("\n==================================================")
         print("ALL TRAVEL BOOKING PLATFORM SYSTEM UPGRADE TESTS PASSED!")
         print("==================================================")
