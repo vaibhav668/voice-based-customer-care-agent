@@ -357,9 +357,9 @@ class ChatService:
         # Generate Final Response
         # ----------------------------------------
 
-        # Retrieve RAG context if the query pertains to policies/FAQs or booking changes
+        # Retrieve RAG context if the query contains policy search keywords or is a policy tool
         rag_context = None
-        if result.tool in ("booking_cancel", "cancellation", "reschedule", "refund", "refund_status", "payment", "faq"):
+        if understanding.search_keywords or result.tool in ("booking_cancel", "cancellation", "reschedule", "refund", "refund_status", "payment", "faq"):
             try:
                 from app.ai.rag.retriever import retriever
                 docs = retriever.invoke(

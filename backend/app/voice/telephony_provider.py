@@ -56,11 +56,26 @@ class PlivoAdapter(TelephonyProvider):
 
     def _map_asr_language(self, language: str) -> str:
         """Maps internal language codes to standard BCP 47 language tags for ASR recognition."""
-        # Always return 'en-US' because Plivo ASR on standard accounts does not natively support
-        # or rejects regional dialects (hi-IN, en-IN, te-IN, etc.) for speech input collection,
-        # which triggers XML schema crashes. Returning 'en-US' keeps the call connected in all cases.
-        return "en-US"
+        # Standardize all non-English regional Indian languages to 'en-IN' (Indian English) for ASR.
+        # This is natively supported by Plivo (preventing Invalid Action XML validation crashes)
+        # and optimized for Indian accents and mixed dialect pronunciations.
+        lang_lower = (language or "en").lower()
+        if lang_lower == "en":
+            return "en-US"
+        return "en-IN"
 
+
+    def _map_voice(self, language: str) -> str:
+        """Maps language code to premium Amazon Polly voice."""
+        mapping = {
+            "en": "Polly.Raveena", # Indian English Female
+            "hi": "Polly.Aditi",   # Hindi Female (also excellent for mixed Hindi/English)
+            "te": "Polly.Chitra",  # Telugu Female
+            "ta": "Polly.Madhavi", # Tamil Female
+        }
+        # Fallback to Polly.Aditi for regional Indian languages as it is multilingual
+        # and has a warm, natural Indian accent, unlike legacy WOMAN/MAN.
+        return mapping.get((language or "en").lower(), "Polly.Aditi")
 
     def validate_signature(self, method: str, url: str, nonce: str, signature: str, params: Dict[str, Any]) -> bool:
         """Validates that incoming webhook calls originated from Plivo servers."""
@@ -91,7 +106,7 @@ class PlivoAdapter(TelephonyProvider):
             get_input.add(plivoxml.PlayElement(audio_url))
         else:
             plivo_lang = self._map_language(language)
-            get_input.add(plivoxml.SpeakElement(prompt, language=plivo_lang))
+            get_input.add(plivoxml.SpeakElement(prompt, voice=self._map_voice(language), language=plivo_lang))
         response.add(get_input)
         return response.to_string()
 
@@ -117,7 +132,7 @@ class PlivoAdapter(TelephonyProvider):
         if audio_url:
             get_input.add(plivoxml.PlayElement(audio_url))
         else:
-            get_input.add(plivoxml.SpeakElement(text_prompt, language=plivo_lang))
+            get_input.add(plivoxml.SpeakElement(text_prompt, voice=self._map_voice(language), language=plivo_lang))
         response.add(get_input)
         return response.to_string()
 
@@ -140,7 +155,7 @@ class PlivoAdapter(TelephonyProvider):
             get_input.add(plivoxml.PlayElement(audio_url))
         else:
             plivo_lang = self._map_language(language)
-            get_input.add(plivoxml.SpeakElement(text_prompt, language=plivo_lang))
+            get_input.add(plivoxml.SpeakElement(text_prompt, voice=self._map_voice(language), language=plivo_lang))
         response.add(get_input)
         return response.to_string()
 
@@ -151,6 +166,6 @@ class PlivoAdapter(TelephonyProvider):
             response.add(plivoxml.PlayElement(audio_url))
         else:
             plivo_lang = self._map_language(language)
-            response.add(plivoxml.SpeakElement(prompt, language=plivo_lang))
+            response.add(plivoxml.SpeakElement(prompt, voice=self._map_voice(language), language=plivo_lang))
         response.add(plivoxml.HangupElement())
         return response.to_string()
