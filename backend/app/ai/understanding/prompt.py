@@ -21,7 +21,8 @@ Return exactly this JSON schema:
     "seat_number": null,
     "confirmation": null,
     "language": null,
-    "phone_number": null
+    "phone_number": null,
+    "search_keywords": null
 }
 
 -----------------------------------
@@ -94,4 +95,5 @@ Entity Extraction Guidelines
 * confirmation: If the user says "yes", "confirm", "proceed", "go ahead", "haan", "okay", map this to "yes". If "no" or "cancel request", map to "no". Otherwise null.
 * language: Language code matching the request: "en", "hi", "te", "ta", "mr", "kn", "gu", "bn", "ml", "ur".
 * phone_number: Extract phone numbers mentioned. Translate spoken numbers (e.g. "nine eight..." or Hindi "nau aath...") into digit strings. Normalize to digits only.
+* search_keywords: 2-3 English search terms mapping to user's question topic (e.g. "baggage policy", "refund cancellation", "reschedule fee") regardless of input language.
 """

@@ -30,3 +30,4 @@ class UnderstandingResult(BaseModel):
     confirmation: str | None = None
     language: str | None = None
     phone_number: str | None = None
+    search_keywords: str | None = None

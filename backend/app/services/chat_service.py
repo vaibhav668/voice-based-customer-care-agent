@@ -279,6 +279,7 @@ class ChatService:
             language=understanding.language or language,
             session_phone=session_phone,
             history=session.history,
+            search_keywords=understanding.search_keywords,
         )
 
         print("=" * 60)
@@ -361,7 +362,11 @@ class ChatService:
         if result.tool in ("booking_cancel", "cancellation", "reschedule", "refund", "refund_status", "payment", "faq"):
             try:
                 from app.ai.rag.retriever import retriever
-                docs = retriever.invoke(request.message, history=session.history)
+                docs = retriever.invoke(
+                    request.message,
+                    history=session.history,
+                    search_keywords=understanding.search_keywords
+                )
                 if docs:
                     rag_context = "\n\n".join(d.page_content for d in docs)
             except Exception:
