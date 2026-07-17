@@ -94,6 +94,20 @@ def run_tests():
         booking.user_id = user.id
         db.commit()
 
+        # Ensure BK-1234's trip route is populated with source="Delhi" and destination="Jaipur"
+        if booking.trip:
+            if not booking.trip.route:
+                from app.database.models.route import Route
+                route = Route(source_city="Delhi", destination_city="Jaipur", distance_km=280, estimated_duration_minutes=300)
+                db.add(route)
+                db.commit()
+                booking.trip.route_id = route.id
+                db.commit()
+            else:
+                booking.trip.route.source_city = "Delhi"
+                booking.trip.route.destination_city = "Jaipur"
+                db.commit()
+
         # Create test campaign
         campaign = db.query(Campaign).filter_by(name="Test July Campaign").first()
         if not campaign:

@@ -36,6 +36,33 @@ def understand(message: str, history: list = None) -> UnderstandingResult:
 
         data = parse_json(response)
 
+        # Convert lists to comma-separated strings for string fields, and ensure string type
+        str_fields = [
+            "booking_code", "passenger_name", "complaint", "bus_number",
+            "source_city", "destination_city", "travel_date", "confirmation",
+            "language", "phone_number", "search_keywords"
+        ]
+        for field in str_fields:
+            val = data.get(field)
+            if val is not None:
+                if isinstance(val, list):
+                    data[field] = ", ".join([str(x) for x in val if x is not None])
+                else:
+                    data[field] = str(val)
+
+        # Handle seat_number safely
+        seat_val = data.get("seat_number")
+        if seat_val is not None:
+            if isinstance(seat_val, list):
+                seat_val = seat_val[0] if seat_val else None
+            if seat_val is not None:
+                try:
+                    # Extract numeric digits
+                    seat_digits = "".join(filter(str.isdigit, str(seat_val)))
+                    data["seat_number"] = int(seat_digits) if seat_digits else None
+                except Exception:
+                    data["seat_number"] = None
+
         intent_val = data.get("intent")
         if not intent_val or intent_val not in [i.value for i in Intent]:
             data["intent"] = Intent.GENERAL.value

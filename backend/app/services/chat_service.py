@@ -242,7 +242,7 @@ class ChatService:
             }
 
         # ----------------------------------------
-        # Continue Previous Intent
+        # Continue Previous Intent / Fallback to Last Intent
         # ----------------------------------------
 
         if session.current_intent:
@@ -250,6 +250,21 @@ class ChatService:
                 understanding.intent = session.current_intent
             else:
                 session.current_intent = understanding.intent
+        else:
+            if understanding.intent in (Intent.PROVIDE_BOOKING_CODE, Intent.FOLLOW_UP) or not understanding.intent:
+                last_intent_val = session.entities.get("last_intent")
+                if last_intent_val:
+                    if isinstance(last_intent_val, str):
+                        try:
+                            understanding.intent = Intent(last_intent_val)
+                        except ValueError:
+                            pass
+                    else:
+                        understanding.intent = last_intent_val
+
+        # Update last_intent if we have a concrete active intent
+        if understanding.intent and understanding.intent not in (Intent.GENERAL, Intent.FOLLOW_UP, Intent.PROVIDE_BOOKING_CODE):
+            session.entities["last_intent"] = understanding.intent.value if hasattr(understanding.intent, "value") else str(understanding.intent)
 
         print("=" * 60)
         print("UNDERSTANDING")

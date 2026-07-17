@@ -24,6 +24,7 @@ class VoiceService:
         audio_relative_path: str | None = None,
         db: Session | None = None,
         append_text: str = "",
+        generate_tts: bool = True,
     ):
         if db:
             self.chat_service = ChatService(db=db)
@@ -59,14 +60,16 @@ class VoiceService:
             tts_text = f"{tts_text} {append_text}"
 
         # ---------------- Text → Speech ---------------- #
-        try:
-            generated_audio = await self.tts.generate(
-                tts_text,
-                language=language,
-            )
-        except Exception as e:
-            print("Notice: Failed to generate TTS via edge-tts in VoiceService:", e)
-            generated_audio = ""
+        generated_audio = ""
+        if generate_tts:
+            try:
+                generated_audio = await self.tts.generate(
+                    tts_text,
+                    language=language,
+                )
+            except Exception as e:
+                print("Notice: Failed to generate TTS via edge-tts in VoiceService:", e)
+                generated_audio = ""
 
 
         # Update DB AI Message with generated audio path

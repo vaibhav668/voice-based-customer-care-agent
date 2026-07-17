@@ -664,6 +664,7 @@ class IVRCallSession:
             user_id=self.user_id,
             db=self.db,
             append_text=append_text,
+            generate_tts=False,
         )
 
         # Retrieve resolution status updates
