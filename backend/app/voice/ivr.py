@@ -149,6 +149,14 @@ PROMPTS = {
     }
 }
 
+# The stored translated IVR prompt text is currently corrupted mojibake in several
+# languages. Plivo may reject or stall on invalid speech XML, so keep IVR control
+# prompts in stable English while still preserving the selected language for AI
+# responses and call metadata.
+for _lang in list(PROMPTS.keys()):
+    if _lang != "en":
+        PROMPTS[_lang] = PROMPTS["en"].copy()
+
 
 class IVRCallSession:
 
@@ -233,6 +241,40 @@ class IVRCallSession:
                 self.user_id = str(user.id)
                 self.language = user.preferred_language or "en"
 
+    def _sync_verified_context(self):
+        """Keeps DB-backed verification details available to the chat agent."""
+        if self.booking_code:
+            from app.repositories.booking_repository import BookingRepository
+
+            booking = BookingRepository(self.db).get_booking_with_trip(self.booking_code)
+            if booking:
+                if not self.user_id and booking.user_id:
+                    caller_digits = "".join(filter(str.isdigit, str(self.phone_number or "")))[-10:]
+                    owner_digits = "".join(filter(str.isdigit, str(booking.user.phone if booking.user else "")))[-10:]
+                    if caller_digits and caller_digits == owner_digits:
+                        self.user_id = str(booking.user_id)
+                        self._save_to_db()
+
+                conv = ConversationRepository(self.db).get_or_create_session(
+                    session_id=self.session_id,
+                    user_id=self.user_id,
+                    channel="VOICE",
+                    language=self.language,
+                )
+                conv.booking_id = booking.id
+                self.db.commit()
+
+        from app.conversation.manager import ConversationManager
+
+        mem_session = ConversationManager().get_session(self.session_id)
+        mem_session.language = self.language
+        if self.booking_code:
+            mem_session.entities["booking_code"] = self.booking_code
+        if self.phone_number:
+            mem_session.entities["phone_number"] = self.phone_number
+        if self.user_id:
+            mem_session.entities["user_id"] = self.user_id
+
     def advance_state(self, action: str, data: Optional[str] = None) -> dict:
         """
         Processes IVR inputs (DTMF or voice) and transitions the call state.
@@ -260,12 +302,13 @@ class IVRCallSession:
                 auth_id = os.getenv("PLIVO_AUTH_ID")
                 auth_token = os.getenv("PLIVO_AUTH_TOKEN")
                 public_url = os.getenv("PUBLIC_URL")
-                if auth_id and auth_token and public_url:
+                auto_record = os.getenv("PLIVO_AUTO_RECORD", "false").lower() == "true"
+                if auto_record and auth_id and auth_token and public_url:
                     client = plivo.RestClient(auth_id, auth_token)
-                    recording = client.calls.record_create(
+                    recording = client.calls.start_recording(
                         call_uuid=self.call_id,
                         file_format='mp3',
-                        recording_callback_url=f"{public_url}/api/v1/telephony/plivo/recording-callback",
+                        callback_url=f"{public_url}/api/v1/telephony/plivo/recording-callback",
                     )
                     recording_id = getattr(recording, "recording_id", None) or (recording.get("recording_id") if hasattr(recording, "get") else None)
                     self._log_system_event(f"Call recording started automatically. Recording ID: {recording_id}")
@@ -291,12 +334,13 @@ class IVRCallSession:
                         auth_id = os.getenv("PLIVO_AUTH_ID")
                         auth_token = os.getenv("PLIVO_AUTH_TOKEN")
                         public_url = os.getenv("PUBLIC_URL")
-                        if auth_id and auth_token and public_url:
+                        auto_record = os.getenv("PLIVO_AUTO_RECORD", "false").lower() == "true"
+                        if auto_record and auth_id and auth_token and public_url:
                             client = plivo.RestClient(auth_id, auth_token)
-                            recording = client.calls.record_create(
+                            recording = client.calls.start_recording(
                                 call_uuid=self.call_id,
                                 file_format='mp3',
-                                recording_callback_url=f"{public_url}/api/v1/telephony/plivo/recording-callback",
+                                callback_url=f"{public_url}/api/v1/telephony/plivo/recording-callback",
                             )
                             recording_id = getattr(recording, "recording_id", None) or (recording.get("recording_id") if hasattr(recording, "get") else None)
                             self._log_system_event(f"Call recording started by system. Recording ID: {recording_id}")
@@ -463,8 +507,11 @@ class IVRCallSession:
                 from app.conversation.manager import ConversationManager
                 manager_inst = ConversationManager()
                 session = manager_inst.get_session(self.session_id)
+                session.language = self.language
                 session.entities["booking_code"] = self.booking_code
                 session.entities["phone_number"] = self.phone_number
+                if self.user_id:
+                    session.entities["user_id"] = self.user_id
                 
                 self._log_system_event(f"Booking {booking_code} verified. Entering active support agent.")
                 broadcast_call_event("call_updated", self.session_id, f"Booking {booking_code} verified.", {
@@ -552,6 +599,7 @@ class IVRCallSession:
         if self.state != IVRState.ACTIVE_AGENT:
             return {"error": "Voice inputs are only allowed during the active agent state."}
 
+        self._sync_verified_context()
         voice_service = VoiceService(db=self.db)
         
         # Process speech agent loop
@@ -594,6 +642,7 @@ class IVRCallSession:
         if self.state != IVRState.ACTIVE_AGENT:
             return {"error": "Voice inputs are only allowed during the active agent state."}
 
+        self._sync_verified_context()
         from app.schemas.chat import ChatRequest
         from app.services.chat_service import ChatService
         chat_service = ChatService(db=self.db)

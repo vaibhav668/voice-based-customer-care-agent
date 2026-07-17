@@ -13,6 +13,7 @@ router = APIRouter(
 )
 
 adapter = PlivoAdapter()
+BOOKING_REF_DIGITS = 4
 
 
 def get_public_audio_url(audio_path: str) -> str:
@@ -224,7 +225,7 @@ async def handle_language(
     xml = adapter.generate_menu_response(
         prompt=res["prompt"],
         expect_input="DTMF",
-        num_digits=6,
+        num_digits=BOOKING_REF_DIGITS,
         action_url="/api/v1/telephony/plivo/verify_code",
         audio_url=audio_url,
         language=session.language,
@@ -257,7 +258,7 @@ async def handle_verify_code(
         xml = adapter.generate_menu_response(
             prompt=res["prompt"],
             expect_input="DTMF",
-            num_digits=6,
+            num_digits=BOOKING_REF_DIGITS,
             action_url="/api/v1/telephony/plivo/verify_code",
             audio_url=audio_url,
             language=session.language,
@@ -289,7 +290,7 @@ async def handle_verify_phone(
         xml = adapter.generate_menu_response(
             prompt=res["prompt"],
             expect_input="DTMF",
-            num_digits=6,
+            num_digits=BOOKING_REF_DIGITS,
             action_url="/api/v1/telephony/plivo/verify_code",
             audio_url=audio_url,
             language=session.language,
