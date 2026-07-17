@@ -608,21 +608,13 @@ class IVRCallSession:
             channel="VOICE",
         )
 
-        from app.voice.tts import TextToSpeech
-        tts = TextToSpeech()
-        
         tts_text = res_chat["response"]
         if append_text:
             tts_text = f"{tts_text} {append_text}"
 
-        try:
-            generated_audio = await tts.generate(
-                tts_text,
-                language=self.language,
-            )
-        except Exception as e:
-            print("Notice: Failed to generate TTS via edge-tts in ivr.py:", e)
-            generated_audio = ""
+        # Bypass slow dynamic edge-tts generation to prevent Plivo webhook timeouts.
+        # This will automatically fall back to Plivo's native, high-quality, zero-latency <Speak> tag.
+        generated_audio = ""
 
 
         if res_chat.get("db_message_id"):

@@ -25,27 +25,12 @@ def get_public_audio_url(audio_path: str) -> str:
 
 
 async def safe_tts_audio_url(text: str, language: str = "en") -> str:
-    """Generates TTS audio and returns its public URL, or empty string on failure.
+    """Always return empty string to bypass slow dynamic edge-tts generation.
     
-    Returns empty string when TTS fails so callers can fall back to Plivo's
-    built-in Speak TTS, avoiding broken Play URLs that cause Invalid Action XML errors.
+    This forces Plivo to use its native, zero-latency <Speak> tag for all voice/IVR
+    prompts in the target language, eliminating webhook timeouts and call drops.
     """
-    try:
-        from app.voice.tts import TextToSpeech
-        tts = TextToSpeech()
-        audio_file = await tts.generate(text, language=language)
-        if not audio_file:
-            return ""
-        # Resolve path using the TextToSpeech absolute output directory
-        filename = audio_file.split("/")[-1]
-        full_path = tts.output_dir / filename
-        if not full_path.exists():
-            print(f"Warning: TTS audio file not found on disk at: {full_path}")
-            return ""
-        return get_public_audio_url(audio_file)
-    except Exception as e:
-        print(f"Notice: TTS generation failed, using Speak fallback: {e}")
-        return ""
+    return ""
 
 
 def get_public_url(path: str) -> str:
