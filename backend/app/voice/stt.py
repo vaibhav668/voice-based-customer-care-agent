@@ -30,13 +30,22 @@ class SpeechToText:
         lang_code = language.lower() if language and language.lower() in {"en", "hi", "mr", "te", "ta", "kn", "gu", "bn", "ml", "ur"} else "en"
 
         with open(audio_path, "rb") as audio_file:
-
-            transcription = self.client.audio.transcriptions.create(
-                file=audio_file,
-                model="whisper-large-v3",
-                response_format="text",
-                language=lang_code,
-                temperature=0,
-            )
+            if lang_code != "en":
+                # Translate regional language speech directly into English text for accurate agent processing
+                transcription = self.client.audio.translations.create(
+                    file=audio_file,
+                    model="whisper-large-v3",
+                    response_format="text",
+                    temperature=0,
+                )
+            else:
+                # Transcribe English directly
+                transcription = self.client.audio.transcriptions.create(
+                    file=audio_file,
+                    model="whisper-large-v3",
+                    response_format="text",
+                    language=lang_code,
+                    temperature=0,
+                )
 
         return transcription.strip()

@@ -647,7 +647,7 @@ class IVRCallSession:
             "expect_input": "NONE",
         }
 
-    async def process_voice_agent_turn(self, audio_path: str, audio_relative_path: Optional[str] = None) -> dict:
+    async def process_voice_agent_turn(self, audio_path: str, audio_relative_path: Optional[str] = None, append_text: str = "") -> dict:
         """Processes voice turn: STT -> ChatAgent -> TTS."""
         if self.state != IVRState.ACTIVE_AGENT:
             return {"error": "Voice inputs are only allowed during the active agent state."}
@@ -663,6 +663,7 @@ class IVRCallSession:
             language=self.language,
             user_id=self.user_id,
             db=self.db,
+            append_text=append_text,
         )
 
         # Retrieve resolution status updates

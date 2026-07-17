@@ -26,12 +26,22 @@ def get_public_audio_url(audio_path: str) -> str:
 
 
 async def safe_tts_audio_url(text: str, language: str = "en") -> str:
-    """Always return empty string to bypass slow dynamic edge-tts generation.
+    """Always return empty string to bypass slow dynamic edge-tts generation for English.
     
-    This forces Plivo to use its native, zero-latency <Speak> tag for all voice/IVR
-    prompts in the target language, eliminating webhook timeouts and call drops.
+    For regional Indian languages, dynamically generate the audio using edge-tts
+    and return the public URL so Plivo plays it via <Play> (bypassing native Plivo TTS).
     """
-    return ""
+    if (language or "en").lower() == "en":
+        return ""
+    
+    try:
+        from app.voice.tts import TextToSpeech
+        tts = TextToSpeech()
+        audio_path = await tts.generate(text, language=language)
+        return get_public_audio_url(audio_path)
+    except Exception as e:
+        print(f"Failed to generate TTS in safe_tts_audio_url for language {language}: {e}")
+        return ""
 
 
 def get_public_url(path: str) -> str:
@@ -303,6 +313,8 @@ async def handle_agent_turn(
     CallUUID: str = Form(...),
     Speech: str = Form(None),
     SpeechResult: str = Form(None),
+    RecordUrl: str = Form(None),
+    RecordingUrl: str = Form(None),
     db: Session = Depends(get_db),
     _ = Depends(validate_plivo_signature_dependency),
 ):
@@ -310,45 +322,119 @@ async def handle_agent_turn(
     session = ivr_manager.get_or_create_call(CallUUID, "", db)
     from app.voice.ivr import PROMPTS
     
-    user_speech = Speech or SpeechResult
     choose_prompt = PROMPTS.get(session.language, PROMPTS["en"])["choose_query"]
+    record_url = RecordUrl or RecordingUrl
     
-    if not user_speech or not user_speech.strip():
-        audio_url = await safe_tts_audio_url(choose_prompt, language=session.language)
-
+    if (session.language or "en").lower() != "en":
+        # Non-English regional languages flow: expects recording URL via Plivo <Record>
+        if not record_url:
+            audio_url = await safe_tts_audio_url(choose_prompt, language=session.language)
+            xml = adapter.generate_query_choice_response(
+                audio_url=audio_url,
+                text_prompt=choose_prompt,
+                action_url="/api/v1/telephony/plivo/query_choice",
+                language=session.language,
+            )
+            return Response(content=xml, media_type="application/xml")
+            
+        import httpx
+        from pathlib import Path
+        import uuid
+        
+        TEMP_DIR = Path(__file__).parent.parent.parent.parent / "temp"
+        TEMP_DIR.mkdir(exist_ok=True)
+        
+        extension = ".mp3"
+        filename = f"{uuid.uuid4()}{extension}"
+        file_path = TEMP_DIR / filename
+        relative_audio_path = f"temp/{filename}"
+        
+        try:
+            async with httpx.AsyncClient() as http_client:
+                response = await http_client.get(record_url)
+                if response.status_code == 200:
+                    with open(file_path, "wb") as f:
+                        f.write(response.content)
+                else:
+                    raise Exception(f"Failed to download audio: status {response.status_code}")
+            
+            res = await session.process_voice_agent_turn(
+                audio_path=str(file_path),
+                audio_relative_path=relative_audio_path,
+                append_text=choose_prompt
+            )
+        except Exception as e:
+            print("Failed to download or process Plivo recording:", e)
+            audio_url = await safe_tts_audio_url(choose_prompt, language=session.language)
+            xml = adapter.generate_query_choice_response(
+                audio_url=audio_url,
+                text_prompt=choose_prompt,
+                action_url="/api/v1/telephony/plivo/query_choice",
+                language=session.language,
+            )
+            return Response(content=xml, media_type="application/xml")
+            
+        # Use safe path resolution
+        audio_url = ""
+        raw_path = res.get("audio_path", "")
+        if raw_path:
+            try:
+                from app.voice.tts import TextToSpeech
+                tts_svc = TextToSpeech()
+                filename = raw_path.split("/")[-1]
+                full_path = tts_svc.output_dir / filename
+                if full_path.exists():
+                    audio_url = get_public_audio_url(raw_path)
+                else:
+                    print(f"Warning: Agent TTS file not found on disk: {full_path}")
+            except Exception as ex:
+                print(f"Notice: Audio path resolve failed: {ex}")
+                
         xml = adapter.generate_query_choice_response(
             audio_url=audio_url,
-            text_prompt=choose_prompt,
+            text_prompt=f"{res['text']} {choose_prompt}",
             action_url="/api/v1/telephony/plivo/query_choice",
             language=session.language,
         )
         return Response(content=xml, media_type="application/xml")
+        
+    else:
+        # Standard English flow: speech input (ASR done on Plivo side)
+        user_speech = Speech or SpeechResult
+        if not user_speech or not user_speech.strip():
+            audio_url = await safe_tts_audio_url(choose_prompt, language=session.language)
+            xml = adapter.generate_query_choice_response(
+                audio_url=audio_url,
+                text_prompt=choose_prompt,
+                action_url="/api/v1/telephony/plivo/query_choice",
+                language=session.language,
+            )
+            return Response(content=xml, media_type="application/xml")
 
-    res = await session.process_text_agent_turn(user_speech, append_text=choose_prompt)
-    
-    # Use safe path resolution - verify TTS file actually exists on disk before passing to Plivo
-    audio_url = ""
-    raw_path = res.get("audio_path", "")
-    if raw_path:
-        try:
-            from app.voice.tts import TextToSpeech
-            tts_svc = TextToSpeech()
-            filename = raw_path.split("/")[-1]
-            full_path = tts_svc.output_dir / filename
-            if full_path.exists():
-                audio_url = get_public_audio_url(raw_path)
-            else:
-                print(f"Warning: Agent TTS file not found on disk: {full_path}")
-        except Exception as e:
-            print(f"Notice: Audio path resolve failed: {e}")
-    
-    xml = adapter.generate_query_choice_response(
-        audio_url=audio_url,
-        text_prompt=f"{res['text']} {choose_prompt}",
-        action_url="/api/v1/telephony/plivo/query_choice",
-        language=session.language,
-    )
-    return Response(content=xml, media_type="application/xml")
+        res = await session.process_text_agent_turn(user_speech, append_text=choose_prompt)
+        
+        audio_url = ""
+        raw_path = res.get("audio_path", "")
+        if raw_path:
+            try:
+                from app.voice.tts import TextToSpeech
+                tts_svc = TextToSpeech()
+                filename = raw_path.split("/")[-1]
+                full_path = tts_svc.output_dir / filename
+                if full_path.exists():
+                    audio_url = get_public_audio_url(raw_path)
+                else:
+                    print(f"Warning: Agent TTS file not found on disk: {full_path}")
+            except Exception as e:
+                print(f"Notice: Audio path resolve failed: {e}")
+                
+        xml = adapter.generate_query_choice_response(
+            audio_url=audio_url,
+            text_prompt=f"{res['text']} {choose_prompt}",
+            action_url="/api/v1/telephony/plivo/query_choice",
+            language=session.language,
+        )
+        return Response(content=xml, media_type="application/xml")
 
 
 @router.post("/query_choice")

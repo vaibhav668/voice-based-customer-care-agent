@@ -137,6 +137,26 @@ class PlivoAdapter(TelephonyProvider):
         abs_action_url = self._get_absolute_url(action_url)
         response = plivoxml.ResponseElement()
         
+        if (language or "en").lower() != "en":
+            # For non-English regional languages, play/speak the prompt and record user voice directly
+            if audio_url:
+                response.add(plivoxml.PlayElement(audio_url))
+            else:
+                plivo_lang = self._map_language(language)
+                response.add(plivoxml.SpeakElement(text_prompt, voice=self._map_voice(language), language=plivo_lang))
+            
+            record = plivoxml.RecordElement(
+                action=abs_action_url,
+                method="POST",
+                max_length=30,
+                play_beep=True,
+                file_format="mp3",
+                redirect=True,
+                timeout=5,
+            )
+            response.add(record)
+            return response.to_string()
+            
         asr_lang = self._map_asr_language(language)
         # input_type=speech only
         # speech_end_timeout=2 is the minimum allowed by Plivo (less than 2 causes XML validation failure)
@@ -162,17 +182,29 @@ class PlivoAdapter(TelephonyProvider):
         """Generates Plivo XML playing TTS audio and waiting for DTMF or speech choice, resolving absolute action URL."""
         abs_action_url = self._get_absolute_url(action_url)
         response = plivoxml.ResponseElement()
-        asr_lang = self._map_asr_language(language)
-        # IMPORTANT: When input_type is mixed (DTMF and speech), we must use space separation "dtmf speech"
-        # and we must not set num_digits. Also, speech_end_timeout must be >= 2.
-        get_input = plivoxml.GetInputElement(
-            action=abs_action_url,
-            method="POST",
-            input_type="dtmf speech",
-            execution_timeout=15,
-            speech_end_timeout=2,
-            language=asr_lang,
-        )
+        
+        if (language or "en").lower() != "en":
+            # Use DTMF only for non-English languages to bypass ASR inaccuracies or crashes
+            get_input = plivoxml.GetInputElement(
+                action=abs_action_url,
+                method="POST",
+                input_type="dtmf",
+                num_digits=1,
+                execution_timeout=15,
+            )
+        else:
+            asr_lang = self._map_asr_language(language)
+            # IMPORTANT: When input_type is mixed (DTMF and speech), we must use space separation "dtmf speech"
+            # and we must not set num_digits. Also, speech_end_timeout must be >= 2.
+            get_input = plivoxml.GetInputElement(
+                action=abs_action_url,
+                method="POST",
+                input_type="dtmf speech",
+                execution_timeout=15,
+                speech_end_timeout=2,
+                language=asr_lang,
+            )
+            
         if audio_url:
             get_input.add(plivoxml.PlayElement(audio_url))
         else:

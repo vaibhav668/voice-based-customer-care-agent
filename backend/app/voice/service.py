@@ -23,6 +23,7 @@ class VoiceService:
         user_id: str | None = None,
         audio_relative_path: str | None = None,
         db: Session | None = None,
+        append_text: str = "",
     ):
         if db:
             self.chat_service = ChatService(db=db)
@@ -53,10 +54,14 @@ class VoiceService:
             audio_input_path=db_audio_path,
         )
 
+        tts_text = response["response"]
+        if append_text:
+            tts_text = f"{tts_text} {append_text}"
+
         # ---------------- Text → Speech ---------------- #
         try:
             generated_audio = await self.tts.generate(
-                response["response"],
+                tts_text,
                 language=language,
             )
         except Exception as e:
