@@ -85,7 +85,7 @@ class PlivoAdapter(TelephonyProvider):
         hindi_voice = os.getenv("PLIVO_HINDI_VOICE", "WOMAN")
         mapping = {
             "en": "Polly.Raveena",   # Indian English Female (Plivo supported)
-            "hi": "Polly.Kajal",       # Hindi Female (Standard polite WOMAN voice or PLIVO_HINDI_VOICE)
+            "hi": "WOMAN",       # Hindi Female (Standard polite WOMAN voice or PLIVO_HINDI_VOICE)
             "te": "Polly.Aditi",     # Telugu - Aditi bilingual Indian voice
             "ta": "Polly.Aditi",     # Tamil - Aditi bilingual Indian voice
             "mr": hindi_voice,       # Marathi - Devanagari polite voice
