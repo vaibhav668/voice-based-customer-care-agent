@@ -43,24 +43,24 @@ class PlivoAdapter(TelephonyProvider):
         return f"{self.public_url}{url}"
 
     def _map_language(self, language: str) -> str:
-        """Maps internal language codes to Plivo TTS language codes.
+        """Maps internal language codes to Plivo TTS language codes matching Polly voice capabilities.
         
-        Only returns languages natively supported by Plivo standard/Polly TTS
-        (en-US and hi-IN) to prevent XML validation crashes on unsupported locales.
+        Prevents XML validation crashes on Plivo by ensuring language tag matches selected voice.
         """
+        lang_lower = (language or "en").lower()
         mapping = {
             "en": "en-US",
             "hi": "hi-IN",
-            "mr": "mr-IN",
+            "mr": "hi-IN",
             "te": "te-IN",
             "ta": "ta-IN",
-            "kn": "kn-IN",
-            "gu": "gu-IN",
-            "bn": "bn-IN",
-            "ml": "ml-IN",
+            "kn": "te-IN",
+            "gu": "en-IN",
+            "bn": "en-IN",
+            "ml": "te-IN",
             "ur": "hi-IN",
         }
-        return mapping.get((language or "en").lower(), "en-US")
+        return mapping.get(lang_lower, "en-US")
 
     def _map_asr_language(self, language: str) -> str:
         """Maps internal language codes to standard BCP 47 language tags for ASR recognition."""
