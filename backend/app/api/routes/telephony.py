@@ -995,8 +995,12 @@ async def handle_websocket_stream(websocket: WebSocket):
                                             clean_trans = transcription.strip().lower().translate(str.maketrans("", "", ".,!?।॥"))
 
                                             if clean_trans in {"0", "zero", "shunya", "शून्य", "no", "thanks", "thank you", "धन्यवाद", "resolved", "हल हो गया"}:
-                                                print(f"[WebSocket Stream] Verbal 0 detected ({clean_trans}). Playing goodbye prompt...")
+                                                print(f"[WebSocket Stream] Verbal 0 detected ({clean_trans}). Clearing audio, playing goodbye prompt...")
                                                 stop_playback_flag.set()
+                                                if stream_id:
+                                                    await websocket.send_json({"event": "clearAudio", "streamId": stream_id})
+                                                if playback_task and not playback_task.done():
+                                                    playback_task.cancel()
                                                 while not tts_queue.empty():
                                                     try:
                                                         tts_queue.get_nowait()
@@ -1015,8 +1019,12 @@ async def handle_websocket_stream(websocket: WebSocket):
                                                 break
 
                                             elif clean_trans in {"1", "one", "ek", "एक", "next", "another", "अगला", "दूसरा"}:
-                                                print(f"[WebSocket Stream] Verbal 1 detected ({clean_trans}). Prompting for next query...")
+                                                print(f"[WebSocket Stream] Verbal 1 detected ({clean_trans}). Clearing audio, prompting for next query...")
                                                 stop_playback_flag.set()
+                                                if stream_id:
+                                                    await websocket.send_json({"event": "clearAudio", "streamId": stream_id})
+                                                if playback_task and not playback_task.done():
+                                                    playback_task.cancel()
                                                 while not tts_queue.empty():
                                                     try:
                                                         tts_queue.get_nowait()
@@ -1100,8 +1108,12 @@ async def handle_websocket_stream(websocket: WebSocket):
                 lang_prompts = PROMPTS.get(lang_code, PROMPTS["en"])
 
                 if digit == "0":
-                    print(f"[WebSocket Stream DTMF] User selected 0 (Query Resolved). Playing goodbye prompt and closing...")
+                    print(f"[WebSocket Stream DTMF] User selected 0 (Query Resolved). Clearing audio, playing goodbye prompt...")
                     stop_playback_flag.set()
+                    if stream_id:
+                        await websocket.send_json({"event": "clearAudio", "streamId": stream_id})
+                    if playback_task and not playback_task.done():
+                        playback_task.cancel()
                     while not tts_queue.empty():
                         try:
                             tts_queue.get_nowait()
@@ -1120,8 +1132,12 @@ async def handle_websocket_stream(websocket: WebSocket):
                     break
 
                 elif digit == "1":
-                    print(f"[WebSocket Stream DTMF] User selected 1 (Ask another query). Prompting for next question...")
+                    print(f"[WebSocket Stream DTMF] User selected 1 (Ask another query). Clearing audio, prompting for next question...")
                     stop_playback_flag.set()
+                    if stream_id:
+                        await websocket.send_json({"event": "clearAudio", "streamId": stream_id})
+                    if playback_task and not playback_task.done():
+                        playback_task.cancel()
                     while not tts_queue.empty():
                         try:
                             tts_queue.get_nowait()
