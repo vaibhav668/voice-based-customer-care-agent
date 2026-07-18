@@ -80,21 +80,22 @@ class PlivoAdapter(TelephonyProvider):
         return mapping.get(lang_lower, "en-IN")
 
     def _map_voice(self, language: str) -> str:
-        """Maps language code to supported Plivo Amazon Polly voices (Polly.Aditi / Polly.Raveena)."""
+        """Maps language code to supported Plivo TTS voices."""
         lang_lower = (language or "en").lower()
+        hindi_voice = os.getenv("PLIVO_HINDI_VOICE", "WOMAN")
         mapping = {
             "en": "Polly.Raveena",   # Indian English Female (Plivo supported)
-            "hi": "Polly.Aditi",     # Hindi Female (Plivo supported)
+            "hi": "Polly.Kajal",       # Hindi Female (Standard polite WOMAN voice or PLIVO_HINDI_VOICE)
             "te": "Polly.Aditi",     # Telugu - Aditi bilingual Indian voice
             "ta": "Polly.Aditi",     # Tamil - Aditi bilingual Indian voice
-            "mr": "Polly.Aditi",     # Marathi - Aditi Devanagari voice
+            "mr": hindi_voice,       # Marathi - Devanagari polite voice
             "kn": "Polly.Aditi",     # Kannada - Aditi bilingual Indian voice
             "gu": "Polly.Raveena",   # Gujarati - Raveena Indian voice
             "bn": "Polly.Raveena",   # Bengali - Raveena Indian voice
             "ml": "Polly.Aditi",     # Malayalam - Aditi bilingual Indian voice
-            "ur": "Polly.Aditi",     # Urdu - Aditi Hindustani voice
+            "ur": hindi_voice,       # Urdu - Hindustani polite voice
         }
-        return mapping.get(lang_lower, "Polly.Aditi")
+        return mapping.get(lang_lower, hindi_voice)
 
     def validate_signature(self, method: str, url: str, nonce: str, signature: str, params: Dict[str, Any]) -> bool:
         """Validates that incoming webhook calls originated from Plivo servers."""
