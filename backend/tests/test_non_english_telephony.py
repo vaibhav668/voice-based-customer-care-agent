@@ -105,19 +105,19 @@ async def test_non_english_hindi_telephony_flow():
         assert session.language == "hi"
         # Must have Record tag or Speak in hi-IN
         assert "agent" in res.text
-        assert "hi-IN" in res.text or "Polly.Kajal" in res.text
+        assert "hi-IN" in res.text or "Polly.Aditi" in res.text
 
         # 4. Agent turn with SpeechResult (e.g. ASR transcript fallback or text turn)
         res = await client.post("/api/v1/telephony/plivo/agent", data={"CallUUID": call_uuid, "SpeechResult": "मेरी बस का क्या स्टेटस है?"})
         assert res.status_code == 200
         assert "query_choice" in res.text
-        assert "hi-IN" in res.text or "Polly.Kajal" in res.text
+        assert "hi-IN" in res.text or "Polly.Aditi" in res.text
 
         # 5. Query Choice with Digits=1 (asks for second query in Hindi)
         res = await client.post("/api/v1/telephony/plivo/query_choice", data={"CallUUID": call_uuid, "Digits": "1"})
         assert res.status_code == 200
         assert "agent" in res.text
-        assert "hi-IN" in res.text or "Polly.Kajal" in res.text
+        assert "hi-IN" in res.text or "Polly.Aditi" in res.text
 
         # 6. Query Choice with SpeechResult (direct speech during choice phase)
         res = await client.post("/api/v1/telephony/plivo/query_choice", data={"CallUUID": call_uuid, "SpeechResult": "बस कब पहुंचेगी?"})

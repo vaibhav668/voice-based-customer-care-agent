@@ -52,52 +52,49 @@ class PlivoAdapter(TelephonyProvider):
             "en": "en-US",
             "hi": "hi-IN",
             "mr": "hi-IN",
-            "te": "te-IN",
-            "ta": "ta-IN",
-            "kn": "te-IN",
+            "ur": "hi-IN",
+            "te": "hi-IN",
+            "ta": "hi-IN",
+            "kn": "hi-IN",
             "gu": "en-IN",
             "bn": "en-IN",
-            "ml": "te-IN",
-            "ur": "hi-IN",
+            "ml": "hi-IN",
         }
         return mapping.get(lang_lower, "en-US")
 
     def _map_asr_language(self, language: str) -> str:
         """Maps internal language codes to standard BCP 47 language tags for ASR recognition."""
-        # Standardize all non-English regional Indian languages to 'en-IN' (Indian English) for ASR.
-        # This is natively supported by Plivo (preventing Invalid Action XML validation crashes)
-        # and optimized for Indian accents and mixed dialect pronunciations.
         lang_lower = (language or "en").lower()
         mapping = {
             "en": "en-US",
             "hi": "hi-IN",
-            "mr": "mr-IN",
-            "te": "te-IN",
-            "ta": "ta-IN",
-            "kn": "kn-IN",
-            "gu": "gu-IN",
-            "bn": "bn-IN",
-            "ml": "ml-IN",
+            "mr": "hi-IN",
+            "te": "hi-IN",
+            "ta": "hi-IN",
+            "kn": "hi-IN",
+            "gu": "en-IN",
+            "bn": "en-IN",
+            "ml": "hi-IN",
             "ur": "hi-IN",
         }
         return mapping.get(lang_lower, "en-IN")
 
-
     def _map_voice(self, language: str) -> str:
-        """Maps language code to premium Amazon Polly neural voice for natural, conversational output."""
+        """Maps language code to supported Plivo Amazon Polly voices (Polly.Aditi / Polly.Raveena)."""
+        lang_lower = (language or "en").lower()
         mapping = {
-            "en": "Polly.Raveena",   # Indian English Female
-            "hi": "Polly.Kajal",     # Hindi Neural Female - warm, modern, natural (not robotic)
-            "te": "Polly.Chitra",    # Telugu Female
-            "ta": "Polly.Madhavi",   # Tamil Female
-            "mr": "Polly.Kajal",     # Marathi - use Kajal (Hindi/Indian neural) as closest option
-            "kn": "Polly.Chitra",    # Kannada - use Chitra (Dravidian family)
-            "gu": "Polly.Raveena",   # Gujarati - use Indian English voice
-            "bn": "Polly.Raveena",   # Bengali - use Indian English voice
-            "ml": "Polly.Chitra",    # Malayalam - Dravidian family
-            "ur": "Polly.Kajal",     # Urdu - same script/phonetics as Hindi, Kajal works well
+            "en": "Polly.Raveena",   # Indian English Female (Plivo supported)
+            "hi": "Polly.Aditi",     # Hindi Female (Plivo supported)
+            "te": "Polly.Aditi",     # Telugu - Aditi bilingual Indian voice
+            "ta": "Polly.Aditi",     # Tamil - Aditi bilingual Indian voice
+            "mr": "Polly.Aditi",     # Marathi - Aditi Devanagari voice
+            "kn": "Polly.Aditi",     # Kannada - Aditi bilingual Indian voice
+            "gu": "Polly.Raveena",   # Gujarati - Raveena Indian voice
+            "bn": "Polly.Raveena",   # Bengali - Raveena Indian voice
+            "ml": "Polly.Aditi",     # Malayalam - Aditi bilingual Indian voice
+            "ur": "Polly.Aditi",     # Urdu - Aditi Hindustani voice
         }
-        return mapping.get((language or "en").lower(), "Polly.Kajal")
+        return mapping.get(lang_lower, "Polly.Aditi")
 
     def validate_signature(self, method: str, url: str, nonce: str, signature: str, params: Dict[str, Any]) -> bool:
         """Validates that incoming webhook calls originated from Plivo servers."""
