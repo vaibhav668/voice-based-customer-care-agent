@@ -926,16 +926,38 @@ async def handle_websocket_stream(websocket: WebSocket):
                                 temp_wav_path = temp_wav.name
                                 temp_wav.close()
                                 
+                                # Write raw 8kHz µ-law decoded PCM to WAV
                                 with wave.open(temp_wav_path, "wb") as wav_file:
                                     wav_file.setnchannels(1)
                                     wav_file.setsampwidth(2)
                                     wav_file.setframerate(8000)
                                     wav_file.writeframes(struct.pack(f"<{len(pcm16_samples)}h", *pcm16_samples))
                                 
+                                # Upsample to 16kHz using ffmpeg — Whisper is optimised for 16kHz
+                                # and produces significantly better accuracy for non-English languages
+                                temp_wav_16k = tempfile.NamedTemporaryFile(suffix="_16k.wav", delete=False)
+                                temp_wav_16k_path = temp_wav_16k.name
+                                temp_wav_16k.close()
+                                
+                                try:
+                                    upsample_proc = await asyncio.create_subprocess_exec(
+                                        "ffmpeg", "-y",
+                                        "-i", temp_wav_path,
+                                        "-ar", "16000",
+                                        "-ac", "1",
+                                        temp_wav_16k_path,
+                                        stdout=asyncio.subprocess.DEVNULL,
+                                        stderr=asyncio.subprocess.DEVNULL,
+                                    )
+                                    await upsample_proc.wait()
+                                    stt_input_path = temp_wav_16k_path
+                                except Exception:
+                                    stt_input_path = temp_wav_path  # fallback to 8kHz if ffmpeg fails
+                                
                                 try:
                                     from app.voice.stt import SpeechToText
                                     stt = SpeechToText()
-                                    transcription = stt.transcribe(temp_wav_path, language=session.language if session else "en")
+                                    transcription = stt.transcribe(stt_input_path, language=session.language if session else "en")
                                     print(f"[WebSocket Stream] Transcribed user query: {transcription}")
                                     
                                     if transcription.strip():
@@ -955,7 +977,7 @@ async def handle_websocket_stream(websocket: WebSocket):
                                             request=chat_req,
                                             user_id=session.user_id if session else None,
                                             channel="TELEPHONY",
-                                            audio_input_path=temp_wav_path
+                                            audio_input_path=stt_input_path
                                         ):
                                             sentence_accum += token
                                             if any(sentence_accum.endswith(p) for p in (".", "?", "!", "\n", "।", "॥")):
@@ -970,10 +992,12 @@ async def handle_websocket_stream(websocket: WebSocket):
                                 except Exception as err:
                                     print(f"Error executing agent stream: {err}")
                                 finally:
-                                    try:
-                                        os.remove(temp_wav_path)
-                                    except Exception:
-                                        pass
+                                    for f in [temp_wav_path, temp_wav_16k_path]:
+                                        try:
+                                            os.remove(f)
+                                        except Exception:
+                                            pass
+
             elif event == "stop":
                 print(f"[WebSocket Stream] Stop event for Call UUID: {call_uuid}")
                 break
