@@ -778,6 +778,8 @@ async def handle_websocket_stream(websocket: WebSocket):
     if SAVE_STREAM_DEBUG_WAV:
         DEBUG_AUDIO_DIR.mkdir(parents=True, exist_ok=True)
     
+    awaiting_feedback = False
+
     async def stream_sentence_audio(sentence: str):
         try:
             from app.voice.tts import TextToSpeech
@@ -994,8 +996,34 @@ async def handle_websocket_stream(websocket: WebSocket):
                                             lang_prompts = PROMPTS.get(lang_code, PROMPTS["en"])
                                             clean_trans = transcription.strip().lower().translate(str.maketrans("", "", ".,!?।॥"))
 
-                                            if clean_trans in {"0", "zero", "shunya", "शून्य", "no", "thanks", "thank you", "धन्यवाद", "resolved", "हल हो गया"}:
-                                                print(f"[WebSocket Stream] Verbal 0 detected ({clean_trans}). Clearing audio, playing goodbye prompt...")
+                                            # Handle verbal feedback rating if currently awaiting feedback
+                                            if awaiting_feedback:
+                                                num_map = {
+                                                    "0": 10, "10": 10, "zero": 10, "ten": 10, "shunya": 10, "शून्य": 10, "दस": 10,
+                                                    "1": 1, "one": 1, "ek": 1, "एक": 1,
+                                                    "2": 2, "two": 2, "do": 2, "दो": 2,
+                                                    "3": 3, "three": 3, "teen": 3, "तीन": 3,
+                                                    "4": 4, "four": 4, "chaar": 4, "चार": 4,
+                                                    "5": 5, "five": 5, "paanch": 5, "पांच": 5, "पाँच": 5,
+                                                    "6": 6, "six": 6, "chhah": 6, "छह": 6,
+                                                    "7": 7, "seven": 7, "saat": 7, "सात": 7,
+                                                    "8": 8, "eight": 8, "aath": 8, "आठ": 8,
+                                                    "9": 9, "nine": 9, "nau": 9, "नौ": 9,
+                                                }
+                                                rating = None
+                                                for word in clean_trans.split():
+                                                    if word in num_map:
+                                                        rating = num_map[word]
+                                                        break
+                                                if rating is None:
+                                                    rating = 10  # default rating fallback
+
+                                                print(f"[WebSocket Stream Feedback] Verbal rating received: {rating}/10 for Call UUID: {call_uuid}")
+                                                if session:
+                                                    session.sentiment = f"RATING_{rating}_OUT_OF_10"
+                                                    session.resolution_status = "RESOLVED"
+                                                    db.commit()
+
                                                 stop_playback_flag.set()
                                                 if stream_id:
                                                     await websocket.send_json({"event": "clearAudio", "streamId": stream_id})
@@ -1018,8 +1046,32 @@ async def handle_websocket_stream(websocket: WebSocket):
                                                     pass
                                                 break
 
+                                            if clean_trans in {"0", "zero", "shunya", "शून्य", "no", "thanks", "thank you", "धन्यवाद", "resolved", "हल हो गया"}:
+                                                print(f"[WebSocket Stream] Verbal 0 (Query Resolved). Prompting for 1-10 feedback rating...")
+                                                awaiting_feedback = True
+                                                stop_playback_flag.set()
+                                                if stream_id:
+                                                    await websocket.send_json({"event": "clearAudio", "streamId": stream_id})
+                                                if playback_task and not playback_task.done():
+                                                    playback_task.cancel()
+                                                while not tts_queue.empty():
+                                                    try:
+                                                        tts_queue.get_nowait()
+                                                        tts_queue.task_done()
+                                                    except asyncio.QueueEmpty:
+                                                        break
+                                                stop_playback_flag.clear()
+                                                playback_task = asyncio.create_task(playback_worker())
+                                                feedback_msg = lang_prompts.get(
+                                                    "feedback",
+                                                    "Thank you. Please rate your support experience from 1 to 10 using your telephone keypad, where 0 represents a rating of 10."
+                                                )
+                                                await tts_queue.put(feedback_msg)
+                                                continue
+
                                             elif clean_trans in {"1", "one", "ek", "एक", "next", "another", "अगला", "दूसरा"}:
                                                 print(f"[WebSocket Stream] Verbal 1 detected ({clean_trans}). Clearing audio, prompting for next query...")
+                                                awaiting_feedback = False
                                                 stop_playback_flag.set()
                                                 if stream_id:
                                                     await websocket.send_json({"event": "clearAudio", "streamId": stream_id})
@@ -1107,8 +1159,15 @@ async def handle_websocket_stream(websocket: WebSocket):
                 from app.voice.ivr import PROMPTS
                 lang_prompts = PROMPTS.get(lang_code, PROMPTS["en"])
 
-                if digit == "0":
-                    print(f"[WebSocket Stream DTMF] User selected 0 (Query Resolved). Clearing audio, playing goodbye prompt...")
+                if awaiting_feedback:
+                    # Capture rating keypress (1 to 9, or 0 for 10)
+                    rating = 10 if digit == "0" else (int(digit) if digit.isdigit() else 10)
+                    print(f"[WebSocket Stream Feedback] Caller rated experience: {rating}/10 for Call UUID: {call_uuid}")
+                    if session:
+                        session.sentiment = f"RATING_{rating}_OUT_OF_10"
+                        session.resolution_status = "RESOLVED"
+                        db.commit()
+
                     stop_playback_flag.set()
                     if stream_id:
                         await websocket.send_json({"event": "clearAudio", "streamId": stream_id})
@@ -1131,8 +1190,31 @@ async def handle_websocket_stream(websocket: WebSocket):
                         pass
                     break
 
+                elif digit == "0":
+                    print(f"[WebSocket Stream DTMF] User selected 0 (Query Resolved). Prompting for 1-10 feedback rating...")
+                    awaiting_feedback = True
+                    stop_playback_flag.set()
+                    if stream_id:
+                        await websocket.send_json({"event": "clearAudio", "streamId": stream_id})
+                    if playback_task and not playback_task.done():
+                        playback_task.cancel()
+                    while not tts_queue.empty():
+                        try:
+                            tts_queue.get_nowait()
+                            tts_queue.task_done()
+                        except asyncio.QueueEmpty:
+                            break
+                    stop_playback_flag.clear()
+                    playback_task = asyncio.create_task(playback_worker())
+                    feedback_msg = lang_prompts.get(
+                        "feedback",
+                        "Thank you. Please rate your support experience from 1 to 10 using your telephone keypad, where 0 represents a rating of 10."
+                    )
+                    await tts_queue.put(feedback_msg)
+
                 elif digit == "1":
                     print(f"[WebSocket Stream DTMF] User selected 1 (Ask another query). Clearing audio, prompting for next question...")
+                    awaiting_feedback = False
                     stop_playback_flag.set()
                     if stream_id:
                         await websocket.send_json({"event": "clearAudio", "streamId": stream_id})
