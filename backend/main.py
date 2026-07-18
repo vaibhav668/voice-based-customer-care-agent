@@ -137,6 +137,10 @@ print("\n========== ROUTES ==========")
 
 for route in app.routes:
     methods = getattr(route, "methods", [])
-    print(methods, route.path)
+    path = getattr(route, "path", None)
+    if path:
+        print(methods, path)
+    else:
+        print(f"Router: {route}")
 
 print("============================\n")

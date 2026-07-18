@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.pool import NullPool
 
 from app.config.settings import settings
 
@@ -41,7 +42,20 @@ if engine is None:
         db_url,
         echo=settings.debug,
         connect_args=connect_args,
+        poolclass=NullPool,
     )
+    
+    # Enable WAL mode for SQLite to support concurrent reads and writes
+    if db_url.startswith("sqlite") or "sqlite" in db_url:
+        from sqlalchemy import event
+        @event.listens_for(engine, "connect")
+        def set_sqlite_pragma(dbapi_connection, connection_record):
+            import sqlite3
+            if isinstance(dbapi_connection, sqlite3.Connection):
+                cursor = dbapi_connection.cursor()
+                cursor.execute("PRAGMA journal_mode=WAL;")
+                cursor.execute("PRAGMA synchronous=NORMAL;")
+                cursor.close()
 
 SessionLocal = sessionmaker(
     autocommit=False,

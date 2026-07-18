@@ -909,40 +909,26 @@ async def handle_websocket_stream(websocket: WebSocket):
                             audio_data = bytes(caller_audio_buffer)
                             caller_audio_buffer.clear()
                             
-                            if len(audio_data) > 8000:
-                                pcm16_samples = []
-                                for b in audio_data:
-                                    u_val = ~b & 0xFF
-                                    sign = (u_val & 0x80)
-                                    exponent = (u_val & 0x70) >> 4
-                                    mantissa = u_val & 0x0F
-                                    sample = (mantissa << 3) + 33
-                                    sample <<= exponent
-                                    sample -= 33
-                                    pcm16_samples.append(-sample if sign else sample)
-                                
+                            if len(audio_data) >= 12000:
                                 import tempfile
-                                temp_wav = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-                                temp_wav_path = temp_wav.name
-                                temp_wav.close()
+                                temp_raw = tempfile.NamedTemporaryFile(suffix=".raw", delete=False)
+                                temp_raw.write(audio_data)
+                                temp_raw_path = temp_raw.name
+                                temp_raw.close()
                                 
-                                # Write raw 8kHz µ-law decoded PCM to WAV
-                                with wave.open(temp_wav_path, "wb") as wav_file:
-                                    wav_file.setnchannels(1)
-                                    wav_file.setsampwidth(2)
-                                    wav_file.setframerate(8000)
-                                    wav_file.writeframes(struct.pack(f"<{len(pcm16_samples)}h", *pcm16_samples))
-                                
-                                # Upsample to 16kHz using ffmpeg — Whisper is optimised for 16kHz
-                                # and produces significantly better accuracy for non-English languages
                                 temp_wav_16k = tempfile.NamedTemporaryFile(suffix="_16k.wav", delete=False)
                                 temp_wav_16k_path = temp_wav_16k.name
                                 temp_wav_16k.close()
                                 
+                                stt_input_path = None
                                 try:
+                                    # FFMPEG decodes raw 8kHz G.711 mu-law directly and resamples to crisp 16kHz mono WAV
                                     upsample_proc = await asyncio.create_subprocess_exec(
                                         "ffmpeg", "-y",
-                                        "-i", temp_wav_path,
+                                        "-f", "mulaw",
+                                        "-ar", "8000",
+                                        "-ac", "1",
+                                        "-i", temp_raw_path,
                                         "-ar", "16000",
                                         "-ac", "1",
                                         temp_wav_16k_path,
@@ -951,52 +937,53 @@ async def handle_websocket_stream(websocket: WebSocket):
                                     )
                                     await upsample_proc.wait()
                                     stt_input_path = temp_wav_16k_path
-                                except Exception:
-                                    stt_input_path = temp_wav_path  # fallback to 8kHz if ffmpeg fails
+                                except Exception as ex:
+                                    print(f"[WebSocket Stream] FFMPEG conversion error: {ex}")
                                 
-                                try:
-                                    from app.voice.stt import SpeechToText
-                                    stt = SpeechToText()
-                                    transcription = stt.transcribe(stt_input_path, language=session.language if session else "en")
-                                    print(f"[WebSocket Stream] Transcribed user query: {transcription}")
-                                    
-                                    if transcription.strip():
-                                        if playback_task and not playback_task.done():
-                                            playback_task.cancel()
-                                        stop_playback_flag.clear()
-                                        playback_task = asyncio.create_task(playback_worker())
+                                if stt_input_path and os.path.exists(stt_input_path):
+                                    try:
+                                        from app.voice.stt import SpeechToText
+                                        stt = SpeechToText()
+                                        transcription = stt.transcribe(stt_input_path, language=session.language if session else "en")
+                                        print(f"[WebSocket Stream] Transcribed user query: {transcription}")
                                         
-                                        chat_req = ChatRequest(
-                                            message=transcription,
-                                            session_id=session.session_id if session else None,
-                                            language=session.language if session else "en"
-                                        )
-                                        
-                                        sentence_accum = ""
-                                        async for token in chat_service.process_stream(
-                                            request=chat_req,
-                                            user_id=session.user_id if session else None,
-                                            channel="TELEPHONY",
-                                            audio_input_path=stt_input_path
-                                        ):
-                                            sentence_accum += token
-                                            if any(sentence_accum.endswith(p) for p in (".", "?", "!", "\n", "।", "॥")):
-                                                sentence = sentence_accum.strip()
-                                                if sentence:
-                                                    await tts_queue.put(sentence)
-                                                sentence_accum = ""
-                                                
-                                        if sentence_accum.strip():
-                                            await tts_queue.put(sentence_accum.strip())
+                                        if transcription.strip():
+                                            if playback_task and not playback_task.done():
+                                                playback_task.cancel()
+                                            stop_playback_flag.clear()
+                                            playback_task = asyncio.create_task(playback_worker())
                                             
-                                except Exception as err:
-                                    print(f"Error executing agent stream: {err}")
-                                finally:
-                                    for f in [temp_wav_path, temp_wav_16k_path]:
-                                        try:
-                                            os.remove(f)
-                                        except Exception:
-                                            pass
+                                            chat_req = ChatRequest(
+                                                message=transcription,
+                                                session_id=session.session_id if session else None,
+                                                language=session.language if session else "en"
+                                            )
+                                            
+                                            sentence_accum = ""
+                                            async for token in chat_service.process_stream(
+                                                request=chat_req,
+                                                user_id=session.user_id if session else None,
+                                                channel="TELEPHONY",
+                                                audio_input_path=stt_input_path
+                                            ):
+                                                sentence_accum += token
+                                                if any(sentence_accum.endswith(p) for p in (".", "?", "!", "\n", "।", "॥")):
+                                                    sentence = sentence_accum.strip()
+                                                    if sentence:
+                                                        await tts_queue.put(sentence)
+                                                    sentence_accum = ""
+                                                    
+                                            if sentence_accum.strip():
+                                                await tts_queue.put(sentence_accum.strip())
+                                                
+                                    except Exception as err:
+                                        print(f"Error executing agent stream: {err}")
+                                    finally:
+                                        for f in [temp_raw_path, temp_wav_16k_path]:
+                                            try:
+                                                os.remove(f)
+                                            except Exception:
+                                                pass
 
             elif event == "stop":
                 print(f"[WebSocket Stream] Stop event for Call UUID: {call_uuid}")

@@ -29,9 +29,9 @@ Return exactly this JSON schema:
 Available Intents & Classification Rules
 -----------------------------------
 
-1. BOOKING_STATUS: User wants to know details about their booking, such as seat number, route, departure/arrival time, drop/boarding point, ticket status, bus name, PNR, or passenger lists for their booking.
-   * Note: If the query is just a generic question about policies (e.g., "how can I change seat?"), use FAQ instead.
-   * Examples: "mujhhe ticket ki details chahiye", "show my booking BK-1234", "aagman ka samay kya hai", "what is my seat number?", "is my ticket confirmed?"
+1. BOOKING_STATUS: User wants to know specific details about their active booking, such as seat number, route, departure/arrival time, drop/boarding point, ticket status, or bus name.
+   * Note: If the query mentions refund or money back, classify as REFUND_STATUS! If asking about delay, classify as BUS_DELAY!
+   * Examples: "mujhhe ticket ki details chahiye", "show my booking BK-1234", "aagman ka samay kya hai", "what is my seat number?", "is my ticket confirmed?", "mujhe meri dekhne ki जाननी है"
 
 2. BUS_DELAY: User is specifically asking if the bus is delayed, why it is late, how much it is delayed, or what the updated ETA is due to delays.
    * Examples: "is my bus delayed?", "why is the bus late?", "bus kitni late hai?", "delay status check karo"
@@ -44,8 +44,8 @@ Available Intents & Classification Rules
    * Examples: "cancel my ticket", "mujhe booking cancel karni hai", "I don't want to travel, cancel BK-1012"
 
 5. REFUND_STATUS: User is asking about the status of their refund, when they will receive money back from a cancelled booking, or stating they haven't received their refund.
-   * Note: If they are asking about refund eligibility policy, use FAQ instead!
-   * Examples: "refund kab milega?", "where is my refund?", "refund status of cancelled booking BK-1012"
+   * CRITICAL RULE: If the query mentions 'refund' / 'रिफंड' / 'पैसा वापस' / 'money back' or 'रिफंड स्थिति' or 'नुझे रिफंड इत्ये रह जाने', ALWAYS classify as REFUND_STATUS!
+   * Examples: "refund kab milega?", "where is my refund?", "refund status of cancelled booking BK-1012", "नुझे रिफंड इत्ये रह जाने", "मुझे रिफंड जानना है", "रिफंड का क्या हुआ"
 
 6. PAYMENT_ISSUE: User reports a payment failure, duplicate charge, money deducted but booking not confirmed, or billing discrepancies.
    * Examples: "payment failed but money deducted", "stuck on payment screen", "double payment ho gaya hai", "charged twice for booking"
@@ -70,7 +70,7 @@ Available Intents & Classification Rules
 12. FOLLOW_UP: Short, context-dependent follow-up inputs (e.g. "and delay?", "cancel it", "what about refund?", "next", "driver details?").
     * Examples: "usaka kya?", "status?", "driver number?"
 
-13. GENERAL: Salutations, greetings, casual chit-chat, thank you, who are you, general non-bus queries.
+13. GENERAL: Salutations, greetings, casual chit-chat, thank you, who are you, general non-bus queries, or incoherent keyword lists.
     * Examples: "hi", "hello", "thank you", "good morning", "kaise ho?"
 
 14. ESCALATE_TO_HUMAN: Explicit demand to connect to a human agent, manager, real person, or customer care representative.

@@ -1,13 +1,13 @@
 import os
 import sys
 import uuid
-import asyncio
+import pytest
 from datetime import datetime, timedelta
 
 # Add backend directory to sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import httpx
+from fastapi.testclient import TestClient
 from main import app
 from app.database.session import SessionLocal, engine
 from app.database.base import Base
@@ -23,8 +23,7 @@ from app.database.models.customer_feedback import CustomerFeedback
 from app.voice.ivr import ivr_manager, IVRState
 
 
-@pytest.mark.asyncio
-async def test_plivo_integration():
+def test_plivo_integration():
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     print("==================================================")
@@ -120,15 +119,22 @@ async def test_plivo_integration():
         call_uuid = f"CA-Test-{uuid.uuid4().hex[:6]}"
         caller_phone = phone_number # Registered customer phone
 
-        # Instantiate async httpx client
-        transport = httpx.ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        # Save seeded entity IDs and close DB session to prevent locks during ASGI request processing
+        user_id_str = str(user.id)
+        booking_id = booking.id
+        trip_id = trip.id
+        bus_id = bus.id
+        route_id = route.id
+        db.close()
+
+        # Instantiate TestClient
+        with TestClient(app) as client:
 
             # ----------------------------------------------------
             # 1. Incoming Call Webhook (Greets and redirects to Language)
             # ----------------------------------------------------
             print("\n--- 1. Testing Incoming Call Webhook ---")
-            response = await client.post("/api/v1/telephony/plivo/incoming", data={"CallUUID": call_uuid, "From": caller_phone})
+            response = client.post("/api/v1/telephony/plivo/incoming", data={"CallUUID": call_uuid, "From": caller_phone})
             assert response.status_code == 200
             assert "application/xml" in response.headers["content-type"]
             assert "<GetInput" in response.text
@@ -139,7 +145,7 @@ async def test_plivo_integration():
             # 4. Language Selection Hook (VERIFICATION_PENDING)
             # ----------------------------------------------------
             print("\n--- 4. Testing Language Selection Hook ---")
-            response = await client.post("/api/v1/telephony/plivo/language", data={"CallUUID": call_uuid, "Digits": "1"})
+            response = client.post("/api/v1/telephony/plivo/language", data={"CallUUID": call_uuid, "Digits": "1"})
             assert response.status_code == 200
             assert "verify_code" in response.text
             print("-> Language selection redirects to booking verify code: PASSED")
@@ -148,7 +154,7 @@ async def test_plivo_integration():
             # 5. Verify Code (ACTIVE_AGENT)
             # ----------------------------------------------------
             print("\n--- 5. Testing Verify Code Hook (Booking Ownership) ---")
-            response = await client.post("/api/v1/telephony/plivo/verify_code", data={"CallUUID": call_uuid, "Digits": booking_code})
+            response = client.post("/api/v1/telephony/plivo/verify_code", data={"CallUUID": call_uuid, "Digits": booking_code})
             assert response.status_code == 200
             assert "Stream" in response.text
             assert "bidirectional" in response.text
@@ -156,12 +162,12 @@ async def test_plivo_integration():
             # Verify call session state is now ACTIVE_AGENT
             session = ivr_manager.calls[call_uuid]
             assert session.state == IVRState.ACTIVE_AGENT
-            assert session.user_id == str(user.id)
+            assert session.user_id == user_id_str
             print("-> Booking ownership verification XML response: PASSED")
 
             # 6. Connect to Bidirectional WebSocket Stream
-            async with client.websocket_connect("/api/v1/telephony/plivo/stream") as ws:
-                await ws.send_json({
+            with client.websocket_connect(f"/api/v1/telephony/plivo/stream?call_uuid={call_uuid}") as ws:
+                ws.send_json({
                     "event": "start",
                     "streamId": "STR-EN-123",
                     "start": {
@@ -169,7 +175,7 @@ async def test_plivo_integration():
                     }
                 })
                 # Receive welcome prompt response stream events
-                resp = await ws.receive_json()
+                resp = ws.receive_json()
                 assert resp["event"] == "playAudio"
                 assert resp["media"]["contentType"] == "audio/x-mulaw"
                 assert resp["media"]["sampleRate"] == "8000"
@@ -177,14 +183,18 @@ async def test_plivo_integration():
 
             # Transition to FEEDBACK_PENDING to test CSAT rating steps
             session.state = IVRState.FEEDBACK_PENDING
+            # Reopen fresh session for save
+            db_save = SessionLocal()
+            session.db = db_save
             session._save_to_db()
+            db_save.close()
             print("-> Choice resolved to feedback transition response: PASSED")
 
             # ----------------------------------------------------
             # 8. CSAT Rating collection (0 maps to 10, or 10 maps to 10)
             # ----------------------------------------------------
             print("\n--- 8. Testing CSAT Feedback collection ---")
-            response = await client.post("/api/v1/telephony/plivo/feedback", data={"CallUUID": call_uuid, "Digits": "0"})
+            response = client.post("/api/v1/telephony/plivo/feedback", data={"CallUUID": call_uuid, "Digits": "0"})
             assert response.status_code == 200
             assert "<Hangup" in response.text
             
@@ -192,35 +202,43 @@ async def test_plivo_integration():
             assert session.state == IVRState.COMPLETED
             
             # Verify rating database row created
-            fb = db.query(CustomerFeedback).filter_by(conversation_id=conv.id).first()
+            db_verify = SessionLocal()
+            conv = db_verify.query(Conversation).filter_by(session_id=session.session_id).first()
+            fb = db_verify.query(CustomerFeedback).filter_by(conversation_id=conv.id).first()
             assert fb is not None
             assert fb.rating == 10
             print("-> Customer rating persisted as 10 XML response: PASSED")
+            db_verify.close()
 
             # ----------------------------------------------------
             # 9. Call Recording Status Callback mapping
             # ----------------------------------------------------
             print("\n--- 9. Testing Recording Completed Callback ---")
             recording_url = "https://api.plivo.com/v1/Account/MA/Recordings/RE12345"
-            response = await client.post(
+            response = client.post(
                 "/api/v1/telephony/plivo/recording-callback",
                 data={"CallUUID": call_uuid, "RecordingUrl": recording_url}
             )
             assert response.status_code == 200
             
             # Verify recording URL stored in database
-            db.refresh(conv)
+            db_verify = SessionLocal()
+            conv = db_verify.query(Conversation).filter_by(session_id=session.session_id).first()
             assert conv.recording_url == recording_url
             print("-> Recording URL correctly saved to conversation database record: PASSED")
+            db_verify.close()
 
             # ----------------------------------------------------
             # 10. Status Callback Disconnect Hook
             # ----------------------------------------------------
             print("\n--- 10. Testing Disconnect Status Callbacks ---")
             session.state = IVRState.ACTIVE_AGENT
+            db_save = SessionLocal()
+            session.db = db_save
             session._save_to_db()
+            db_save.close()
             
-            response = await client.post("/api/v1/telephony/plivo/hangup", data={"CallUUID": call_uuid, "HangupCause": "Normal Hangup"})
+            response = client.post("/api/v1/telephony/plivo/hangup", data={"CallUUID": call_uuid, "HangupCause": "Normal Hangup"})
             assert response.status_code == 200
             
             # Refresh and check completed
@@ -229,32 +247,33 @@ async def test_plivo_integration():
 
         # Database Cleanup
         print("\nCleaning up database records...")
-        db.delete(booking)
-        db.query(Trip).filter(Trip.route_id == route.id).delete()
-        db.commit()
-        db.delete(bus)
-        db.delete(route)
-        db.delete(user)
-        db.query(IvrSession).filter(IvrSession.call_id == call_uuid).delete()
-        db.query(ConversationMessage).filter(ConversationMessage.conversation_id == conv.id).delete()
-        db.query(CustomerFeedback).filter(CustomerFeedback.conversation_id == conv.id).delete()
-        db.delete(conv)
-        db.commit()
+        db_cleanup = SessionLocal()
+        db_cleanup.query(Booking).filter(Booking.id == booking_id).delete()
+        db_cleanup.query(Trip).filter(Trip.id == trip_id).delete()
+        db_cleanup.query(Bus).filter(Bus.id == bus_id).delete()
+        db_cleanup.query(Route).filter(Route.id == route_id).delete()
+        db_cleanup.query(User).filter(User.id == uuid.UUID(user_id_str)).delete()
+        db_cleanup.query(IvrSession).filter(IvrSession.call_id == call_uuid).delete()
+        conv = db_cleanup.query(Conversation).filter_by(session_id=f"ivr-{call_uuid}").first()
+        if conv:
+            db_cleanup.query(ConversationMessage).filter(ConversationMessage.conversation_id == conv.id).delete()
+            db_cleanup.query(CustomerFeedback).filter(CustomerFeedback.conversation_id == conv.id).delete()
+            db_cleanup.delete(conv)
+        db_cleanup.commit()
+        db_cleanup.close()
         print("Cleanup completed.")
 
         print("\nALL PLIVO TELEPHONY INTEGRATION TESTS PASSED SUCCESSFULLY! [SUCCESS]")
-        db.close()
         return True
 
     except Exception as e:
         import traceback
         traceback.print_exc()
-        db.rollback()
-        db.close()
+        db_err = SessionLocal()
+        db_err.rollback()
+        db_err.close()
         raise e
 
 
 if __name__ == "__main__":
-    success = asyncio.run(test_plivo_integration())
-    if not success:
-        sys.exit(1)
+    test_plivo_integration()
