@@ -989,6 +989,52 @@ async def handle_websocket_stream(websocket: WebSocket):
                                         print(f"[WebSocket Stream] Transcribed user query: {transcription}")
                                         
                                         if transcription.strip():
+                                            lang_code = session.language if session else "en"
+                                            from app.voice.ivr import PROMPTS
+                                            lang_prompts = PROMPTS.get(lang_code, PROMPTS["en"])
+                                            clean_trans = transcription.strip().lower().translate(str.maketrans("", "", ".,!?।॥"))
+
+                                            if clean_trans in {"0", "zero", "shunya", "शून्य", "no", "thanks", "thank you", "धन्यवाद", "resolved", "हल हो गया"}:
+                                                print(f"[WebSocket Stream] Verbal 0 detected ({clean_trans}). Playing goodbye prompt...")
+                                                stop_playback_flag.set()
+                                                while not tts_queue.empty():
+                                                    try:
+                                                        tts_queue.get_nowait()
+                                                        tts_queue.task_done()
+                                                    except asyncio.QueueEmpty:
+                                                        break
+                                                stop_playback_flag.clear()
+                                                playback_task = asyncio.create_task(playback_worker())
+                                                goodbye_msg = lang_prompts.get("goodbye", "Thank you for calling. Have a great day! Goodbye.")
+                                                await tts_queue.put(goodbye_msg)
+                                                await asyncio.sleep(4.0)
+                                                try:
+                                                    await websocket.close()
+                                                except Exception:
+                                                    pass
+                                                break
+
+                                            elif clean_trans in {"1", "one", "ek", "एक", "next", "another", "अगला", "दूसरा"}:
+                                                print(f"[WebSocket Stream] Verbal 1 detected ({clean_trans}). Prompting for next query...")
+                                                stop_playback_flag.set()
+                                                while not tts_queue.empty():
+                                                    try:
+                                                        tts_queue.get_nowait()
+                                                        tts_queue.task_done()
+                                                    except asyncio.QueueEmpty:
+                                                        break
+                                                caller_audio_buffer.clear()
+                                                pre_roll_buffer.clear()
+                                                is_speaking = False
+                                                silence_counter = 0
+                                                speech_packet_count = 0
+
+                                                stop_playback_flag.clear()
+                                                playback_task = asyncio.create_task(playback_worker())
+                                                speak_msg = lang_prompts.get("speak_query", "Please speak your query now.")
+                                                await tts_queue.put(speak_msg)
+                                                continue
+
                                             if playback_task and not playback_task.done():
                                                 playback_task.cancel()
                                             stop_playback_flag.clear()
@@ -1019,8 +1065,6 @@ async def handle_websocket_stream(websocket: WebSocket):
                                             
                                             # Append DTMF choice prompt ("Press 1 for next query, 0 if resolved") to finish turn
                                             if session:
-                                                from app.voice.ivr import PROMPTS
-                                                lang_prompts = PROMPTS.get(session.language, PROMPTS["en"])
                                                 choose_prompt = lang_prompts.get(
                                                     "choose_query",
                                                     "If you want to ask another query, press 1. If your query is resolved, press 0."
@@ -1040,6 +1084,60 @@ async def handle_websocket_stream(websocket: WebSocket):
                                                 os.remove(temp_wav_16k_path)
                                             except Exception:
                                                 pass
+
+            elif event == "dtmf":
+                dtmf_obj = msg.get("dtmf") or msg.get("media") or {}
+                digit = str(
+                    dtmf_obj.get("digit")
+                    or msg.get("digit")
+                    or msg.get("data")
+                    or ""
+                ).strip()
+                print(f"[WebSocket Stream DTMF] Received keypress '{digit}' for Call UUID: {call_uuid}")
+
+                lang_code = session.language if session else "en"
+                from app.voice.ivr import PROMPTS
+                lang_prompts = PROMPTS.get(lang_code, PROMPTS["en"])
+
+                if digit == "0":
+                    print(f"[WebSocket Stream DTMF] User selected 0 (Query Resolved). Playing goodbye prompt and closing...")
+                    stop_playback_flag.set()
+                    while not tts_queue.empty():
+                        try:
+                            tts_queue.get_nowait()
+                            tts_queue.task_done()
+                        except asyncio.QueueEmpty:
+                            break
+                    stop_playback_flag.clear()
+                    playback_task = asyncio.create_task(playback_worker())
+                    goodbye_msg = lang_prompts.get("goodbye", "Thank you for calling. Have a great day! Goodbye.")
+                    await tts_queue.put(goodbye_msg)
+                    await asyncio.sleep(4.0)
+                    try:
+                        await websocket.close()
+                    except Exception:
+                        pass
+                    break
+
+                elif digit == "1":
+                    print(f"[WebSocket Stream DTMF] User selected 1 (Ask another query). Prompting for next question...")
+                    stop_playback_flag.set()
+                    while not tts_queue.empty():
+                        try:
+                            tts_queue.get_nowait()
+                            tts_queue.task_done()
+                        except asyncio.QueueEmpty:
+                            break
+                    caller_audio_buffer.clear()
+                    pre_roll_buffer.clear()
+                    is_speaking = False
+                    silence_counter = 0
+                    speech_packet_count = 0
+
+                    stop_playback_flag.clear()
+                    playback_task = asyncio.create_task(playback_worker())
+                    speak_msg = lang_prompts.get("speak_query", "Please speak your query now.")
+                    await tts_queue.put(speak_msg)
 
             elif event == "stop":
                 print(f"[WebSocket Stream] Stop event for Call UUID: {call_uuid}")
