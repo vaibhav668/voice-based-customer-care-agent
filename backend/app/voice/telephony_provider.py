@@ -28,6 +28,20 @@ class TelephonyProvider(ABC):
         pass
 
 
+class CustomStreamElement(plivoxml.StreamElement):
+    _name = 'Stream'
+    def __init__(self, content, bidirectional=None, keepCallAlive=None, contentType=None, **kwargs):
+        super().__init__(content, bidirectional=bidirectional, contentType=contentType, **kwargs)
+        self.keepCallAlive = keepCallAlive
+
+    def to_dict(self):
+        d = super().to_dict()
+        if self.keepCallAlive is not None:
+            import six
+            d['keepCallAlive'] = six.text_type(str(self.keepCallAlive).lower())
+        return d
+
+
 class PlivoAdapter(TelephonyProvider):
     """Concrete adapter mapping unified IVR instructions to XML Plivo responses with absolute URLs."""
 
@@ -229,7 +243,7 @@ class PlivoAdapter(TelephonyProvider):
     def generate_stream_response(self, stream_url: str, keep_call_alive: bool = True) -> str:
         """Generates Plivo XML starting a bidirectional WebSocket audio stream."""
         response = plivoxml.ResponseElement()
-        stream = plivoxml.StreamElement(
+        stream = CustomStreamElement(
             stream_url,
             bidirectional=True,
             keepCallAlive=keep_call_alive,
