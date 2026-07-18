@@ -1,7 +1,16 @@
-import os
-from fastapi import APIRouter, Depends, Form, Request, Header, Response, HTTPException
+from fastapi import APIRouter, Depends, Form, Request, Header, Response, HTTPException, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 from plivo import plivoxml
+import os
+import asyncio
+import base64
+import struct
+import math
+import json
+import wave
+from app.schemas.chat import ChatRequest
+from app.services.chat_service import ChatService
+from app.database.session import SessionLocal
 
 from app.database.session import get_db
 from app.voice.ivr import ivr_manager, IVRState
@@ -254,11 +263,18 @@ async def handle_verify_code(
     audio_url = await safe_tts_audio_url(res["prompt"], language=session.language)
 
     if session.state == IVRState.ACTIVE_AGENT:
-        xml = adapter.generate_voice_agent_response(
-            audio_url=audio_url,
-            text_prompt=res["prompt"],
-            action_url="/api/v1/telephony/plivo/agent",
-            language=session.language,
+        public_url = os.getenv("PUBLIC_URL", "http://localhost:8000")
+        if public_url.startswith("https://"):
+            ws_url = public_url.replace("https://", "wss://")
+        else:
+            ws_url = public_url.replace("http://", "ws://")
+        if ws_url.endswith("/"):
+            ws_url = ws_url[:-1]
+        ws_url = f"{ws_url}/api/v1/telephony/plivo/stream"
+
+        xml = adapter.generate_stream_response(
+            stream_url=ws_url,
+            keep_call_alive=True
         )
     else:
 
@@ -287,11 +303,18 @@ async def handle_verify_phone(
     audio_url = await safe_tts_audio_url(res["prompt"], language=session.language)
     
     if session.state == IVRState.ACTIVE_AGENT:
-        xml = adapter.generate_voice_agent_response(
-            audio_url=audio_url,
-            text_prompt=res["prompt"],
-            action_url="/api/v1/telephony/plivo/agent",
-            language=session.language,
+        public_url = os.getenv("PUBLIC_URL", "http://localhost:8000")
+        if public_url.startswith("https://"):
+            ws_url = public_url.replace("https://", "wss://")
+        else:
+            ws_url = public_url.replace("http://", "ws://")
+        if ws_url.endswith("/"):
+            ws_url = ws_url[:-1]
+        ws_url = f"{ws_url}/api/v1/telephony/plivo/stream"
+
+        xml = adapter.generate_stream_response(
+            stream_url=ws_url,
+            keep_call_alive=True
         )
     else:
         xml = adapter.generate_menu_response(
@@ -668,3 +691,274 @@ async def handle_recording_callback(
             return {"status": "success", "message": "Recording URL mapped to conversation."}
             
     return {"status": "ignored"}
+
+
+BIAS = 0x84
+CLIP = 32635
+
+def pcm16_to_ulaw(sample: int) -> int:
+    """Encodes a signed 16-bit PCM integer sample to an 8-bit G.711 mu-law byte."""
+    sign = (sample >> 8) & 0x80
+    if sample < 0:
+        sample = -sample
+        sign = 0x80
+    else:
+        sign = 0x00
+
+    if sample > CLIP:
+        sample = CLIP
+
+    sample += BIAS
+    exponent = 7
+    mask = 0x4000
+    while (sample & mask) == 0 and exponent > 0:
+        exponent -= 1
+        mask >>= 1
+
+    mantissa = (sample >> (exponent + 3)) & 0x0F
+    ulaw_byte = ~(sign | (exponent << 4) | mantissa) & 0xFF
+    return ulaw_byte
+
+
+def get_mulaw_rms(mulaw_data: bytes) -> float:
+    """Computes the RMS energy of a chunk of G.711 mu-law bytes for silence detection."""
+    if not mulaw_data:
+        return 0.0
+    sum_squares = 0
+    for b in mulaw_data:
+        u_val = ~b & 0xFF
+        sign = (u_val & 0x80)
+        exponent = (u_val & 0x70) >> 4
+        mantissa = u_val & 0x0F
+        sample = (mantissa << 3) + 33
+        sample <<= exponent
+        sample -= 33
+        pcm_val = -sample if sign else sample
+        sum_squares += pcm_val * pcm_val
+    return math.sqrt(sum_squares / len(mulaw_data))
+
+
+@router.websocket("/stream")
+async def handle_websocket_stream(websocket: WebSocket):
+    await websocket.accept()
+    
+    db = SessionLocal()
+    chat_service = ChatService(db)
+    
+    stream_id = None
+    call_uuid = None
+    session = None
+    
+    caller_audio_buffer = bytearray()
+    
+    is_speaking = False
+    silence_counter = 0
+    SILENCE_THRESHOLD_PACKETS = 40  # ~800ms at 20ms chunks
+    RMS_SILENCE_LIMIT = 400.0
+    
+    tts_queue = asyncio.Queue()
+    stop_playback_flag = asyncio.Event()
+    playback_task = None
+    
+    async def stream_sentence_audio(sentence: str):
+        try:
+            from app.voice.tts import TextToSpeech
+            tts = TextToSpeech()
+            
+            # Generate short audio path
+            audio_path = await tts.generate(sentence, language=session.language if session else "en")
+            
+            import miniaudio
+            full_path = tts.output_dir.parent / audio_path
+            decoded = miniaudio.decode_file(str(full_path))
+            
+            pcm16_data = decoded.samples
+            sample_rate = decoded.sample_rate
+            
+            num_samples = len(pcm16_data) // 2
+            samples = struct.unpack(f"<{num_samples}h", pcm16_data)
+            
+            ratio = sample_rate // 8000
+            if ratio > 1:
+                downsampled_samples = []
+                for i in range(0, len(samples) - ratio + 1, ratio):
+                    avg_sample = sum(samples[i:i+ratio]) // ratio
+                    downsampled_samples.append(avg_sample)
+            else:
+                downsampled_samples = samples
+                
+            mulaw_bytes = bytearray(len(downsampled_samples))
+            for idx, s in enumerate(downsampled_samples):
+                mulaw_bytes[idx] = pcm16_to_ulaw(s)
+                
+            chunk_size = 320  # 40ms of audio at 8000Hz µ-law
+            for offset in range(0, len(mulaw_bytes), chunk_size):
+                if stop_playback_flag.is_set():
+                    break
+                chunk = mulaw_bytes[offset:offset+chunk_size]
+                payload = base64.b64encode(chunk).decode("utf-8")
+                
+                await websocket.send_json({
+                    "event": "playAudio",
+                    "media": {
+                        "contentType": "audio/x-mulaw",
+                        "sampleRate": "8000",
+                        "payload": payload
+                    }
+                })
+                await asyncio.sleep(0.04)
+        except Exception as e:
+            print(f"Error in stream_sentence_audio: {e}")
+
+    async def playback_worker():
+        try:
+            while True:
+                sentence = await tts_queue.get()
+                if sentence is None:
+                    break
+                
+                if not stop_playback_flag.is_set():
+                    await stream_sentence_audio(sentence)
+                tts_queue.task_done()
+        except asyncio.CancelledError:
+            pass
+
+    try:
+        while True:
+            data = await websocket.receive_text()
+            msg = json.loads(data)
+            event = msg.get("event")
+            
+            if event == "start":
+                stream_id = msg.get("streamId")
+                meta = msg.get("start", {})
+                call_uuid = meta.get("callUuid")
+                print(f"[WebSocket Stream] Started for Call UUID: {call_uuid}, Stream ID: {stream_id}")
+                
+                session = ivr_manager.calls.get(call_uuid)
+                if session:
+                    from app.voice.ivr import PROMPTS
+                    prompt = PROMPTS.get(session.language, PROMPTS["en"])["welcome"]
+                    if session.booking_code:
+                        prompt = PROMPTS.get(session.language, PROMPTS["en"])["speak_query"]
+                    
+                    stop_playback_flag.clear()
+                    playback_task = asyncio.create_task(playback_worker())
+                    await tts_queue.put(prompt)
+                
+            elif event == "media":
+                media = msg.get("media", {})
+                payload_b64 = media.get("payload")
+                if not payload_b64:
+                    continue
+                
+                payload = base64.b64decode(payload_b64)
+                rms = get_mulaw_rms(payload)
+                
+                if rms > RMS_SILENCE_LIMIT:
+                    silence_counter = 0
+                    if not is_speaking:
+                        is_speaking = True
+                        print("[VAD] Caller speaking detected.")
+                        stop_playback_flag.set()
+                        if stream_id:
+                            await websocket.send_json({
+                                "event": "clearAudio",
+                                "streamId": stream_id
+                            })
+                        while not tts_queue.empty():
+                            try:
+                                tts_queue.get_nowait()
+                                tts_queue.task_done()
+                            except asyncio.QueueEmpty:
+                                break
+                    caller_audio_buffer.extend(payload)
+                else:
+                    if is_speaking:
+                        silence_counter += 1
+                        caller_audio_buffer.extend(payload)
+                        
+                        if silence_counter >= SILENCE_THRESHOLD_PACKETS:
+                            print("[VAD] Caller silence detected. Processing query...")
+                            is_speaking = False
+                            silence_counter = 0
+                            
+                            audio_data = bytes(caller_audio_buffer)
+                            caller_audio_buffer.clear()
+                            
+                            if len(audio_data) > 8000:
+                                pcm16_samples = []
+                                for b in audio_data:
+                                    u_val = ~b & 0xFF
+                                    sign = (u_val & 0x80)
+                                    exponent = (u_val & 0x70) >> 4
+                                    mantissa = u_val & 0x0F
+                                    sample = (mantissa << 3) + 33
+                                    sample <<= exponent
+                                    sample -= 33
+                                    pcm16_samples.append(-sample if sign else sample)
+                                
+                                import tempfile
+                                temp_wav = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+                                temp_wav_path = temp_wav.name
+                                temp_wav.close()
+                                
+                                with wave.open(temp_wav_path, "wb") as wav_file:
+                                    wav_file.setnchannels(1)
+                                    wav_file.setsampwidth(2)
+                                    wav_file.setframerate(8000)
+                                    wav_file.writeframes(struct.pack(f"<{len(pcm16_samples)}h", *pcm16_samples))
+                                
+                                try:
+                                    from app.voice.stt import SpeechToText
+                                    stt = SpeechToText()
+                                    transcription = stt.transcribe(temp_wav_path, language=session.language if session else "en")
+                                    print(f"[WebSocket Stream] Transcribed user query: {transcription}")
+                                    
+                                    if transcription.strip():
+                                        if playback_task and not playback_task.done():
+                                            playback_task.cancel()
+                                        stop_playback_flag.clear()
+                                        playback_task = asyncio.create_task(playback_worker())
+                                        
+                                        chat_req = ChatRequest(
+                                            message=transcription,
+                                            session_id=session.session_id if session else None,
+                                            language=session.language if session else "en"
+                                        )
+                                        
+                                        sentence_accum = ""
+                                        async for token in chat_service.process_stream(
+                                            request=chat_req,
+                                            user_id=session.user_id if session else None,
+                                            channel="TELEPHONY",
+                                            audio_input_path=temp_wav_path
+                                        ):
+                                            sentence_accum += token
+                                            if any(sentence_accum.endswith(p) for p in (".", "?", "!", "\n", "।", "॥")):
+                                                sentence = sentence_accum.strip()
+                                                if sentence:
+                                                    await tts_queue.put(sentence)
+                                                sentence_accum = ""
+                                                
+                                        if sentence_accum.strip():
+                                            await tts_queue.put(sentence_accum.strip())
+                                            
+                                except Exception as err:
+                                    print(f"Error executing agent stream: {err}")
+                                finally:
+                                    try:
+                                        os.remove(temp_wav_path)
+                                    except Exception:
+                                        pass
+            elif event == "stop":
+                print(f"[WebSocket Stream] Stop event for Call UUID: {call_uuid}")
+                break
+    except WebSocketDisconnect:
+        print(f"[WebSocket Stream] Disconnected for Call UUID: {call_uuid}")
+    except Exception as e:
+        print(f"[WebSocket Stream] WebSocket Error: {e}")
+    finally:
+        if playback_task and not playback_task.done():
+            playback_task.cancel()
+        db.close()

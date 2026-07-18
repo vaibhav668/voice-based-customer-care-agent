@@ -23,6 +23,10 @@ class TelephonyProvider(ABC):
     def generate_completion_response(self, prompt: str, language: str = "en", audio_url: str = "") -> str:
         pass
 
+    @abstractmethod
+    def generate_stream_response(self, stream_url: str, keep_call_alive: bool = True) -> str:
+        pass
+
 
 class PlivoAdapter(TelephonyProvider):
     """Concrete adapter mapping unified IVR instructions to XML Plivo responses with absolute URLs."""
@@ -220,4 +224,16 @@ class PlivoAdapter(TelephonyProvider):
             plivo_lang = self._map_language(language)
             response.add(plivoxml.SpeakElement(prompt, voice=self._map_voice(language), language=plivo_lang))
         response.add(plivoxml.HangupElement())
+        return response.to_string()
+
+    def generate_stream_response(self, stream_url: str, keep_call_alive: bool = True) -> str:
+        """Generates Plivo XML starting a bidirectional WebSocket audio stream."""
+        response = plivoxml.ResponseElement()
+        stream = plivoxml.StreamElement(
+            stream_url,
+            bidirectional=True,
+            keepCallAlive=keep_call_alive,
+            contentType="audio/x-mulaw;rate=8000"
+        )
+        response.add(stream)
         return response.to_string()

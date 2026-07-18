@@ -103,32 +103,24 @@ async def test_non_english_hindi_telephony_flow():
         assert res.status_code == 200
         assert session.state == IVRState.ACTIVE_AGENT
         assert session.language == "hi"
-        # Must have Record tag or Speak in hi-IN
-        assert "agent" in res.text
-        assert "hi-IN" in res.text or "Polly.Aditi" in res.text
+        assert "Stream" in res.text
+        assert "bidirectional" in res.text
 
-        # 4. Agent turn with SpeechResult (e.g. ASR transcript fallback or text turn)
-        res = await client.post("/api/v1/telephony/plivo/agent", data={"CallUUID": call_uuid, "SpeechResult": "मेरी बस का क्या स्टेटस है?"})
-        assert res.status_code == 200
-        assert "query_choice" in res.text
-        assert "hi-IN" in res.text or "Polly.Aditi" in res.text
-
-        # 5. Query Choice with Digits=1 (asks for second query in Hindi)
-        res = await client.post("/api/v1/telephony/plivo/query_choice", data={"CallUUID": call_uuid, "Digits": "1"})
-        assert res.status_code == 200
-        assert "agent" in res.text
-        assert "hi-IN" in res.text or "Polly.Aditi" in res.text
-
-        # 6. Query Choice with SpeechResult (direct speech during choice phase)
-        res = await client.post("/api/v1/telephony/plivo/query_choice", data={"CallUUID": call_uuid, "SpeechResult": "बस कब पहुंचेगी?"})
-        assert res.status_code == 200
-        assert "query_choice" in res.text
-
-        # 7. Query Choice with Digits=0 (Feedback)
-        res = await client.post("/api/v1/telephony/plivo/query_choice", data={"CallUUID": call_uuid, "Digits": "0"})
-        assert res.status_code == 200
-        assert "feedback" in res.text
-        assert session.state == IVRState.FEEDBACK_PENDING
+        # 4. Connect to Bidirectional WebSocket Stream
+        async with client.websocket_connect("/api/v1/telephony/plivo/stream") as ws:
+            await ws.send_json({
+                "event": "start",
+                "streamId": "STR-HINDI-123",
+                "start": {
+                    "callUuid": call_uuid
+                }
+            })
+            # Receive welcome prompt response stream events
+            resp = await ws.receive_json()
+            assert resp["event"] == "playAudio"
+            assert resp["media"]["contentType"] == "audio/x-mulaw"
+            assert resp["media"]["sampleRate"] == "8000"
+            assert "payload" in resp["media"]
 
     # Cleanup
     db.delete(booking)
@@ -223,11 +215,24 @@ async def test_telugu_telephony_flow():
         assert res.status_code == 200
         assert session.state == IVRState.ACTIVE_AGENT
         assert session.language == "te"
+        assert "Stream" in res.text
+        assert "bidirectional" in res.text
 
-        # 4. Ask about refund status in Telugu
-        res = await client.post("/api/v1/telephony/plivo/agent", data={"CallUUID": call_uuid, "SpeechResult": "నా రిఫండ్ సమాచారం ఏంటి?"})
-        assert res.status_code == 200
-        assert "query_choice" in res.text
+        # 4. Connect to Bidirectional WebSocket Stream
+        async with client.websocket_connect("/api/v1/telephony/plivo/stream") as ws:
+            await ws.send_json({
+                "event": "start",
+                "streamId": "STR-TELUGU-123",
+                "start": {
+                    "callUuid": call_uuid
+                }
+            })
+            # Receive welcome prompt response stream events
+            resp = await ws.receive_json()
+            assert resp["event"] == "playAudio"
+            assert resp["media"]["contentType"] == "audio/x-mulaw"
+            assert resp["media"]["sampleRate"] == "8000"
+            assert "payload" in resp["media"]
 
     # Cleanup
     db.delete(booking)

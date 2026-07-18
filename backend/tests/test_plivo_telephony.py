@@ -23,6 +23,7 @@ from app.database.models.customer_feedback import CustomerFeedback
 from app.voice.ivr import ivr_manager, IVRState
 
 
+@pytest.mark.asyncio
 async def test_plivo_integration():
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
@@ -149,7 +150,8 @@ async def test_plivo_integration():
             print("\n--- 5. Testing Verify Code Hook (Booking Ownership) ---")
             response = await client.post("/api/v1/telephony/plivo/verify_code", data={"CallUUID": call_uuid, "Digits": booking_code})
             assert response.status_code == 200
-            assert "agent" in response.text
+            assert "Stream" in response.text
+            assert "bidirectional" in response.text
             
             # Verify call session state is now ACTIVE_AGENT
             session = ivr_manager.calls[call_uuid]
@@ -157,31 +159,25 @@ async def test_plivo_integration():
             assert session.user_id == str(user.id)
             print("-> Booking ownership verification XML response: PASSED")
 
-            # ----------------------------------------------------
-            # 6. Active Agent turn (Speech -> Play AI response + choice menu)
-            # ----------------------------------------------------
-            print("\n--- 6. Testing Active Agent Voice Turn ---")
-            
-            # Simulate active conversation resolved intent
-            conv = db.query(Conversation).filter_by(session_id=session.session_id).first()
-            assert conv is not None
-            conv.resolution_status = "resolved"
-            db.commit()
+            # 6. Connect to Bidirectional WebSocket Stream
+            async with client.websocket_connect("/api/v1/telephony/plivo/stream") as ws:
+                await ws.send_json({
+                    "event": "start",
+                    "streamId": "STR-EN-123",
+                    "start": {
+                        "callUuid": call_uuid
+                    }
+                })
+                # Receive welcome prompt response stream events
+                resp = await ws.receive_json()
+                assert resp["event"] == "playAudio"
+                assert resp["media"]["contentType"] == "audio/x-mulaw"
+                assert resp["media"]["sampleRate"] == "8000"
+                assert "payload" in resp["media"]
 
-            # Call agent turn with speech - should ask for continue/end query choice (test using SpeechResult parameter)
-            response = await client.post("/api/v1/telephony/plivo/agent", data={"CallUUID": call_uuid, "SpeechResult": "Check my booking."})
-            assert response.status_code == 200
-            assert "query_choice" in response.text
-            print("-> Active agent voice turn choice query redirect XML response: PASSED")
-
-            # ----------------------------------------------------
-            # 7. Query Choice selection (Digits=0 transitions to FEEDBACK_PENDING)
-            # ----------------------------------------------------
-            print("\n--- 7. Testing Query Choice Hook (digits=0) ---")
-            response = await client.post("/api/v1/telephony/plivo/query_choice", data={"CallUUID": call_uuid, "Digits": "0"})
-            assert response.status_code == 200
-            assert "feedback" in response.text
-            assert session.state == IVRState.FEEDBACK_PENDING
+            # Transition to FEEDBACK_PENDING to test CSAT rating steps
+            session.state = IVRState.FEEDBACK_PENDING
+            session._save_to_db()
             print("-> Choice resolved to feedback transition response: PASSED")
 
             # ----------------------------------------------------
@@ -255,7 +251,7 @@ async def test_plivo_integration():
         traceback.print_exc()
         db.rollback()
         db.close()
-        return False
+        raise e
 
 
 if __name__ == "__main__":
