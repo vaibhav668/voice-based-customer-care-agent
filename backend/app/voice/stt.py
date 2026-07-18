@@ -65,20 +65,20 @@ class SpeechToText:
         if lang_code not in {"en", "hi", "mr", "te", "ta", "kn", "gu", "bn", "ml", "ur"}:
             lang_code = "en"
 
-        # Note: We intentionally do NOT supply a prompt parameter here because
-        # Whisper-large-v3 on Groq uses prompt to bias context and frequently hallucinates
-        # words from the prompt parameter when processing low-bitrate phone audio.
+        prompt_text = self.LANGUAGE_PROMPTS.get(lang_code, self.LANGUAGE_PROMPTS["en"])
+
         try:
             with open(audio_path, "rb") as audio_file:
                 transcription = self.client.audio.transcriptions.create(
                     file=audio_file,
-                    model="whisper-large-v3-turbo",
+                    model="whisper-large-v3",
                     response_format="text",
                     language=lang_code,
+                    prompt=prompt_text,
                     temperature=0.0,
                 )
         except Exception as e:
-            print(f"[STT] Notice: whisper-large-v3-turbo failed ({e}), falling back to whisper-large-v3")
+            print(f"[STT] Notice: whisper-large-v3 failed ({e}), falling back without prompt parameter...")
             with open(audio_path, "rb") as audio_file:
                 transcription = self.client.audio.transcriptions.create(
                     file=audio_file,

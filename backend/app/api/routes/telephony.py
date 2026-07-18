@@ -1,3 +1,4 @@
+from pathlib import Path
 from fastapi import APIRouter, Depends, Form, Request, Header, Response, HTTPException, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 from plivo import plivoxml
@@ -753,16 +754,29 @@ async def handle_websocket_stream(websocket: WebSocket):
     if call_uuid:
         session = ivr_manager.get_or_create_call(call_uuid, "", db)
     
+    from collections import deque
+    import time
+
     caller_audio_buffer = bytearray()
+    pre_roll_buffer = deque(maxlen=25)  # 25 packets = 500ms of pre-speech audio lead-in
     
     is_speaking = False
     silence_counter = 0
-    SILENCE_THRESHOLD_PACKETS = 40  # ~800ms at 20ms chunks
-    RMS_SILENCE_LIMIT = 400.0
+    speech_packet_count = 0
+    SILENCE_THRESHOLD_PACKETS = 55  # ~1100ms at 20ms chunks to allow natural speech pauses
+    RMS_SPEECH_THRESHOLD = 350.0    # Speech detection sensitivity threshold
+    MAX_SPEECH_PACKETS = 600        # Max 12s per utterance turn to prevent infinite buffering
+    turn_index = 0
     
     tts_queue = asyncio.Queue()
     stop_playback_flag = asyncio.Event()
     playback_task = None
+
+    # Enable debug mode to save streamed WAV files for side-by-side comparison with Plivo recordings
+    SAVE_STREAM_DEBUG_WAV = os.getenv("DEBUG_VOICE_AUDIO", "true").lower() == "true"
+    DEBUG_AUDIO_DIR = Path(__file__).resolve().parents[3] / "temp" / "debug_audio"
+    if SAVE_STREAM_DEBUG_WAV:
+        DEBUG_AUDIO_DIR.mkdir(parents=True, exist_ok=True)
     
     async def stream_sentence_audio(sentence: str):
         try:
@@ -878,11 +892,13 @@ async def handle_websocket_stream(websocket: WebSocket):
                 payload = base64.b64decode(payload_b64)
                 rms = get_mulaw_rms(payload)
                 
-                if rms > RMS_SILENCE_LIMIT:
+                if rms > RMS_SPEECH_THRESHOLD:
                     silence_counter = 0
                     if not is_speaking:
                         is_speaking = True
-                        print("[VAD] Caller speaking detected.")
+                        speech_packet_count = 0
+                        print(f"[VAD] Caller speaking detected (RMS: {rms:.1f}). Prepending pre-roll lead-in buffer ({len(pre_roll_buffer)} packets / {len(pre_roll_buffer)*20}ms)...")
+                        
                         stop_playback_flag.set()
                         if stream_id:
                             await websocket.send_json({
@@ -895,34 +911,55 @@ async def handle_websocket_stream(websocket: WebSocket):
                                 tts_queue.task_done()
                             except asyncio.QueueEmpty:
                                 break
+
+                        # Prepend 500ms pre-roll lead-in audio to preserve initial soft consonants/words
+                        caller_audio_buffer.clear()
+                        for packet in pre_roll_buffer:
+                            caller_audio_buffer.extend(packet)
+                        pre_roll_buffer.clear()
+
                     caller_audio_buffer.extend(payload)
+                    speech_packet_count += 1
                 else:
+                    # Keep continuous 500ms ring buffer of lead-in audio while caller is silent
+                    pre_roll_buffer.append(payload)
+                    
                     if is_speaking:
                         silence_counter += 1
+                        speech_packet_count += 1
                         caller_audio_buffer.extend(payload)
                         
-                        if silence_counter >= SILENCE_THRESHOLD_PACKETS:
-                            print("[VAD] Caller silence detected. Processing query...")
+                        if silence_counter >= SILENCE_THRESHOLD_PACKETS or speech_packet_count >= MAX_SPEECH_PACKETS:
+                            turn_index += 1
+                            duration_sec = round((len(caller_audio_buffer) / 8000), 2)
+                            print(f"[VAD] Complete utterance detected (packets={speech_packet_count}, duration={duration_sec}s, silence_packets={silence_counter}). Processing query...")
+                            
                             is_speaking = False
                             silence_counter = 0
+                            speech_packet_count = 0
                             
                             audio_data = bytes(caller_audio_buffer)
                             caller_audio_buffer.clear()
                             
-                            if len(audio_data) >= 12000:
+                            if len(audio_data) >= 8000:  # At least 1.0s total audio (with pre-roll)
                                 import tempfile
                                 temp_raw = tempfile.NamedTemporaryFile(suffix=".raw", delete=False)
                                 temp_raw.write(audio_data)
                                 temp_raw_path = temp_raw.name
                                 temp_raw.close()
                                 
-                                temp_wav_16k = tempfile.NamedTemporaryFile(suffix="_16k.wav", delete=False)
-                                temp_wav_16k_path = temp_wav_16k.name
-                                temp_wav_16k.close()
+                                temp_wav_16k_path = None
+                                if SAVE_STREAM_DEBUG_WAV:
+                                    debug_filename = f"stream_{call_uuid or 'test'}_turn{turn_index}_{int(time.time())}.wav"
+                                    temp_wav_16k_path = str(DEBUG_AUDIO_DIR / debug_filename)
+                                else:
+                                    temp_wav_16k = tempfile.NamedTemporaryFile(suffix="_16k.wav", delete=False)
+                                    temp_wav_16k_path = temp_wav_16k.name
+                                    temp_wav_16k.close()
                                 
                                 stt_input_path = None
                                 try:
-                                    # FFMPEG decodes raw 8kHz G.711 mu-law directly and resamples to crisp 16kHz mono WAV
+                                    # FFMPEG decodes 8kHz µ-law directly and resamples to crisp 16kHz 16-bit PCM WAV (pcm_s16le)
                                     upsample_proc = await asyncio.create_subprocess_exec(
                                         "ffmpeg", "-y",
                                         "-f", "mulaw",
@@ -931,6 +968,7 @@ async def handle_websocket_stream(websocket: WebSocket):
                                         "-i", temp_raw_path,
                                         "-ar", "16000",
                                         "-ac", "1",
+                                        "-c:a", "pcm_s16le",
                                         temp_wav_16k_path,
                                         stdout=asyncio.subprocess.DEVNULL,
                                         stderr=asyncio.subprocess.DEVNULL,
@@ -944,7 +982,10 @@ async def handle_websocket_stream(websocket: WebSocket):
                                     try:
                                         from app.voice.stt import SpeechToText
                                         stt = SpeechToText()
-                                        transcription = stt.transcribe(stt_input_path, language=session.language if session else "en")
+                                        lang_code = session.language if session else "en"
+                                        print(f"[WebSocket Stream VAD Debug] Sending {duration_sec}s audio to STT (language={lang_code}, saved_file={stt_input_path})...")
+                                        
+                                        transcription = stt.transcribe(stt_input_path, language=lang_code)
                                         print(f"[WebSocket Stream] Transcribed user query: {transcription}")
                                         
                                         if transcription.strip():
@@ -979,9 +1020,14 @@ async def handle_websocket_stream(websocket: WebSocket):
                                     except Exception as err:
                                         print(f"Error executing agent stream: {err}")
                                     finally:
-                                        for f in [temp_raw_path, temp_wav_16k_path]:
+                                        if os.path.exists(temp_raw_path):
                                             try:
-                                                os.remove(f)
+                                                os.remove(temp_raw_path)
+                                            except Exception:
+                                                pass
+                                        if not SAVE_STREAM_DEBUG_WAV and temp_wav_16k_path and os.path.exists(temp_wav_16k_path):
+                                            try:
+                                                os.remove(temp_wav_16k_path)
                                             except Exception:
                                                 pass
 
