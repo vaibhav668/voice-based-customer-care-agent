@@ -27,25 +27,26 @@ class SpeechToText:
         language: str = "en",
     ) -> str:
 
-        lang_code = language.lower() if language and language.lower() in {"en", "hi", "mr", "te", "ta", "kn", "gu", "bn", "ml", "ur"} else "en"
+        lang_code = (language or "en").lower().strip()
+        if lang_code not in {"en", "hi", "mr", "te", "ta", "kn", "gu", "bn", "ml", "ur"}:
+            lang_code = "en"
+
+        prompt_text = (
+            "Customer support phone call for bus travel service. "
+            "Keywords: booking code, ticket status, refund status, bus delay, live tracking, "
+            "reschedule, cancellation, seat number, departure time, arrival time, Hyderabad, Delhi, Goa."
+        )
 
         with open(audio_path, "rb") as audio_file:
-            if lang_code != "en":
-                # Translate regional language speech directly into English text for accurate agent processing
-                transcription = self.client.audio.translations.create(
-                    file=audio_file,
-                    model="whisper-large-v3",
-                    response_format="text",
-                    temperature=0,
-                )
-            else:
-                # Transcribe English directly
-                transcription = self.client.audio.transcriptions.create(
-                    file=audio_file,
-                    model="whisper-large-v3",
-                    response_format="text",
-                    language=lang_code,
-                    temperature=0,
-                )
+            # Explicitly specify target language code (e.g. 'te' for Telugu, 'hi' for Hindi)
+            # and domain prompt to prevent language auto-detection errors or hallucinated translations.
+            transcription = self.client.audio.transcriptions.create(
+                file=audio_file,
+                model="whisper-large-v3",
+                response_format="text",
+                language=lang_code,
+                prompt=prompt_text,
+                temperature=0,
+            )
 
         return transcription.strip()
