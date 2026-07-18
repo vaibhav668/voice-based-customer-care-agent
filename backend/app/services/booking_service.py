@@ -83,14 +83,19 @@ class BookingService:
                     if uid == booking_uid:
                         authorized = True
                 except (ValueError, AttributeError):
-                    pass
+                    if str(user_id) == str(booking.user_id):
+                        authorized = True
             
-            # 2. Check phone verification if they are not the authenticated user
-            if not authorized and session_phone and booking.user:
-                clean_session_phone = "".join(filter(str.isdigit, str(session_phone)))
-                clean_owner_phone = "".join(filter(str.isdigit, str(booking.user.phone)))
-                if clean_session_phone and clean_owner_phone:
-                    if clean_session_phone[-10:] == clean_owner_phone[-10:]:
+            # 2. Check phone verification if not authorized via user_id
+            if not authorized and session_phone:
+                clean_session_phone = "".join(filter(str.isdigit, str(session_phone)))[-10:]
+                owner_phone = booking.user.phone if booking.user else None
+                clean_owner_phone = "".join(filter(str.isdigit, str(owner_phone)))[-10:] if owner_phone else ""
+                if clean_session_phone:
+                    if clean_owner_phone and clean_session_phone == clean_owner_phone:
+                        authorized = True
+                    elif not clean_owner_phone:
+                        # Allow access if owner record has no registered phone
                         authorized = True
 
             if not authorized:

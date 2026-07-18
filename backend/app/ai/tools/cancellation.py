@@ -32,7 +32,7 @@ class CancellationTool:
 
         # Check if the user has explicitly confirmed
         if confirmation and confirmation.strip().lower() in ["yes", "yes cancel", "confirm", "proceed", "go ahead"]:
-            result = self.service.cancel_booking(booking_code)
+            result = self.service.cancel_booking(booking_code, user_id=user_id, session_phone=session_phone)
             return {
                 "status": "cancelled",
                 "message": f"Successfully cancelled booking {booking_code}.",

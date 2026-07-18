@@ -15,9 +15,9 @@ class RefundTool:
         user_id: str | None = None,
         session_phone: str | None = None,
     ):
-        # We also enforce secure ownership here by checking details first
-        self.service.get_booking_details_secure(booking_code, user_id, session_phone=session_phone)
-        
+        # Retrieve refund status passing user_id and session_phone for secure authorization
         return self.service.get_refund_status(
-            booking_code
+            booking_code,
+            user_id=user_id,
+            session_phone=session_phone,
         )

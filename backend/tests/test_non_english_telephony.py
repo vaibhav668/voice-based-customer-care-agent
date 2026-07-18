@@ -144,3 +144,102 @@ async def test_non_english_hindi_telephony_flow():
     db.query(IvrSession).filter(IvrSession.call_id == call_uuid).delete()
     db.commit()
     db.close()
+
+
+@pytest.mark.asyncio
+async def test_telugu_telephony_flow():
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+
+    phone_number = "7036510611"
+    email = "telugu_telephony_tester@example.com"
+    booking_code = "BK-TELUGU"
+
+    user = db.query(User).filter_by(email=email).first()
+    if user:
+        db.delete(user)
+        db.commit()
+
+    user = User(
+        id=uuid.uuid4(),
+        full_name="Telugu Telephony Tester",
+        email=email,
+        phone=phone_number,
+        password_hash="pass",
+        role=UserRole.CUSTOMER,
+        is_verified=True,
+        is_active=True,
+    )
+    db.add(user)
+    db.commit()
+
+    route = Route(source_city="Delhi", destination_city="Hyderabad", distance_km=1500, estimated_duration_minutes=1200)
+    db.add(route)
+    db.commit()
+
+    bus = Bus(bus_number="BUSTEL", bus_name="Telugu Express", registration_number="TELU123", capacity=36, bus_type=BusType.AC_SLEEPER)
+    db.add(bus)
+    db.commit()
+
+    departure_time = datetime.now() + timedelta(days=2)
+    trip = Trip(
+        route_id=route.id,
+        bus_id=bus.id,
+        departure_time=departure_time,
+        arrival_time=departure_time + timedelta(hours=15),
+        status=TripStatus.SCHEDULED,
+        available_seats=30
+    )
+    db.add(trip)
+    db.commit()
+
+    booking = Booking(
+        booking_code=booking_code,
+        user_id=user.id,
+        trip_id=trip.id,
+        seat_number="T1",
+        booking_status=BookingStatus.CONFIRMED,
+        payment_status=PaymentStatus.PAID
+    )
+    db.add(booking)
+    db.commit()
+
+    call_uuid = f"CA-TeluguTest-{uuid.uuid4().hex[:6]}"
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        # 1. Incoming Call
+        res = await client.post("/api/v1/telephony/plivo/incoming", data={"CallUUID": call_uuid, "From": phone_number})
+        assert res.status_code == 200
+
+        # 2. Select Telugu (Digits=3)
+        res = await client.post("/api/v1/telephony/plivo/language", data={"CallUUID": call_uuid, "Digits": "3"})
+        assert res.status_code == 200
+        session = ivr_manager.calls[call_uuid]
+        assert session.language == "te"
+
+        # 3. Enter Booking Code (BK-TELUGU)
+        res = await client.post("/api/v1/telephony/plivo/verify_code", data={"CallUUID": call_uuid, "Digits": booking_code})
+        assert res.status_code == 200
+        assert session.state == IVRState.ACTIVE_AGENT
+        assert session.language == "te"
+
+        # 4. Ask about refund status in Telugu
+        res = await client.post("/api/v1/telephony/plivo/agent", data={"CallUUID": call_uuid, "SpeechResult": "నా రిఫండ్ సమాచారం ఏంటి?"})
+        assert res.status_code == 200
+        assert "query_choice" in res.text
+
+    # Cleanup
+    db.delete(booking)
+    db.delete(trip)
+    db.delete(bus)
+    db.delete(route)
+    db.delete(user)
+    conv = db.query(Conversation).filter_by(session_id=session.session_id).first()
+    if conv:
+        db.query(ConversationMessage).filter(ConversationMessage.conversation_id == conv.id).delete()
+        db.query(CustomerFeedback).filter(CustomerFeedback.conversation_id == conv.id).delete()
+        db.delete(conv)
+    db.query(IvrSession).filter(IvrSession.call_id == call_uuid).delete()
+    db.commit()
+    db.close()
