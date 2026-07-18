@@ -29,9 +29,10 @@ Return exactly this JSON schema:
 Available Intents & Classification Rules
 -----------------------------------
 
-1. BOOKING_STATUS: User wants to know specific details about their active booking, such as seat number, route, departure/arrival time, drop/boarding point, ticket status, or bus name.
+1. BOOKING_STATUS: User wants to know specific details about their active booking, such as destination/route, seat number, departure/arrival time, drop/boarding point, ticket status, or bus name.
+   * Note: If asking about destination (including phonetic variations like "विप्तिनीशन", "रशने", "डेस्टिनेशन", "मंजिल", "गंतव्य", "destination"), classify as BOOKING_STATUS!
    * Note: If the query mentions refund or money back, classify as REFUND_STATUS! If asking about delay, classify as BUS_DELAY!
-   * Examples: "mujhhe ticket ki details chahiye", "show my booking BK-1234", "aagman ka samay kya hai", "what is my seat number?", "is my ticket confirmed?", "mujhe meri dekhne ki जाननी है"
+   * Examples: "mujhhe ticket ki details chahiye", "show my booking BK-1234", "aagman ka samay kya hai", "what is my seat number?", "is my ticket confirmed?", "मुझे मेरी विप्तिनीशन जानी है", "मुझे मेरी रशने से जाननी है", "destination kya hai?"
 
 2. BUS_DELAY: User is specifically asking if the bus is delayed, why it is late, how much it is delayed, or what the updated ETA is due to delays.
    * Examples: "is my bus delayed?", "why is the bus late?", "bus kitni late hai?", "delay status check karo"

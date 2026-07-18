@@ -148,8 +148,10 @@ Recent Conversation History:
         elif "booking" in tool_lower or "status" in tool_lower:
             intent_focus_directive = """
             CRITICAL INTENT RULE (SPECIFIC QUERY FOCUS):
-            Answer ONLY the specific field/detail requested by the user. DO NOT recite every single property in the JSON tool output.
-            Keep the response to 1-2 friendly spoken sentences.
+            - If the user asks about destination / मंजिल / गंतव्य (including phonetic STT variations like 'विप्तिनीशन' or 'रशने'), state ONLY their destination city (e.g. destination / destination_city).
+            - If the user asks about departure / arrival time, state ONLY departure or arrival time.
+            - If the user asks about seat number, state ONLY the seat number.
+            - Answer ONLY the specific property requested by the user in 1-2 friendly spoken sentences. DO NOT recite every single field in the JSON tool output.
             """
 
         system = SystemMessage(
@@ -332,8 +334,10 @@ Recent Conversation History:
         elif "booking" in tool_lower or "status" in tool_lower:
             intent_focus_directive = """
             CRITICAL INTENT RULE (SPECIFIC QUERY FOCUS):
-            Answer ONLY the specific field/detail requested by the user. DO NOT recite every single property in the JSON tool output.
-            Keep the response to 1-2 friendly spoken sentences.
+            - If the user asks about destination / मंजिल / गंतव्य (including phonetic STT variations like 'विप्तिनीशन' or 'रशने'), state ONLY their destination city (e.g. destination / destination_city).
+            - If the user asks about departure / arrival time, state ONLY departure or arrival time.
+            - If the user asks about seat number, state ONLY the seat number.
+            - Answer ONLY the specific property requested by the user in 1-2 friendly spoken sentences. DO NOT recite every single field in the JSON tool output.
             """
 
         system = SystemMessage(
