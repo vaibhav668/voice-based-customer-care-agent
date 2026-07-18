@@ -26,11 +26,19 @@ def get_public_audio_url(audio_path: str) -> str:
 
 
 async def safe_tts_audio_url(text: str, language: str = "en") -> str:
-    """Always return empty string to bypass slow dynamic edge-tts generation.
-    
-    This forces Plivo to use its native, zero-latency neural TTS engine.
+    """Generates high-quality polite neural audio using edge-tts (hi-IN-SwaraNeural for Hindi)
+    and returns absolute public URL for Plivo <Play> playback.
     """
-    return ""
+    if not text or not text.strip():
+        return ""
+    try:
+        from app.voice.tts import TextToSpeech
+        tts = TextToSpeech()
+        audio_path = await tts.generate(text, language=language)
+        return get_public_audio_url(audio_path)
+    except Exception as e:
+        print("Notice: Dynamic TTS audio generation fallback:", e)
+        return ""
 
 
 def get_public_url(path: str) -> str:
@@ -379,7 +387,9 @@ async def handle_agent_turn(
     # Safe audio URL resolution if TTS audio was generated
     audio_url = ""
     raw_path = res.get("audio_path", "")
-    if raw_path:
+    if not raw_path and res.get("text"):
+        audio_url = await safe_tts_audio_url(f"{res['text']} {choose_prompt}", language=session.language)
+    elif raw_path:
         try:
             from app.voice.tts import TextToSpeech
             tts_svc = TextToSpeech()
