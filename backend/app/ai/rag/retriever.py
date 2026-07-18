@@ -20,19 +20,33 @@ class KeywordBasedRetriever:
         # to achieve 0ms additional latency. Otherwise fall back to local keyword parsing.
         search_terms = search_keywords or query
 
-        # Clean query: lowercase and remove special characters
-        clean_query = re.sub(r'[^a-zA-Z0-9\s]', '', search_terms.lower())
+        # Keep all Unicode word characters (including Devanagari/Hindi, Telugu, Tamil, etc.)
+        clean_query = re.sub(r'[^\w\s]', ' ', search_terms.lower())
         query_words = set(clean_query.split())
 
-        # Simple stop words to filter out noise
+        # Domain synonyms mapping Hindi & common STT variations to knowledge files
+        SYNONYMS = {
+            "baggage": ["baggage", "luggage", "सामान", "नगेज", "नगेर", "बैग", "सामान की नीति", "सामान नीत"],
+            "refund": ["refund", "रिफंड", "रिपुंड", "पैसा वापस", "वापस", "रिफर्न"],
+            "cancellation": ["cancel", "cancellation", "रद्द", "निरस्त", "कैंसिल", "अवरिफ्रेंड"],
+            "rescheduling": ["reschedule", "rescheduling", "बदल", "तारीख बदल"],
+            "payment": ["payment", "भुगतान", "पेमेंट", "पैसा"],
+        }
+
+        # Expand query keywords with matching file synonyms
+        expanded_keywords = set(query_words)
+        for doc_key, syn_list in SYNONYMS.items():
+            if any(syn in search_terms.lower() for syn in syn_list):
+                expanded_keywords.add(doc_key)
+
         stopwords = {
             "tell", "me", "the", "policy", "what", "is", "how", "much", "do",
             "you", "have", "about", "rules", "for", "please", "show", "can",
-            "ask", "question"
+            "ask", "question", "जाननी", "है", "की", "मुझे", "क्या", "बताएं"
         }
-        keywords = query_words - stopwords
+        keywords = expanded_keywords - stopwords
         if not keywords:
-            keywords = query_words  # fallback if all words are stopwords
+            keywords = expanded_keywords
 
         scored_docs = []
         for file in self.knowledge_path.glob("*.md"):
@@ -40,16 +54,11 @@ class KeywordBasedRetriever:
                 with open(file, "r", encoding="utf-8") as f:
                     content = f.read()
 
-                # Clean content for scoring
                 clean_content = content.lower()
-
-                # Calculate simple score: count of matching keywords
                 score = 0
                 for kw in keywords:
-                    # Give higher weight to matches in filenames
                     if kw in file.name.lower():
-                        score += 5
-                    # Count occurrences in content
+                        score += 10
                     score += clean_content.count(kw)
 
                 if score > 0:
@@ -63,7 +72,6 @@ class KeywordBasedRetriever:
             except Exception:
                 pass
 
-        # Sort by score descending and return the Documents
         scored_docs.sort(key=lambda x: x[0], reverse=True)
         return [doc for score, doc in scored_docs[:3]]
 

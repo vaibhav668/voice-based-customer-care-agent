@@ -17,6 +17,7 @@ class GroqLLM(BaseLLM):
             api_key=settings.groq_api_key,
             model=model,
             temperature=0,
+            max_retries=1,
         )
 
     def invoke(

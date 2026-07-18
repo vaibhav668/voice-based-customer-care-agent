@@ -1016,6 +1016,16 @@ async def handle_websocket_stream(websocket: WebSocket):
                                                     
                                             if sentence_accum.strip():
                                                 await tts_queue.put(sentence_accum.strip())
+                                            
+                                            # Append DTMF choice prompt ("Press 1 for next query, 0 if resolved") to finish turn
+                                            if session:
+                                                from app.voice.ivr import PROMPTS
+                                                lang_prompts = PROMPTS.get(session.language, PROMPTS["en"])
+                                                choose_prompt = lang_prompts.get(
+                                                    "choose_query",
+                                                    "If you want to ask another query, press 1. If your query is resolved, press 0."
+                                                )
+                                                await tts_queue.put(choose_prompt)
                                                 
                                     except Exception as err:
                                         print(f"Error executing agent stream: {err}")
