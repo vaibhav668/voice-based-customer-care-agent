@@ -270,11 +270,12 @@ async def handle_verify_code(
             ws_url = public_url.replace("http://", "ws://")
         if ws_url.endswith("/"):
             ws_url = ws_url[:-1]
-        ws_url = f"{ws_url}/api/v1/telephony/plivo/stream"
+        ws_url = f"{ws_url}/api/v1/telephony/plivo/stream?call_uuid={CallUUID}"
 
         xml = adapter.generate_stream_response(
             stream_url=ws_url,
-            keep_call_alive=True
+            keep_call_alive=True,
+            call_uuid=CallUUID
         )
     else:
 
@@ -310,11 +311,12 @@ async def handle_verify_phone(
             ws_url = public_url.replace("http://", "ws://")
         if ws_url.endswith("/"):
             ws_url = ws_url[:-1]
-        ws_url = f"{ws_url}/api/v1/telephony/plivo/stream"
+        ws_url = f"{ws_url}/api/v1/telephony/plivo/stream?call_uuid={CallUUID}"
 
         xml = adapter.generate_stream_response(
             stream_url=ws_url,
-            keep_call_alive=True
+            keep_call_alive=True,
+            call_uuid=CallUUID
         )
     else:
         xml = adapter.generate_menu_response(
@@ -746,8 +748,10 @@ async def handle_websocket_stream(websocket: WebSocket):
     chat_service = ChatService(db)
     
     stream_id = None
-    call_uuid = None
+    call_uuid = websocket.query_params.get("call_uuid")
     session = None
+    if call_uuid:
+        session = ivr_manager.get_or_create_call(call_uuid, "", db)
     
     caller_audio_buffer = bytearray()
     
@@ -830,21 +834,40 @@ async def handle_websocket_stream(websocket: WebSocket):
             event = msg.get("event")
             
             if event == "start":
-                stream_id = msg.get("streamId")
                 meta = msg.get("start", {})
-                call_uuid = meta.get("callUuid")
+                # Plivo sends callId (not callUuid) inside the start sub-object
+                stream_id = meta.get("streamId") or msg.get("streamId")
+                if not call_uuid:
+                    # Primary: start.callId (Plivo's documented field name)
+                    call_uuid = (
+                        meta.get("callId")
+                        or meta.get("callUuid")
+                        or meta.get("call_uuid")
+                        or msg.get("callId")
+                        or msg.get("callUuid")
+                    )
+                    # Fallback: parse from extra_headers if injected by Stream XML
+                    if not call_uuid:
+                        extra_headers = msg.get("extra_headers", "")
+                        for part in str(extra_headers).split(";"):
+                            if part.strip().startswith("call_uuid="):
+                                call_uuid = part.strip().split("=", 1)[1]
+                                break
                 print(f"[WebSocket Stream] Started for Call UUID: {call_uuid}, Stream ID: {stream_id}")
+                print(f"[WebSocket Stream] Full start payload: {json.dumps(msg)[:500]}")
                 
-                session = ivr_manager.calls.get(call_uuid)
+                if not session and call_uuid:
+                    session = ivr_manager.get_or_create_call(call_uuid, "", db)
                 if session:
                     from app.voice.ivr import PROMPTS
-                    prompt = PROMPTS.get(session.language, PROMPTS["en"])["welcome"]
-                    if session.booking_code:
-                        prompt = PROMPTS.get(session.language, PROMPTS["en"])["speak_query"]
+                    lang_prompts = PROMPTS.get(session.language, PROMPTS["en"])
+                    prompt = lang_prompts.get("speak_query", "Please speak your query now.")
                     
                     stop_playback_flag.clear()
                     playback_task = asyncio.create_task(playback_worker())
                     await tts_queue.put(prompt)
+                else:
+                    print(f"[WebSocket Stream] WARNING: No session found for call_uuid={call_uuid}. Cannot greet caller.")
                 
             elif event == "media":
                 media = msg.get("media", {})

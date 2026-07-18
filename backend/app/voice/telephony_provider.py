@@ -30,15 +30,17 @@ class TelephonyProvider(ABC):
 
 class CustomStreamElement(plivoxml.StreamElement):
     _name = 'Stream'
-    def __init__(self, content, bidirectional=None, keepCallAlive=None, contentType=None, **kwargs):
+    def __init__(self, content, bidirectional=None, keepCallAlive=None, contentType=None, extraHeaders=None, **kwargs):
         super().__init__(content, bidirectional=bidirectional, contentType=contentType, **kwargs)
         self.keepCallAlive = keepCallAlive
+        self.extraHeaders = extraHeaders
 
     def to_dict(self):
         d = super().to_dict()
         if self.keepCallAlive is not None:
-            import six
-            d['keepCallAlive'] = six.text_type(str(self.keepCallAlive).lower())
+            d['keepCallAlive'] = str(self.keepCallAlive).lower()
+        if self.extraHeaders is not None:
+            d['extraHeaders'] = str(self.extraHeaders)
         return d
 
 
@@ -240,14 +242,17 @@ class PlivoAdapter(TelephonyProvider):
         response.add(plivoxml.HangupElement())
         return response.to_string()
 
-    def generate_stream_response(self, stream_url: str, keep_call_alive: bool = True) -> str:
+    def generate_stream_response(self, stream_url: str, keep_call_alive: bool = True, call_uuid: str = None) -> str:
         """Generates Plivo XML starting a bidirectional WebSocket audio stream."""
         response = plivoxml.ResponseElement()
+        # Inject call_uuid in extraHeaders so WebSocket start event can reliably identify the session
+        extra_headers = f"call_uuid={call_uuid}" if call_uuid else None
         stream = CustomStreamElement(
             stream_url,
             bidirectional=True,
             keepCallAlive=keep_call_alive,
-            contentType="audio/x-mulaw;rate=8000"
+            contentType="audio/x-mulaw;rate=8000",
+            extraHeaders=extra_headers,
         )
         response.add(stream)
         return response.to_string()
