@@ -148,8 +148,9 @@ Recent Conversation History:
         elif "booking" in tool_lower or "status" in tool_lower:
             intent_focus_directive = """
             CRITICAL INTENT RULE (SPECIFIC QUERY FOCUS):
+            - If the user asks about arrival time / arrival / आगमन / पहुंचने का समय (including phonetic STT variations like 'अराइवर्डा', 'विल्टेम', 'अराइवल'), state ONLY their expected arrival time (e.g. arrival_time / arrival / arrival_date).
+            - If the user asks about departure time / प्रस्थान समय, state ONLY their departure time (e.g. departure_time / departure).
             - If the user asks about destination / मंजिल / गंतव्य (including phonetic STT variations like 'विप्तिनीशन' or 'रशने'), state ONLY their destination city (e.g. destination / destination_city).
-            - If the user asks about departure / arrival time, state ONLY departure or arrival time.
             - If the user asks about seat number, state ONLY the seat number.
             - Answer ONLY the specific property requested by the user in 1-2 friendly spoken sentences. DO NOT recite every single field in the JSON tool output.
             """
@@ -334,8 +335,9 @@ Recent Conversation History:
         elif "booking" in tool_lower or "status" in tool_lower:
             intent_focus_directive = """
             CRITICAL INTENT RULE (SPECIFIC QUERY FOCUS):
+            - If the user asks about arrival time / arrival / आगमन / पहुंचने का समय (including phonetic STT variations like 'अराइवर्डा', 'विल्टेम', 'अराइवल'), state ONLY their expected arrival time (e.g. arrival_time / arrival / arrival_date).
+            - If the user asks about departure time / प्रस्थान समय, state ONLY their departure time (e.g. departure_time / departure).
             - If the user asks about destination / मंजिल / गंतव्य (including phonetic STT variations like 'विप्तिनीशन' or 'रशने'), state ONLY their destination city (e.g. destination / destination_city).
-            - If the user asks about departure / arrival time, state ONLY departure or arrival time.
             - If the user asks about seat number, state ONLY the seat number.
             - Answer ONLY the specific property requested by the user in 1-2 friendly spoken sentences. DO NOT recite every single field in the JSON tool output.
             """
