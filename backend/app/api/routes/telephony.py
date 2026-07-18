@@ -769,30 +769,29 @@ async def handle_websocket_stream(websocket: WebSocket):
             from app.voice.tts import TextToSpeech
             tts = TextToSpeech()
             
-            # Generate short audio path
+            # Generate TTS audio (MP3)
             audio_path = await tts.generate(sentence, language=session.language if session else "en")
-            
-            import miniaudio
-            full_path = tts.output_dir.parent / audio_path
-            decoded = miniaudio.decode_file(str(full_path))
-            
-            pcm16_data = decoded.samples
-            sample_rate = decoded.sample_rate
-            
+            full_path = str(tts.output_dir.parent / audio_path)
+
+            # Use ffmpeg to decode MP3 → raw 8kHz mono signed 16-bit PCM (no temp files needed)
+            import subprocess
+            ffmpeg_proc = await asyncio.create_subprocess_exec(
+                "ffmpeg", "-y",
+                "-i", full_path,
+                "-ar", "8000",        # resample to 8kHz
+                "-ac", "1",           # mono
+                "-f", "s16le",        # raw signed 16-bit little-endian PCM
+                "-",                  # output to stdout
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            pcm16_data, _ = await ffmpeg_proc.communicate()
+
             num_samples = len(pcm16_data) // 2
             samples = struct.unpack(f"<{num_samples}h", pcm16_data)
-            
-            ratio = sample_rate // 8000
-            if ratio > 1:
-                downsampled_samples = []
-                for i in range(0, len(samples) - ratio + 1, ratio):
-                    avg_sample = sum(samples[i:i+ratio]) // ratio
-                    downsampled_samples.append(avg_sample)
-            else:
-                downsampled_samples = samples
-                
-            mulaw_bytes = bytearray(len(downsampled_samples))
-            for idx, s in enumerate(downsampled_samples):
+
+            mulaw_bytes = bytearray(len(samples))
+            for idx, s in enumerate(samples):
                 mulaw_bytes[idx] = pcm16_to_ulaw(s)
                 
             chunk_size = 320  # 40ms of audio at 8000Hz µ-law
@@ -813,6 +812,7 @@ async def handle_websocket_stream(websocket: WebSocket):
                 await asyncio.sleep(0.04)
         except Exception as e:
             print(f"Error in stream_sentence_audio: {e}")
+
 
     async def playback_worker():
         try:
