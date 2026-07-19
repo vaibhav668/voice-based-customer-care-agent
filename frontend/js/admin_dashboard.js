@@ -26,6 +26,11 @@ let activeLoadToken       = null;  // race-condition guard
 
 let convSearchQuery = "";
 
+// WebSocket throttling to prevent latency/API floods during active streams
+let wsUpdateTimeout = null;
+let wsPendingUpdate = false;
+const WS_THROTTLE_MS = 2000; // minimum 2 seconds between UI/API syncs during live events
+
 // Chart instances
 let chartCallsTimelineInst   = null;
 let chartResolutionRatioInst = null;
@@ -1387,14 +1392,132 @@ function initWebSocket() {
         socket.onclose = () => setTimeout(initWebSocket, 4000);
         socket.onerror = (e) => console.warn("[WS] error:", e);
 
-        socket.onmessage = async () => {
-            await loadAllData();
-            if (selectedCustomerPhone && groupedCustomers[selectedCustomerPhone]) {
-                await loadCustomerConversation(selectedCustomerPhone);
-            }
+        socket.onmessage = () => {
+            triggerWSUpdate();
         };
     } catch (e) {
         console.error("[WS] Connection failed:", e);
+    }
+}
+
+/* ─── Throttled Update Trigger to prevent API flooding and browser lag during streams ─── */
+function triggerWSUpdate() {
+    if (wsUpdateTimeout) {
+        wsPendingUpdate = true;
+        return;
+    }
+
+    performWSUpdate();
+
+    wsUpdateTimeout = setTimeout(() => {
+        wsUpdateTimeout = null;
+        if (wsPendingUpdate) {
+            wsPendingUpdate = false;
+            triggerWSUpdate();
+        }
+    }, WS_THROTTLE_MS);
+}
+
+async function performWSUpdate() {
+    console.log("[WS] Performing throttled update...");
+    try {
+        await loadAllData();
+        if (selectedCustomerPhone) {
+            await refreshCustomerConversation(selectedCustomerPhone);
+        }
+    } catch (err) {
+        console.error("[WS] throttled update failed:", err);
+    }
+}
+
+/* ─── Quietly Refresh Conversation (append new messages without resetting lazy state/scroll) ─── */
+async function refreshCustomerConversation(phone) {
+    const customer = groupedCustomers[phone];
+    if (!customer) return;
+
+    if (selectedCustomerPhone !== phone) return;
+
+    const newestEnriched = customer.conversations.at(-1); // sorted oldest -> newest
+    if (!newestEnriched) return;
+
+    const detail = await fetchConvDetail(newestEnriched);
+
+    if (selectedCustomerPhone !== phone) return;
+
+    const chatScroll = document.getElementById("conv-chat-scroll");
+    if (!chatScroll) return;
+
+    const newestBlockEl = chatScroll.querySelector(`[data-conv-id="${escapeAttr(newestEnriched.id)}"]`);
+    if (newestBlockEl) {
+        const blockState = lazy.loadedBlocks.find(b => (b.detail.id || b.meta.id) === newestEnriched.id);
+        if (blockState) {
+            blockState.detail = detail;
+            blockState.allMsgs = detail.messages || [];
+
+            const existingMsgGroupEls = newestBlockEl.querySelectorAll(".chat-msg-group");
+            const existingMsgIds = new Set(Array.from(existingMsgGroupEls).map(el => el.dataset.msgId));
+
+            const startIdx = blockState.renderedUpTo;
+            const msgsToShow = blockState.allMsgs.slice(startIdx);
+
+            let newHtml = "";
+            let addedAny = false;
+            msgsToShow.forEach(msg => {
+                const msgIdStr = String(msg.id || "");
+                if (!existingMsgIds.has(msgIdStr)) {
+                    newHtml += buildChatMessage(msg);
+                    addedAny = true;
+                }
+            });
+
+            if (addedAny) {
+                // Check if user is scrolled near the bottom (within 120px)
+                const isNearBottom = (chatScroll.scrollHeight - chatScroll.scrollTop - chatScroll.clientHeight) < 120;
+
+                const tempDiv = document.createElement("div");
+                tempDiv.innerHTML = newHtml;
+                while (tempDiv.firstChild) {
+                    newestBlockEl.appendChild(tempDiv.firstChild);
+                }
+
+                if (isNearBottom) {
+                    requestAnimationFrame(() => {
+                        chatScroll.scrollTop = chatScroll.scrollHeight;
+                    });
+                }
+            }
+
+            // Update call header/divider metadata
+            const labelEl = newestBlockEl.querySelector(".call-divider-label");
+            if (labelEl) {
+                const callDate = detail.started_at
+                    ? new Date(detail.started_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+                    : "Unknown Date";
+                const callTime = detail.started_at
+                    ? new Date(detail.started_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })
+                    : "";
+                const resStatus = detail.resolution_status || "unresolved";
+                const resClass  = resStatus === "resolved" ? "badge-resolved" : (resStatus === "escalated" ? "badge-escalated" : "badge-pending");
+                const durSec    = detail.duration || 0;
+                const durFmt    = `${Math.floor(durSec / 60)}m ${durSec % 60}s`;
+
+                labelEl.innerHTML = `
+                    <i class="fa-solid fa-phone"></i>
+                    <span class="call-divider-text">Call — ${escapeHtml(callDate)} ${escapeHtml(callTime)}</span>
+                    <span class="call-divider-date">· ${durFmt}</span>
+                    <span class="badge-status-sm ${resClass}" style="margin-left:4px;">${resStatus.toUpperCase()}</span>
+                `;
+            }
+
+            populateConvHeader(customer);
+        }
+    } else {
+        // Entirely new call started
+        appendConversationBlock(detail, newestEnriched, chatScroll, "append");
+        installAudioObserver(chatScroll);
+        requestAnimationFrame(() => {
+            chatScroll.scrollTop = chatScroll.scrollHeight;
+        });
     }
 }
 
