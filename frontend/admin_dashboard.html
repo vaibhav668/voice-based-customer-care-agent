@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Support AI - Enterprise Customer Support Platform</title>
+    <meta name="description" content="Support AI enterprise customer support analytics, voice intelligence, and conversation center powered by PostgreSQL.">
     
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
@@ -16,7 +17,7 @@
 <body>
 
     <div class="admin-wrapper">
-        <!-- LEFT SIDEBAR (EXACTLY 4 MENU ITEMS) -->
+        <!-- LEFT SIDEBAR -->
         <aside class="sidebar">
             <div class="brand-section">
                 <div class="brand-icon">
@@ -94,7 +95,7 @@
                         <p>Support AI enterprise customer support analytics and voice intelligence from PostgreSQL.</p>
                     </div>
 
-                    <!-- 4 LARGE CLEAN METRIC CARDS -->
+                    <!-- 4 METRIC CARDS -->
                     <div class="metrics-grid-4">
                         <div class="metric-card lg">
                             <div class="metric-header">
@@ -133,14 +134,14 @@
                         </div>
                     </div>
 
-                    <!-- DASHBOARD MAIN LAYOUT (CHARTS + LIVE CALLS PANEL) -->
+                    <!-- DASHBOARD MAIN LAYOUT -->
                     <div class="dashboard-layout">
-                        <!-- LEFT COLUMN: LIVE CHARTS (MAIN FOCUS) -->
+                        <!-- LEFT: CHARTS -->
                         <div class="charts-section">
                             <div class="chart-card large-chart">
                                 <div class="chart-header">
                                     <h3>Call Activity Timeline</h3>
-                                    <span class="chart-tag">Hourly & Daily Trend</span>
+                                    <span class="chart-tag">Hourly &amp; Daily Trend</span>
                                 </div>
                                 <div class="chart-container-wrapper main-timeline">
                                     <canvas id="chartCallsTimeline"></canvas>
@@ -148,7 +149,6 @@
                             </div>
 
                             <div class="chart-grid-2">
-                                <!-- Resolution Status Ratio Card with Side Breakdown -->
                                 <div class="chart-card">
                                     <div class="chart-header">
                                         <h3>Resolution Status Ratio</h3>
@@ -178,7 +178,6 @@
                                     </div>
                                 </div>
 
-                                <!-- Language Breakdown Pie Chart -->
                                 <div class="chart-card">
                                     <div class="chart-header">
                                         <h3>Language Breakdown</h3>
@@ -200,7 +199,7 @@
                             </div>
                         </div>
 
-                        <!-- RIGHT COLUMN: LIVE CALLS PANEL (24H WINDOW) -->
+                        <!-- RIGHT: LIVE CALLS -->
                         <div class="live-calls-panel">
                             <div class="panel-title">
                                 <h3>Live Calls (Past 24 Hours)</h3>
@@ -220,105 +219,115 @@
                     </div>
                 </section>
 
-                <!-- 2. CALL SUPPORT TAB (3-PANEL LAYOUT) -->
+                <!-- 2. CALL SUPPORT TAB — 2-COLUMN ENTERPRISE LAYOUT -->
                 <section class="tab-pane" id="tab-call-support">
-                    <div class="call-support-container">
+                    <div class="call-support-workspace">
 
-                        <!-- LEFT PANEL: UNIQUE CUSTOMERS ONLY -->
-                        <div class="panel-customers">
-                            <div class="panel-header-sub">
-                                <h3>Unique Customers</h3>
-                                <div class="panel-search">
+                        <!-- LEFT PANEL: UNIQUE CUSTOMERS -->
+                        <div class="cs-left-panel">
+                            <div class="cs-left-header">
+                                <div class="cs-left-title-row">
+                                    <h3>Unique Customers</h3>
+                                    <span class="cs-customer-count" id="cs-customer-count">0</span>
+                                </div>
+                                <div class="cs-search-wrap">
                                     <i class="fa-solid fa-magnifying-glass"></i>
-                                    <input type="text" id="customer-search-input" placeholder="Filter phone or name...">
+                                    <input
+                                        type="text"
+                                        id="cs-search-input"
+                                        class="cs-search-input"
+                                        placeholder="Search name, phone, booking, language…"
+                                        autocomplete="off"
+                                    >
                                 </div>
                             </div>
-                            <div class="customer-list-scroll" id="unique-customers-list">
-                                <div class="empty-state-box">
-                                    <i class="fa-solid fa-spinner fa-spin"></i>
-                                    <p>Loading customers...</p>
+
+                            <div class="cs-customer-list" id="cs-customer-list">
+                                <!-- Skeleton loaders -->
+                                <div id="cs-skeleton-list">
+                                    <div class="skeleton-customer"><div class="skel-avatar"></div><div class="skel-lines"><div class="skel-line w-70"></div><div class="skel-line w-50"></div><div class="skel-line w-40"></div></div></div>
+                                    <div class="skeleton-customer"><div class="skel-avatar"></div><div class="skel-lines"><div class="skel-line w-70"></div><div class="skel-line w-50"></div><div class="skel-line w-40"></div></div></div>
+                                    <div class="skeleton-customer"><div class="skel-avatar"></div><div class="skel-lines"><div class="skel-line w-70"></div><div class="skel-line w-50"></div><div class="skel-line w-40"></div></div></div>
+                                    <div class="skeleton-customer"><div class="skel-avatar"></div><div class="skel-lines"><div class="skel-line w-70"></div><div class="skel-line w-50"></div><div class="skel-line w-40"></div></div></div>
+                                    <div class="skeleton-customer"><div class="skel-avatar"></div><div class="skel-lines"><div class="skel-line w-70"></div><div class="skel-line w-50"></div><div class="skel-line w-40"></div></div></div>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- CENTER PANEL: CONVERSATION HISTORY -->
-                        <div class="panel-history">
-                            <div class="panel-header-sub">
-                                <h3 id="selected-customer-title">Customer History</h3>
-                                <span style="font-size: 11px; color: var(--text-muted);" id="selected-customer-subtitle">Select a customer on the left</span>
-                            </div>
-                            <div class="history-list-scroll" id="customer-history-list">
-                                <div class="empty-state-box">
-                                    <i class="fa-solid fa-hand-pointer"></i>
-                                    <p>Select a customer from the left panel to view their call history.</p>
-                                </div>
-                            </div>
-                        </div>
+                        <!-- RIGHT PANEL: CONVERSATION WORKSPACE -->
+                        <div class="cs-right-panel" id="cs-right-panel">
 
-                        <!-- RIGHT PANEL: CALL DETAILS & TRANSCRIPT TIMELINE -->
-                        <div class="panel-details">
-                            <div class="details-header">
-                                <div style="display:flex; justify-content:space-between; align-items:center;">
-                                    <div>
-                                        <h3 id="detail-customer-name" style="font-size:15px; font-weight:700; color:var(--text-primary);">Select Conversation</h3>
-                                        <span id="detail-customer-phone" style="font-size:12px; font-family:var(--font-mono); color:var(--text-muted);">—</span>
-                                    </div>
-                                    <div id="detail-resolution-badge"></div>
-                                </div>
-
-                                <div class="details-meta-grid">
-                                    <div class="meta-item">
-                                        <span class="meta-label">Booking Code</span>
-                                        <span class="meta-value" id="detail-booking-code">—</span>
-                                    </div>
-                                    <div class="meta-item">
-                                        <span class="meta-label">Language</span>
-                                        <span class="meta-value" id="detail-language">—</span>
-                                    </div>
-                                    <div class="meta-item">
-                                        <span class="meta-label">Call Duration</span>
-                                        <span class="meta-value" id="detail-duration">—</span>
-                                    </div>
-                                    <div class="meta-item">
-                                        <span class="meta-label">Rating</span>
-                                        <span class="meta-value" id="detail-rating">—</span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Full Transcript Timeline -->
-                            <div class="transcript-container" id="transcript-timeline-container">
-                                <div class="empty-state-box">
+                            <!-- No-selection state -->
+                            <div class="cs-no-selection" id="cs-no-selection">
+                                <div class="ns-icon">
                                     <i class="fa-solid fa-comments"></i>
-                                    <p>Select a call from history to inspect full transcript timeline.</p>
                                 </div>
+                                <h3>Select a Customer</h3>
+                                <p>Choose a customer from the left panel to view their complete conversation history.</p>
                             </div>
 
-                            <!-- Audio Player Footer -->
-                            <div class="audio-player-footer" id="audio-player-footer" style="display:none;">
-                                <div class="audio-controls">
-                                    <button class="btn-play" id="audio-play-pause-btn">
-                                        <i class="fa-solid fa-play"></i>
-                                    </button>
-                                    <span id="audio-time-current" style="font-size:11px; font-family:var(--font-mono); color:var(--text-muted);">0:00</span>
-                                    <input type="range" class="audio-seekbar" id="audio-seekbar" value="0" min="0" max="100">
-                                    <span id="audio-time-total" style="font-size:11px; font-family:var(--font-mono); color:var(--text-muted);">0:00</span>
-                                    <audio id="real-audio-element" style="display:none;"></audio>
-                                </div>
-                            </div>
-                        </div>
+                            <!-- Conversation Workspace (shown when customer selected) -->
+                            <div class="cs-conversation-view" id="cs-conversation-view">
 
-                    </div>
+                                <!-- STICKY HEADER -->
+                                <div class="conv-sticky-header" id="conv-sticky-header">
+                                    <div class="conv-header-top">
+                                        <div class="conv-header-avatar" id="conv-hdr-avatar" style="background:#2563eb;">AB</div>
+                                        <div class="conv-header-identity">
+                                            <div class="conv-header-name" id="conv-hdr-name">Customer Name</div>
+                                            <div class="conv-header-phone" id="conv-hdr-phone">+91 XXXXXXXXXX</div>
+                                        </div>
+                                        <div class="conv-header-badges" id="conv-hdr-badges">
+                                            <!-- dynamically populated -->
+                                        </div>
+                                    </div>
+
+                                    <!-- Conversation search + meta -->
+                                    <div class="conv-search-bar">
+                                        <div class="conv-search-wrap">
+                                            <i class="fa-solid fa-magnifying-glass"></i>
+                                            <input
+                                                type="text"
+                                                id="conv-search-input"
+                                                class="conv-search-input"
+                                                placeholder="Search conversation…"
+                                                autocomplete="off"
+                                            >
+                                        </div>
+                                        <button class="conv-search-clear" id="conv-search-clear" title="Clear search">
+                                            <i class="fa-solid fa-xmark"></i>
+                                        </button>
+                                    </div>
+
+                                    <div class="conv-meta-grid" id="conv-meta-grid">
+                                        <!-- dynamically populated meta items -->
+                                    </div>
+                                </div>
+
+                                <!-- SCROLLABLE CHAT AREA -->
+                                <div class="conv-chat-scroll" id="conv-chat-scroll">
+                                    <!-- Chat messages rendered here -->
+                                </div>
+
+                                <!-- Scroll-to-bottom FAB -->
+                                <button class="scroll-bottom-btn" id="scroll-bottom-btn" title="Scroll to latest">
+                                    <i class="fa-solid fa-chevron-down"></i>
+                                </button>
+
+                            </div><!-- end cs-conversation-view -->
+
+                        </div><!-- end cs-right-panel -->
+
+                    </div><!-- end call-support-workspace -->
                 </section>
 
                 <!-- 3. CUSTOMER FEEDBACK TAB -->
                 <section class="tab-pane" id="tab-reviews">
                     <div class="page-header">
-                        <h1>Customer Feedback & Reviews</h1>
+                        <h1>Customer Feedback &amp; Reviews</h1>
                         <p>Customer rating distribution, CSAT scores, and direct conversation reviews.</p>
                     </div>
 
-                    <!-- SUMMARY CARDS -->
                     <div class="feedback-summary-grid">
                         <div class="metric-card">
                             <div class="metric-title">Average Rating</div>
@@ -347,15 +356,11 @@
                         </div>
                     </div>
 
-                    <!-- 10-STAR RATING DISTRIBUTION BREAKDOWN -->
                     <div class="distribution-card">
                         <h3 style="font-size:14px; font-weight:700; margin-bottom:16px;">Rating Distribution (10 Stars Scale)</h3>
-                        <div id="rating-distribution-bars">
-                            <!-- Dynamically generated 10 to 1 bars -->
-                        </div>
+                        <div id="rating-distribution-bars"></div>
                     </div>
 
-                    <!-- RECENT REVIEWS TABLE -->
                     <div class="table-container">
                         <table class="custom-table">
                             <thead>
@@ -414,7 +419,7 @@
                     </div>
                 </section>
 
-            </div>
+            </div><!-- end tab-content-container -->
         </main>
     </div>
 
