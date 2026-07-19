@@ -218,27 +218,46 @@ function groupCustomersByPhone() {
 function renderDashboard4Metrics() {
     const now = Date.now();
 
-    // 1. Active Calls in previous 24 hours
+    // 1. Active Calls = COUNT(DISTINCT phone_number) within the previous 24 hours
     const calls24h = allEnrichedConvs.filter(c => {
         if (!c.started_at) return false;
         const callTime = new Date(c.started_at).getTime();
         return (now - callTime) <= TWENTY_FOUR_HOURS_MS || c.status === "ACTIVE";
     });
-    const activeCallsCount = calls24h.length;
+    const distinctActive24hPhones = new Set(
+        calls24h
+            .map(c => c.user_phone)
+            .filter(p => p && p !== "Unknown")
+    );
+    const activeCallsCount = distinctActive24hPhones.size;
 
-    // 2. Average Call Duration across all completed calls
-    const totalCalls = allEnrichedConvs.length;
-    const totalDurationSec = allEnrichedConvs.reduce((acc, c) => acc + (c.duration || 0), 0);
-    const avgDurationSec = totalCalls > 0 ? Math.round(totalDurationSec / totalCalls) : 0;
-    const avgDurationFormatted = avgDurationSec > 0 ? `${Math.floor(avgDurationSec / 60)}m ${avgDurationSec % 60}s` : "0m 0s";
+    // 2. Average Call Duration = SUM(duration of valid completed calls) / COUNT(DISTINCT phone_number)
+    const validCompletedCalls = allEnrichedConvs.filter(c => typeof c.duration === "number" && c.duration > 0);
+    const sumTotalDurationSec = validCompletedCalls.reduce((acc, c) => acc + c.duration, 0);
 
-    // 3. Total Users = DISTINCT phone numbers count
-    const distinctPhones = new Set(
+    const distinctPhonesAll = new Set(
         allEnrichedConvs
             .map(c => c.user_phone)
             .filter(p => p && p !== "Unknown")
     );
-    const totalUsersCount = distinctPhones.size || Object.keys(groupedCustomers).length || 0;
+    const countDistinctCustomers = distinctPhonesAll.size || Object.keys(groupedCustomers).length || 0;
+
+    let avgDurationFormatted = "No Data Available";
+    if (countDistinctCustomers > 0 && sumTotalDurationSec > 0) {
+        const avgDurationSec = Math.round(sumTotalDurationSec / countDistinctCustomers);
+        const hours = Math.floor(avgDurationSec / 3600);
+        const mins = Math.floor((avgDurationSec % 3600) / 60);
+        const secs = avgDurationSec % 60;
+        
+        if (hours > 0) {
+            avgDurationFormatted = `${hours}h ${mins < 10 ? '0' : ''}${mins}m ${secs < 10 ? '0' : ''}${secs}s`;
+        } else {
+            avgDurationFormatted = `${mins}m ${secs < 10 ? '0' : ''}${secs}s`;
+        }
+    }
+
+    // 3. Total Users = DISTINCT phone numbers count
+    const totalUsersCount = countDistinctCustomers;
 
     // 4. Average Agent Response Time
     const avgLatency = "1.2s";
@@ -426,25 +445,40 @@ function renderDashboardCharts() {
         });
     }
 
-    // 4. Rating Distribution Chart (1 to 10 Stars)
+    // 4. Rating Distribution Chart (Percentage of Rating Customers for 1 to 10 Stars)
     const ctxRate = document.getElementById("chartRatingsTrend")?.getContext("2d");
     if (ctxRate) {
         if (chartRatingsTrendInst) chartRatingsTrendInst.destroy();
 
-        const ratingCounts = new Array(10).fill(0);
+        // Deduplicate ratings by customer phone/user ID so each rating customer counts once
+        const customerRatings = {};
         allReviews.forEach(r => {
+            const key = r.user_phone || r.id;
             if (r.rating >= 1 && r.rating <= 10) {
-                ratingCounts[r.rating - 1]++;
+                customerRatings[key] = r.rating;
             }
         });
+
+        const ratingCustomerKeys = Object.keys(customerRatings);
+        const totalRatingCustomers = ratingCustomerKeys.length;
+
+        const ratingCounts = new Array(10).fill(0);
+        ratingCustomerKeys.forEach(k => {
+            const star = customerRatings[k];
+            ratingCounts[star - 1]++;
+        });
+
+        const ratingPercentages = ratingCounts.map(count => 
+            totalRatingCustomers > 0 ? parseFloat(((count / totalRatingCustomers) * 100).toFixed(1)) : 0
+        );
 
         chartRatingsTrendInst = new Chart(ctxRate, {
             type: "bar",
             data: {
                 labels: ["1★", "2★", "3★", "4★", "5★", "6★", "7★", "8★", "9★", "10★"],
                 datasets: [{
-                    label: "Review Count",
-                    data: ratingCounts,
+                    label: "Customer Percentage (%)",
+                    data: ratingPercentages,
                     backgroundColor: "#f59e0b",
                     borderRadius: 4
                 }]
@@ -452,10 +486,29 @@ function renderDashboardCharts() {
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const starIdx = context.dataIndex;
+                                const count = ratingCounts[starIdx];
+                                const pct = context.raw || 0;
+                                return `${pct}% (${count} of ${totalRatingCustomers} rating customers)`;
+                            }
+                        }
+                    }
+                },
                 scales: {
                     x: { grid: { display: false }, ticks: { font: { size: 10 } } },
-                    y: { beginAtZero: true, ticks: { precision: 0, font: { size: 11 } } }
+                    y: {
+                        beginAtZero: true,
+                        title: { display: true, text: "Percentage (%)", font: { size: 11, weight: "600" } },
+                        ticks: {
+                            callback: function(val) { return val + "%"; },
+                            font: { size: 11 }
+                        }
+                    }
                 }
             }
         });
