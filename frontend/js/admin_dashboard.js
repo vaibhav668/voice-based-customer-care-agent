@@ -121,28 +121,22 @@ function switchToTab(tabName) {
 
 /* ----------------- DATA LOADING & MASTER REFRESH ----------------- */
 async function loadAllData() {
-    try {
-        await Promise.all([
-            fetchConversations(),
-            fetchReviews(),
-            fetchBookings()
-        ]);
-        
-        renderDashboard4Metrics();
-        renderDashboardCharts();
-        renderLiveCallsPanel24h();
-        renderCallSupportLeftPanel();
-        renderFeedbackTab();
-        renderBookingsTab();
-    } catch (err) {
-        console.error("Error loading master dashboard data:", err);
-    }
+    try { await fetchConversations(); } catch (e) { console.error("fetchConversations failed:", e); }
+    try { await fetchReviews(); } catch (e) { console.error("fetchReviews failed:", e); }
+    try { await fetchBookings(); } catch (e) { console.error("fetchBookings failed:", e); }
+
+    try { renderDashboard4Metrics(); } catch (e) { console.error("renderDashboard4Metrics failed:", e); }
+    try { renderDashboardCharts(); } catch (e) { console.error("renderDashboardCharts failed:", e); }
+    try { renderLiveCallsPanel24h(); } catch (e) { console.error("renderLiveCallsPanel24h failed:", e); }
+    try { renderCallSupportLeftPanel(); } catch (e) { console.error("renderCallSupportLeftPanel failed:", e); }
+    try { renderFeedbackTab(); } catch (e) { console.error("renderFeedbackTab failed:", e); }
+    try { renderBookingsTab(); } catch (e) { console.error("renderBookingsTab failed:", e); }
 }
 
 async function fetchConversations() {
     try {
         const response = await getAdminEnrichedConversations(200);
-        allEnrichedConvs = response.data?.conversations || [];
+        allEnrichedConvs = response.data?.conversations || response.conversations || [];
         groupCustomersByPhone();
     } catch (err) {
         console.error("Failed to fetch enriched conversations:", err);
@@ -153,7 +147,7 @@ async function fetchConversations() {
 async function fetchReviews() {
     try {
         const response = await getAdminReviews();
-        allReviews = response.data?.reviews || [];
+        allReviews = response.data?.reviews || response.reviews || [];
     } catch (err) {
         console.error("Failed to fetch customer reviews:", err);
         allReviews = [];
@@ -163,7 +157,7 @@ async function fetchReviews() {
 async function fetchBookings() {
     try {
         const response = await getAnalyticsBookings();
-        allBookings = response.data || [];
+        allBookings = response.data || response || [];
     } catch (err) {
         console.error("Failed to fetch bookings:", err);
         allBookings = [];
@@ -279,6 +273,11 @@ function renderDashboard4Metrics() {
 
 /* ----------------- 2. REAL-TIME ANALYTICS CHARTS (MAIN FOCUS) ----------------- */
 function renderDashboardCharts() {
+    if (typeof Chart === "undefined") {
+        console.warn("Chart.js library is not loaded yet.");
+        return;
+    }
+
     const totalCalls = allEnrichedConvs.length;
 
     // 1. Call Activity Timeline Chart
