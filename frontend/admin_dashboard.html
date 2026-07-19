@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EchoCore AI - Enterprise Support Console</title>
+    <title>Support AI - Enterprise Customer Support Platform</title>
     
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
@@ -23,8 +23,8 @@
                     <i class="fa-solid fa-headset"></i>
                 </div>
                 <div class="brand-text">
-                    <h2>EchoCore AI</h2>
-                    <p>Enterprise Customer Care</p>
+                    <h2>Support AI</h2>
+                    <p>Enterprise Customer Support Platform</p>
                 </div>
             </div>
 
@@ -50,10 +50,10 @@
 
             <div class="sidebar-footer">
                 <div class="user-meta-footer">
-                    <div class="avatar-circle" id="admin-avatar-initials">AD</div>
+                    <div class="avatar-circle" id="admin-avatar-initials">SA</div>
                     <div class="user-info-text">
-                        <strong id="admin-name">Admin Console</strong>
-                        <span>Super Administrator</span>
+                        <strong id="admin-name">Support AI Admin</strong>
+                        <span>System Administrator</span>
                     </div>
                 </div>
                 <button class="btn-logout" id="admin-logout" title="Sign Out">
@@ -91,170 +91,129 @@
                 <section class="tab-pane active" id="tab-dashboard">
                     <div class="page-header">
                         <h1>Operations Overview</h1>
-                        <p>Real-time AI voice support analytics and customer session intelligence from PostgreSQL.</p>
+                        <p>Support AI enterprise customer support analytics and voice intelligence from PostgreSQL.</p>
                     </div>
 
-                    <!-- 11 OPERATIONAL METRIC CARDS -->
-                    <div class="metrics-grid-11">
-                        <div class="metric-card">
+                    <!-- 4 LARGE CLEAN METRIC CARDS -->
+                    <div class="metrics-grid-4">
+                        <div class="metric-card lg">
                             <div class="metric-header">
-                                <span class="metric-title">Today's Calls</span>
-                                <div class="metric-icon"><i class="fa-solid fa-phone"></i></div>
-                            </div>
-                            <div class="metric-value" id="stat-todays-calls">—</div>
-                            <div class="metric-sub">Voice sessions logged today</div>
-                        </div>
-
-                        <div class="metric-card">
-                            <div class="metric-header">
-                                <span class="metric-title">Active Calls</span>
+                                <span class="metric-title">Active Calls (24h)</span>
                                 <div class="metric-icon"><i class="fa-solid fa-signal" style="color:var(--green-success)"></i></div>
                             </div>
                             <div class="metric-value" id="stat-active-calls">—</div>
-                            <div class="metric-sub">Currently in progress</div>
+                            <div class="metric-sub">Calls in past 24 hours</div>
                         </div>
 
-                        <div class="metric-card">
+                        <div class="metric-card lg">
                             <div class="metric-header">
-                                <span class="metric-title">Resolved Calls</span>
-                                <div class="metric-icon"><i class="fa-solid fa-circle-check" style="color:var(--green-text)"></i></div>
-                            </div>
-                            <div class="metric-value" id="stat-resolved-calls">—</div>
-                            <div class="metric-sub">Fully handled by AI</div>
-                        </div>
-
-                        <div class="metric-card">
-                            <div class="metric-header">
-                                <span class="metric-title">Unresolved Calls</span>
-                                <div class="metric-icon"><i class="fa-solid fa-triangle-exclamation" style="color:var(--red-text)"></i></div>
-                            </div>
-                            <div class="metric-value" id="stat-unresolved-calls">—</div>
-                            <div class="metric-sub">Escalated or pending review</div>
-                        </div>
-
-                        <div class="metric-card">
-                            <div class="metric-header">
-                                <span class="metric-title">Avg Call Duration</span>
-                                <div class="metric-icon"><i class="fa-regular fa-clock"></i></div>
+                                <span class="metric-title">Average Call Duration</span>
+                                <div class="metric-icon"><i class="fa-regular fa-clock" style="color:var(--blue-primary)"></i></div>
                             </div>
                             <div class="metric-value" id="stat-avg-duration">—</div>
-                            <div class="metric-sub">Average talk time</div>
+                            <div class="metric-sub">Across all completed calls</div>
                         </div>
 
-                        <div class="metric-card">
+                        <div class="metric-card lg">
                             <div class="metric-header">
-                                <span class="metric-title">Avg Customer Rating</span>
-                                <div class="metric-icon"><i class="fa-solid fa-star" style="color:var(--amber-warning)"></i></div>
+                                <span class="metric-title">Total Users</span>
+                                <div class="metric-icon"><i class="fa-solid fa-users" style="color:var(--purple-accent)"></i></div>
                             </div>
-                            <div class="metric-value" id="stat-avg-rating">—</div>
-                            <div class="metric-sub">Customer satisfaction score</div>
+                            <div class="metric-value" id="stat-total-users">—</div>
+                            <div class="metric-sub">Registered customer accounts</div>
                         </div>
 
-                        <div class="metric-card">
+                        <div class="metric-card lg">
                             <div class="metric-header">
-                                <span class="metric-title">Total Customers</span>
-                                <div class="metric-icon"><i class="fa-solid fa-users"></i></div>
-                            </div>
-                            <div class="metric-value" id="stat-total-customers">—</div>
-                            <div class="metric-sub">Unique phone contacts</div>
-                        </div>
-
-                        <div class="metric-card">
-                            <div class="metric-header">
-                                <span class="metric-title">Avg AI Response Time</span>
-                                <div class="metric-icon"><i class="fa-solid fa-bolt" style="color:var(--purple-accent)"></i></div>
+                                <span class="metric-title">Average Agent Response Time</span>
+                                <div class="metric-icon"><i class="fa-solid fa-bolt" style="color:var(--amber-warning)"></i></div>
                             </div>
                             <div class="metric-value" id="stat-ai-latency">—</div>
-                            <div class="metric-sub">Average turn latency</div>
-                        </div>
-
-                        <div class="metric-card">
-                            <div class="metric-header">
-                                <span class="metric-title">Avg Resolution Time</span>
-                                <div class="metric-icon"><i class="fa-solid fa-stopwatch"></i></div>
-                            </div>
-                            <div class="metric-value" id="stat-resolution-time">—</div>
-                            <div class="metric-sub">Time to issue resolution</div>
-                        </div>
-
-                        <div class="metric-card">
-                            <div class="metric-header">
-                                <span class="metric-title">Languages Used</span>
-                                <div class="metric-icon"><i class="fa-solid fa-language"></i></div>
-                            </div>
-                            <div class="metric-value" id="stat-languages-used">—</div>
-                            <div class="metric-sub">Multilingual call volume</div>
-                        </div>
-
-                        <div class="metric-card">
-                            <div class="metric-header">
-                                <span class="metric-title">Bookings Verified</span>
-                                <div class="metric-icon"><i class="fa-solid fa-shield-check" style="color:var(--blue-primary)"></i></div>
-                            </div>
-                            <div class="metric-value" id="stat-bookings-verified">—</div>
-                            <div class="metric-sub">Authenticated voice bookings</div>
+                            <div class="metric-sub">Average AI turn latency</div>
                         </div>
                     </div>
 
                     <!-- DASHBOARD MAIN LAYOUT (CHARTS + LIVE CALLS PANEL) -->
                     <div class="dashboard-layout">
-                        <!-- LEFT COLUMN: LIVE CHARTS -->
+                        <!-- LEFT COLUMN: LIVE CHARTS (MAIN FOCUS) -->
                         <div class="charts-section">
-                            <div class="chart-grid-2">
-                                <div class="chart-card">
-                                    <div class="chart-header">
-                                        <h3>Calls Activity Timeline</h3>
-                                    </div>
-                                    <div class="chart-container-wrapper">
-                                        <canvas id="chartCallsTimeline"></canvas>
-                                    </div>
+                            <div class="chart-card large-chart">
+                                <div class="chart-header">
+                                    <h3>Call Activity Timeline</h3>
+                                    <span class="chart-tag">Hourly & Daily Trend</span>
                                 </div>
-
-                                <div class="chart-card">
-                                    <div class="chart-header">
-                                        <h3>Resolution Status Ratio</h3>
-                                    </div>
-                                    <div class="chart-container-wrapper">
-                                        <canvas id="chartResolutionRatio"></canvas>
-                                    </div>
+                                <div class="chart-container-wrapper main-timeline">
+                                    <canvas id="chartCallsTimeline"></canvas>
                                 </div>
                             </div>
 
                             <div class="chart-grid-2">
+                                <!-- Resolution Status Ratio Card with Side Breakdown -->
+                                <div class="chart-card">
+                                    <div class="chart-header">
+                                        <h3>Resolution Status Ratio</h3>
+                                    </div>
+                                    <div class="doughnut-card-body">
+                                        <div class="chart-container-wrapper doughnut-wrapper">
+                                            <canvas id="chartResolutionRatio"></canvas>
+                                        </div>
+                                        <div class="resolution-side-stats" id="resolution-side-stats">
+                                            <div class="res-stat-item">
+                                                <div class="res-stat-indicator" style="background-color: var(--green-success);"></div>
+                                                <div class="res-stat-info">
+                                                    <span class="res-stat-label">Resolved</span>
+                                                    <strong class="res-stat-pct" id="res-stat-resolved-pct">0%</strong>
+                                                    <span class="res-stat-count" id="res-stat-resolved-count">0 Calls</span>
+                                                </div>
+                                            </div>
+                                            <div class="res-stat-item">
+                                                <div class="res-stat-indicator" style="background-color: var(--red-danger);"></div>
+                                                <div class="res-stat-info">
+                                                    <span class="res-stat-label">Unresolved</span>
+                                                    <strong class="res-stat-pct" id="res-stat-unresolved-pct">0%</strong>
+                                                    <span class="res-stat-count" id="res-stat-unresolved-count">0 Calls</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Language Breakdown Pie Chart -->
                                 <div class="chart-card">
                                     <div class="chart-header">
                                         <h3>Language Breakdown</h3>
+                                        <span class="chart-tag">10 Supported Languages</span>
                                     </div>
                                     <div class="chart-container-wrapper">
                                         <canvas id="chartLanguageDist"></canvas>
                                     </div>
                                 </div>
+                            </div>
 
-                                <div class="chart-card">
-                                    <div class="chart-header">
-                                        <h3>Rating Distribution</h3>
-                                    </div>
-                                    <div class="chart-container-wrapper">
-                                        <canvas id="chartRatingsTrend"></canvas>
-                                    </div>
+                            <div class="chart-card">
+                                <div class="chart-header">
+                                    <h3>Rating Distribution (1 to 10 Stars)</h3>
+                                </div>
+                                <div class="chart-container-wrapper">
+                                    <canvas id="chartRatingsTrend"></canvas>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- RIGHT COLUMN: LIVE CALLS PANEL -->
+                        <!-- RIGHT COLUMN: LIVE CALLS PANEL (24H WINDOW) -->
                         <div class="live-calls-panel">
                             <div class="panel-title">
-                                <h3>Live Active Calls</h3>
+                                <h3>Live Calls (Past 24 Hours)</h3>
                                 <div class="live-pulse-badge">
                                     <span class="pulse-dot"></span>
-                                    <span>LIVE</span>
+                                    <span>24H LIVE</span>
                                 </div>
                             </div>
 
                             <div class="live-calls-list" id="dashboard-live-calls-list">
                                 <div class="empty-state-box">
                                     <i class="fa-solid fa-spinner fa-spin"></i>
-                                    <p>Loading live active sessions...</p>
+                                    <p>Loading recent 24h call sessions...</p>
                                 </div>
                             </div>
                         </div>

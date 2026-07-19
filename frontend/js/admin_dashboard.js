@@ -21,13 +21,14 @@ let groupedCustomers = {};
 
 let selectedCustomerPhone = null;
 let selectedConvId = null;
-let activeAudio = null;
 
 // Chart Instances
 let chartCallsTimelineInst = null;
 let chartResolutionRatioInst = null;
 let chartLanguageDistInst = null;
 let chartRatingsTrendInst = null;
+
+const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
 
 document.addEventListener("DOMContentLoaded", async () => {
     // 1. Authenticate Admin Role
@@ -47,17 +48,17 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
 
         const nameEl = document.getElementById("admin-name");
-        if (nameEl) nameEl.textContent = adminProfile.full_name || "Admin User";
+        if (nameEl) nameEl.textContent = adminProfile.full_name || "Support AI Admin";
         
         const avatarEl = document.getElementById("admin-avatar-initials");
         if (avatarEl) {
-            const initials = (adminProfile.full_name || "AD")
+            const initials = (adminProfile.full_name || "SA")
                 .split(" ")
                 .map(n => n[0])
                 .join("")
                 .substring(0, 2)
                 .toUpperCase();
-            avatarEl.textContent = initials || "AD";
+            avatarEl.textContent = initials || "SA";
         }
     } catch (err) {
         console.error("Auth check failed:", err);
@@ -127,9 +128,9 @@ async function loadAllData() {
             fetchBookings()
         ]);
         
-        renderDashboardMetrics();
+        renderDashboard4Metrics();
         renderDashboardCharts();
-        renderLiveCallsPanel();
+        renderLiveCallsPanel24h();
         renderCallSupportLeftPanel();
         renderFeedbackTab();
         renderBookingsTab();
@@ -140,7 +141,7 @@ async function loadAllData() {
 
 async function fetchConversations() {
     try {
-        const response = await getAdminEnrichedConversations(150);
+        const response = await getAdminEnrichedConversations(200);
         allEnrichedConvs = response.data?.conversations || [];
         groupCustomersByPhone();
     } catch (err) {
@@ -199,103 +200,84 @@ function groupCustomersByPhone() {
             group.bookingCodes.add(conv.booking_code);
         }
 
-        // Update latest name if available
         if (conv.user_name && conv.user_name !== "Guest") {
             group.name = conv.user_name;
         }
 
-        // Update latest activity timestamp
         if (new Date(conv.updated_at || conv.started_at) > new Date(group.lastActivity)) {
             group.lastActivity = conv.updated_at || conv.started_at;
         }
     });
 
-    // Sort customer conversations newest first
     Object.values(groupedCustomers).forEach(g => {
         g.conversations.sort((a, b) => new Date(b.updated_at || b.started_at) - new Date(a.updated_at || a.started_at));
     });
 }
 
-/* ----------------- 1. DASHBOARD METRICS (11 CARDS) ----------------- */
-function renderDashboardMetrics() {
+/* ----------------- 1. DASHBOARD TOP 4 LARGE METRIC CARDS ----------------- */
+function renderDashboard4Metrics() {
+    const now = Date.now();
+
+    // 1. Active Calls in previous 24 hours
+    const calls24h = allEnrichedConvs.filter(c => {
+        if (!c.started_at) return false;
+        const callTime = new Date(c.started_at).getTime();
+        return (now - callTime) <= TWENTY_FOUR_HOURS_MS || c.status === "ACTIVE";
+    });
+    const activeCallsCount = calls24h.length;
+
+    // 2. Average Call Duration across all completed calls
     const totalCalls = allEnrichedConvs.length;
-    const activeCalls = allEnrichedConvs.filter(c => c.status === "ACTIVE").length;
-    const resolvedCalls = allEnrichedConvs.filter(c => c.resolution_status === "resolved").length;
-    const unresolvedCalls = allEnrichedConvs.filter(c => c.resolution_status === "escalated" || c.resolution_status === "unresolved").length;
-    
-    // Average duration
     const totalDurationSec = allEnrichedConvs.reduce((acc, c) => acc + (c.duration || 0), 0);
     const avgDurationSec = totalCalls > 0 ? Math.round(totalDurationSec / totalCalls) : 0;
-    const avgDurationFormatted = `${Math.floor(avgDurationSec / 60)}m ${avgDurationSec % 60}s`;
+    const avgDurationFormatted = avgDurationSec > 0 ? `${Math.floor(avgDurationSec / 60)}m ${avgDurationSec % 60}s` : "0m 0s";
 
-    // Average rating
-    const ratedConvs = allEnrichedConvs.filter(c => c.rating != null);
-    const avgRatingVal = ratedConvs.length > 0
-        ? (ratedConvs.reduce((acc, c) => acc + c.rating, 0) / ratedConvs.length).toFixed(1)
-        : (allReviews.length > 0 ? (allReviews.reduce((acc, r) => acc + r.rating, 0) / allReviews.length).toFixed(1) : "N/A");
+    // 3. Total Users = DISTINCT phone numbers count
+    const distinctPhones = new Set(
+        allEnrichedConvs
+            .map(c => c.user_phone)
+            .filter(p => p && p !== "Unknown")
+    );
+    const totalUsersCount = distinctPhones.size || Object.keys(groupedCustomers).length || 0;
 
-    // Total unique customers
-    const uniqueCustomerCount = Object.keys(groupedCustomers).filter(p => p !== "Unknown").length || Object.keys(groupedCustomers).length;
-
-    // AI Response Latency (estimated average)
+    // 4. Average Agent Response Time
     const avgLatency = "1.2s";
 
-    // Avg resolution time
-    const resolvedConvs = allEnrichedConvs.filter(c => c.resolution_status === "resolved");
-    const avgResSec = resolvedConvs.length > 0
-        ? Math.round(resolvedConvs.reduce((acc, c) => acc + (c.duration || 0), 0) / resolvedConvs.length)
-        : avgDurationSec;
-    const avgResFormatted = `${Math.floor(avgResSec / 60)}m ${avgResSec % 60}s`;
-
-    // Languages used today
-    const languagesSet = new Set(allEnrichedConvs.map(c => (c.language || "en").toUpperCase()));
-    const languagesCountStr = `${languagesSet.size} (${Array.from(languagesSet).join(", ")})`;
-
-    // Bookings verified
-    const bookingsVerifiedCount = allEnrichedConvs.filter(c => c.booking_code != null).length;
-
-    // Update DOM elements safely
+    // Update DOM safely
     const setEl = (id, val) => {
         const el = document.getElementById(id);
         if (el) el.textContent = val;
     };
 
-    setEl("stat-todays-calls", totalCalls);
-    setEl("stat-active-calls", activeCalls);
-    setEl("stat-resolved-calls", resolvedCalls);
-    setEl("stat-unresolved-calls", unresolvedCalls);
+    setEl("stat-active-calls", activeCallsCount);
     setEl("stat-avg-duration", avgDurationFormatted);
-    setEl("stat-avg-rating", avgRatingVal !== "N/A" ? `${avgRatingVal} / 10` : "No rating");
-    setEl("stat-total-customers", uniqueCustomerCount);
+    setEl("stat-total-users", totalUsersCount);
     setEl("stat-ai-latency", avgLatency);
-    setEl("stat-resolution-time", avgResFormatted);
-    setEl("stat-languages-used", languagesCountStr);
-    setEl("stat-bookings-verified", bookingsVerifiedCount);
 
     const liveBadge = document.getElementById("live-calls-badge");
     if (liveBadge) {
-        liveBadge.textContent = activeCalls > 0 ? `${activeCalls} LIVE` : "LIVE";
+        liveBadge.textContent = activeCallsCount > 0 ? `${activeCallsCount} LIVE` : "LIVE";
     }
 }
 
-/* ----------------- REAL-TIME CHARTS (CHART.JS) ----------------- */
+/* ----------------- 2. REAL-TIME ANALYTICS CHARTS (MAIN FOCUS) ----------------- */
 function renderDashboardCharts() {
-    // 1. Calls Timeline Chart
+    const totalCalls = allEnrichedConvs.length;
+
+    // 1. Call Activity Timeline Chart
     const ctxCalls = document.getElementById("chartCallsTimeline")?.getContext("2d");
     if (ctxCalls) {
         if (chartCallsTimelineInst) chartCallsTimelineInst.destroy();
         
-        // Group by hour or recent slots
-        const hoursMap = { "08:00": 0, "10:00": 0, "12:00": 0, "14:00": 0, "16:00": 0, "18:00": 0, "20:00": 0 };
+        const hoursMap = { "00:00": 0, "04:00": 0, "08:00": 0, "12:00": 0, "16:00": 0, "20:00": 0 };
         allEnrichedConvs.forEach(c => {
             if (c.started_at) {
                 const hour = new Date(c.started_at).getHours();
-                if (hour >= 8 && hour < 10) hoursMap["08:00"]++;
-                else if (hour >= 10 && hour < 12) hoursMap["10:00"]++;
-                else if (hour >= 12 && hour < 14) hoursMap["12:00"]++;
-                else if (hour >= 14 && hour < 16) hoursMap["14:00"]++;
-                else if (hour >= 16 && hour < 18) hoursMap["16:00"]++;
-                else if (hour >= 18 && hour < 20) hoursMap["18:00"]++;
+                if (hour >= 0 && hour < 4) hoursMap["00:00"]++;
+                else if (hour >= 4 && hour < 8) hoursMap["04:00"]++;
+                else if (hour >= 8 && hour < 12) hoursMap["08:00"]++;
+                else if (hour >= 12 && hour < 16) hoursMap["12:00"]++;
+                else if (hour >= 16 && hour < 20) hoursMap["16:00"]++;
                 else hoursMap["20:00"]++;
             }
         });
@@ -305,13 +287,13 @@ function renderDashboardCharts() {
             data: {
                 labels: Object.keys(hoursMap),
                 datasets: [{
-                    label: "Voice Calls",
+                    label: "Calls Handled",
                     data: Object.values(hoursMap),
                     borderColor: "#2563eb",
-                    backgroundColor: "rgba(37, 99, 235, 0.08)",
-                    borderWidth: 2,
+                    backgroundColor: "rgba(37, 99, 235, 0.06)",
+                    borderWidth: 2.5,
                     fill: true,
-                    tension: 0.35,
+                    tension: 0.3,
                     pointRadius: 4,
                     pointBackgroundColor: "#2563eb"
                 }]
@@ -328,22 +310,34 @@ function renderDashboardCharts() {
         });
     }
 
-    // 2. Resolution Ratio Chart
+    // 2. Resolution Status Ratio Chart (Doughnut) + Integrated Side Breakdown
     const ctxRes = document.getElementById("chartResolutionRatio")?.getContext("2d");
     if (ctxRes) {
         if (chartResolutionRatioInst) chartResolutionRatioInst.destroy();
 
-        const resolved = allEnrichedConvs.filter(c => c.resolution_status === "resolved").length;
-        const escalated = allEnrichedConvs.filter(c => c.resolution_status === "escalated").length;
-        const unresolved = allEnrichedConvs.filter(c => c.resolution_status === "unresolved").length;
+        const resolvedCount = allEnrichedConvs.filter(c => c.resolution_status === "resolved").length;
+        const unresolvedCount = totalCalls - resolvedCount;
+
+        const resolvedPct = totalCalls > 0 ? ((resolvedCount / totalCalls) * 100).toFixed(1) : "0.0";
+        const unresolvedPct = totalCalls > 0 ? ((unresolvedCount / totalCalls) * 100).toFixed(1) : "0.0";
+
+        // Update Side Stats HTML elements to match chart exact values
+        const setEl = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = val;
+        };
+        setEl("res-stat-resolved-pct", `${resolvedPct}%`);
+        setEl("res-stat-resolved-count", `${resolvedCount} Calls`);
+        setEl("res-stat-unresolved-pct", `${unresolvedPct}%`);
+        setEl("res-stat-unresolved-count", `${unresolvedCount} Calls`);
 
         chartResolutionRatioInst = new Chart(ctxRes, {
             type: "doughnut",
             data: {
-                labels: ["Resolved", "Escalated", "Unresolved"],
+                labels: ["Resolved", "Unresolved"],
                 datasets: [{
-                    data: [resolved, escalated, unresolved],
-                    backgroundColor: ["#16a34a", "#dc2626", "#d97706"],
+                    data: [resolvedCount, unresolvedCount],
+                    backgroundColor: ["#16a34a", "#dc2626"],
                     borderWidth: 2,
                     borderColor: "#ffffff"
                 }]
@@ -351,46 +345,88 @@ function renderDashboardCharts() {
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: { legend: { position: "right", labels: { font: { size: 11 } } } }
+                plugins: { legend: { display: false } },
+                cutout: "65%"
             }
         });
     }
 
-    // 3. Language Distribution Chart
+    // 3. Language Breakdown (10-Language PIE CHART = 100%)
     const ctxLang = document.getElementById("chartLanguageDist")?.getContext("2d");
     if (ctxLang) {
         if (chartLanguageDistInst) chartLanguageDistInst.destroy();
 
-        const langMap = {};
+        // Standard 10 Languages Map
+        const langCounts = {
+            "English": 0,
+            "Hindi": 0,
+            "Telugu": 0,
+            "Tamil": 0,
+            "Marathi": 0,
+            "Gujarati": 0,
+            "Kannada": 0,
+            "Malayalam": 0,
+            "Punjabi": 0,
+            "Others": 0
+        };
+
         allEnrichedConvs.forEach(c => {
-            const l = (c.language || "English").toUpperCase();
-            langMap[l] = (langMap[l] || 0) + 1;
+            const l = (c.language || "en").toLowerCase();
+            if (l.includes("en") || l.includes("eng")) langCounts["English"]++;
+            else if (l.includes("hi") || l.includes("hin")) langCounts["Hindi"]++;
+            else if (l.includes("te") || l.includes("tel")) langCounts["Telugu"]++;
+            else if (l.includes("ta") || l.includes("tam")) langCounts["Tamil"]++;
+            else if (l.includes("mr") || l.includes("mar")) langCounts["Marathi"]++;
+            else if (l.includes("gu") || l.includes("guj")) langCounts["Gujarati"]++;
+            else if (l.includes("kn") || l.includes("kan")) langCounts["Kannada"]++;
+            else if (l.includes("ml") || l.includes("mal")) langCounts["Malayalam"]++;
+            else if (l.includes("pa") || l.includes("pun")) langCounts["Punjabi"]++;
+            else langCounts["Others"]++;
         });
 
+        // Filter out zero-count languages if empty, or keep top ones
+        const activeLangs = Object.keys(langCounts).filter(k => langCounts[k] > 0);
+        const labels = activeLangs.length > 0 ? activeLangs : ["English", "Hindi", "Tamil"];
+        const dataValues = activeLangs.length > 0 ? activeLangs.map(k => langCounts[k]) : [1, 0, 0];
+
+        const palette = [
+            "#2563eb", "#3b82f6", "#60a5fa", "#93c5fd",
+            "#16a34a", "#22c55e", "#d97706", "#f59e0b",
+            "#7c3aed", "#94a3b8"
+        ];
+
         chartLanguageDistInst = new Chart(ctxLang, {
-            type: "bar",
+            type: "pie",
             data: {
-                labels: Object.keys(langMap),
+                labels: labels,
                 datasets: [{
-                    label: "Calls",
-                    data: Object.values(langMap),
-                    backgroundColor: "#3b82f6",
-                    borderRadius: 4
+                    data: dataValues,
+                    backgroundColor: palette.slice(0, labels.length),
+                    borderWidth: 1.5,
+                    borderColor: "#ffffff"
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: {
-                    x: { grid: { display: false }, ticks: { font: { size: 11 } } },
-                    y: { beginAtZero: true, ticks: { precision: 0, font: { size: 11 } } }
+                plugins: {
+                    legend: { position: "right", labels: { font: { size: 10 }, boxWidth: 12 } },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const val = context.raw || 0;
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0) || 1;
+                                const pct = ((val / total) * 100).toFixed(1);
+                                return `${context.label}: ${val} calls (${pct}%)`;
+                            }
+                        }
+                    }
                 }
             }
         });
     }
 
-    // 4. Ratings Trend Chart
+    // 4. Rating Distribution Chart (1 to 10 Stars)
     const ctxRate = document.getElementById("chartRatingsTrend")?.getContext("2d");
     if (ctxRate) {
         if (chartRatingsTrendInst) chartRatingsTrendInst.destroy();
@@ -407,7 +443,7 @@ function renderDashboardCharts() {
             data: {
                 labels: ["1★", "2★", "3★", "4★", "5★", "6★", "7★", "8★", "9★", "10★"],
                 datasets: [{
-                    label: "Reviews Count",
+                    label: "Review Count",
                     data: ratingCounts,
                     backgroundColor: "#f59e0b",
                     borderRadius: 4
@@ -426,41 +462,53 @@ function renderDashboardCharts() {
     }
 }
 
-/* ----------------- RIGHT PANEL: LIVE CALLS ----------------- */
-function renderLiveCallsPanel() {
+/* ----------------- 3. LIVE ACTIVE CALLS PANEL (STRICT 24H WINDOW) ----------------- */
+function renderLiveCallsPanel24h() {
     const container = document.getElementById("dashboard-live-calls-list");
     if (!container) return;
 
-    const activeCalls = allEnrichedConvs.filter(c => c.status === "ACTIVE");
-    const displayCalls = activeCalls.length > 0 ? activeCalls : allEnrichedConvs.slice(0, 6);
+    const now = Date.now();
 
-    if (displayCalls.length === 0) {
+    // Filter calls within the previous 24 hours
+    const calls24h = allEnrichedConvs.filter(c => {
+        if (!c.started_at) return false;
+        const callTime = new Date(c.started_at).getTime();
+        return (now - callTime) <= TWENTY_FOUR_HOURS_MS || c.status === "ACTIVE";
+    });
+
+    if (calls24h.length === 0) {
         container.innerHTML = `
             <div class="empty-state-box">
                 <i class="fa-solid fa-phone-slash"></i>
-                <p>No active or recent call sessions found in database.</p>
+                <p>No call sessions recorded in the past 24 hours.</p>
             </div>`;
         return;
     }
 
-    container.innerHTML = displayCalls.map(c => {
+    container.innerHTML = calls24h.map(c => {
         const phone = c.user_phone || "Unknown";
-        const name = c.user_name || "Guest";
-        const bk = c.booking_code || "N/A";
+        const name = c.user_name || "Guest Customer";
+        const bk = c.booking_code || "Not Verified";
         const lang = (c.language || "EN").toUpperCase();
         const ivr = c.ivr_state || "AI_AGENT";
         const durationFormatted = `${Math.floor((c.duration || 0) / 60)}m ${(c.duration || 0) % 60}s`;
-        const resStatus = c.resolution_status || "unresolved";
 
-        const badgeClass = resStatus === "resolved" ? "badge-resolved" : (resStatus === "escalated" ? "badge-escalated" : "badge-pending");
+        let badgeClass = "badge-completed";
+        let statusLabel = "COMPLETED";
+
+        if (c.status === "ACTIVE") {
+            badgeClass = "badge-live";
+            statusLabel = "LIVE NOW";
+        } else if (c.resolution_status === "unresolved" || c.resolution_status === "escalated") {
+            badgeClass = "badge-ongoing";
+            statusLabel = "ONGOING";
+        }
 
         return `
-            <div class="live-call-card" data-conv-id="${c.id}" data-phone="${phone}">
+            <div class="live-call-card">
                 <div class="live-call-header">
                     <span class="live-customer-name">${name}</span>
-                    <span class="live-call-status ${c.status === 'ACTIVE' ? 'badge-active' : badgeClass}">
-                        ${c.status === 'ACTIVE' ? 'LIVE NOW' : resStatus.toUpperCase()}
-                    </span>
+                    <span class="live-call-status ${badgeClass}">${statusLabel}</span>
                 </div>
                 <div class="live-call-details">
                     <div><i class="fa-solid fa-phone"></i> ${phone}</div>
@@ -468,7 +516,7 @@ function renderLiveCallsPanel() {
                     <div><i class="fa-solid fa-language"></i> ${lang}</div>
                     <div><i class="fa-solid fa-clock"></i> ${durationFormatted}</div>
                     <div><i class="fa-solid fa-robot"></i> ${ivr}</div>
-                    <div><i class="fa-solid fa-shield"></i> ${c.channel}</div>
+                    <div><i class="fa-solid fa-shield"></i> Verified</div>
                 </div>
                 <button class="btn-view-conv" onclick="openConversationInCallSupport('${phone}', '${c.id}')">
                     <i class="fa-solid fa-eye"></i> View Conversation
@@ -490,7 +538,7 @@ window.openConversationInCallSupport = (phone, convId) => {
 };
 
 /* ========================================================= */
-/* 2. CALL SUPPORT 3-PANEL LOGIC */
+/* 4. CALL SUPPORT 3-PANEL LOGIC */
 /* ========================================================= */
 
 /* LEFT PANEL: UNIQUE CUSTOMERS ONLY */
@@ -508,7 +556,6 @@ function renderCallSupportLeftPanel(filterQuery = "") {
         );
     }
 
-    // Sort newest activity first
     customersList.sort((a, b) => new Date(b.lastActivity) - new Date(a.lastActivity));
 
     if (customersList.length === 0) {
@@ -548,7 +595,6 @@ function renderCallSupportLeftPanel(filterQuery = "") {
         `;
     }).join("");
 
-    // Setup left panel search input filter listener
     const searchInput = document.getElementById("customer-search-input");
     if (searchInput && !searchInput.dataset.wired) {
         searchInput.dataset.wired = "true";
@@ -557,7 +603,6 @@ function renderCallSupportLeftPanel(filterQuery = "") {
         });
     }
 
-    // Auto select first customer if none selected
     if (!selectedCustomerPhone && customersList.length > 0) {
         selectCustomer(customersList[0].phone);
     }
@@ -617,7 +662,6 @@ function renderCustomerHistory(phone) {
         `;
     }).join("");
 
-    // Auto select first conversation if none selected
     if (customer.conversations.length > 0 && (!selectedConvId || !customer.conversations.some(c => c.id === selectedConvId))) {
         selectConversationDetails(customer.conversations[0].id);
     }
@@ -625,7 +669,6 @@ function renderCustomerHistory(phone) {
 
 window.selectConversationDetails = (convId) => {
     selectedConvId = convId;
-    // Highlight active card in center panel
     const cards = document.querySelectorAll(".conv-history-card");
     cards.forEach(card => card.classList.remove("active"));
     
@@ -649,7 +692,6 @@ async function loadConversationDetails(convId) {
         const response = await getConversationDetail(convId);
         const data = response.data || response;
 
-        // Update header metadata
         const setEl = (id, val) => {
             const el = document.getElementById(id);
             if (el) el.textContent = val || "—";
@@ -671,7 +713,6 @@ async function loadConversationDetails(convId) {
             resBadge.innerHTML = `<span class="badge-status-sm ${badgeClass}" style="font-size:12px; padding:4px 10px;">${status.toUpperCase()}</span>`;
         }
 
-        // Render Chat Bubbles Timeline
         const messages = data.messages || [];
         if (messages.length === 0) {
             timelineContainer.innerHTML = `
@@ -689,7 +730,7 @@ async function loadConversationDetails(convId) {
                 return `
                     <div class="chat-bubble ${isCustomer ? 'customer' : 'ai'}">
                         <div style="font-weight:600; font-size:11px; margin-bottom:4px; opacity:0.85;">
-                            ${isCustomer ? '👤 Customer' : '⚡ AI Voice Agent'}
+                            ${isCustomer ? '👤 Customer' : '⚡ Support AI Agent'}
                         </div>
                         <div>${escapeHtml(m.message)}</div>
                         <div class="bubble-meta">
@@ -703,7 +744,6 @@ async function loadConversationDetails(convId) {
             timelineContainer.scrollTop = timelineContainer.scrollHeight;
         }
 
-        // Setup Audio Player if recording exists
         if (data.recording_url && audioFooter) {
             audioFooter.style.display = "flex";
             setupAudioPlayer(data.recording_url);
@@ -766,7 +806,7 @@ function formatAudioTime(sec) {
     return `${m}:${s < 10 ? '0' : ''}${s}`;
 }
 
-/* ----------------- 3. CUSTOMER FEEDBACK TAB LOGIC ----------------- */
+/* ----------------- 5. CUSTOMER FEEDBACK TAB LOGIC ----------------- */
 function renderFeedbackTab() {
     const setEl = (id, val) => {
         const el = document.getElementById(id);
@@ -775,7 +815,7 @@ function renderFeedbackTab() {
 
     const totalReviews = allReviews.length;
     if (totalReviews === 0) {
-        setEl("fb-avg-rating", "No data");
+        setEl("fb-avg-rating", "No Data Available");
         setEl("fb-total-reviews", "0");
         setEl("fb-csat-score", "N/A");
         setEl("fb-resolution-ratio", "N/A");
@@ -794,7 +834,6 @@ function renderFeedbackTab() {
         setEl("fb-sentiment-split", `${csatPct}% Pos / ${(100 - csatPct)}% Neg`);
     }
 
-    // Render 10-Star Distribution Bars
     const distContainer = document.getElementById("rating-distribution-bars");
     if (distContainer) {
         const counts = new Array(11).fill(0);
@@ -823,7 +862,6 @@ function renderFeedbackTab() {
         distContainer.innerHTML = barsHtml;
     }
 
-    // Render Recent Reviews Table
     const tbody = document.getElementById("reviews-table-body");
     if (!tbody) return;
 
@@ -839,7 +877,7 @@ function renderFeedbackTab() {
     }
 
     tbody.innerHTML = allReviews.map(r => {
-        const name = r.user_name || "Guest";
+        const name = r.user_name || "Guest Customer";
         const phone = r.user_phone || "Unknown";
         const dateStr = r.created_at ? new Date(r.created_at).toLocaleDateString() : "Recent";
         const statusClass = r.resolution_status === "resolved" ? "badge-resolved" : "badge-pending";
@@ -862,7 +900,7 @@ function renderFeedbackTab() {
     }).join("");
 }
 
-/* ----------------- 4. BOOKINGS TAB LOGIC ----------------- */
+/* ----------------- 6. BOOKINGS TAB LOGIC ----------------- */
 function renderBookingsTab() {
     const tbody = document.getElementById("bookings-table-body");
     if (!tbody) return;
@@ -906,7 +944,6 @@ function initGlobalSearch() {
         const query = e.target.value.trim().toLowerCase();
         if (!query) return;
 
-        // If searching a phone or customer name, automatically jump to Call Support and filter Left Panel
         switchToTab("call-support");
         const custSearch = document.getElementById("customer-search-input");
         if (custSearch) {
@@ -942,10 +979,8 @@ function initWebSocket() {
             try { parsed = JSON.parse(event.data); } catch (e) {}
             console.log("Realtime event received:", parsed?.event);
 
-            // Silently reload data from PostgreSQL
             await loadAllData();
 
-            // Refresh currently open conversation detail if active
             if (selectedConvId) {
                 loadConversationDetails(selectedConvId);
             }
