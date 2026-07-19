@@ -225,18 +225,25 @@ function renderDashboard4Metrics() {
     );
     const activeCallsCount = distinctActive24hPhones.size;
 
-    // 2. Average Call Duration = Total call duration divided by total calls done (filtering out unended stale sessions > 4h)
+    // COUNT(DISTINCT phone_number) across all customer calls
+    const distinctPhonesAll = new Set(
+        allEnrichedConvs
+            .map(c => c.user_phone)
+            .filter(p => p && p !== "Unknown")
+    );
+    const countDistinctCustomers = distinctPhonesAll.size || Object.keys(groupedCustomers).length || (allEnrichedConvs.length > 0 ? 1 : 0);
+
+    // 2. Average Call Duration = SUM(duration of valid completed calls) / COUNT(DISTINCT phone_number)
     const validCompletedCalls = allEnrichedConvs.filter(c => 
         typeof c.duration === "number" && 
         c.duration > 0 && 
         c.duration < 14400
     );
     const sumTotalDurationSec = validCompletedCalls.reduce((acc, c) => acc + c.duration, 0);
-    const totalCallsCount = validCompletedCalls.length || allEnrichedConvs.length || 0;
 
     let avgDurationFormatted = "No Data Available";
-    if (totalCallsCount > 0 && sumTotalDurationSec > 0) {
-        const avgDurationSec = Math.round(sumTotalDurationSec / totalCallsCount);
+    if (countDistinctCustomers > 0 && sumTotalDurationSec > 0) {
+        const avgDurationSec = Math.round(sumTotalDurationSec / countDistinctCustomers);
         const hours = Math.floor(avgDurationSec / 3600);
         const mins = Math.floor((avgDurationSec % 3600) / 60);
         const secs = avgDurationSec % 60;
@@ -530,23 +537,27 @@ function renderLiveCallsPanel24h() {
 
     const now = Date.now();
 
-    // Filter calls within the previous 24 hours
+    // Filter calls within the previous 24 hours, or fallback to most recent call sessions
     const calls24h = allEnrichedConvs.filter(c => {
-        if (!c.started_at) return false;
-        const callTime = new Date(c.started_at).getTime();
-        return (now - callTime) <= TWENTY_FOUR_HOURS_MS || c.status === "ACTIVE";
+        if (c.status === "ACTIVE") return true;
+        const dateVal = c.started_at || c.updated_at;
+        if (!dateVal) return false;
+        const callTime = new Date(dateVal).getTime();
+        return !isNaN(callTime) && (now - callTime) <= TWENTY_FOUR_HOURS_MS;
     });
 
-    if (calls24h.length === 0) {
+    const displayCalls = calls24h.length > 0 ? calls24h : allEnrichedConvs.slice(0, 10);
+
+    if (displayCalls.length === 0) {
         container.innerHTML = `
             <div class="empty-state-box">
                 <i class="fa-solid fa-phone-slash"></i>
-                <p>No call sessions recorded in the past 24 hours.</p>
+                <p>No call sessions recorded in PostgreSQL.</p>
             </div>`;
         return;
     }
 
-    container.innerHTML = calls24h.map(c => {
+    container.innerHTML = displayCalls.map(c => {
         const phone = c.user_phone || "Unknown";
         const name = c.user_name || "Guest Customer";
         const bk = c.booking_code || "Not Verified";
