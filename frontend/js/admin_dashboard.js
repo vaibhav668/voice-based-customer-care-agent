@@ -233,17 +233,18 @@ function renderDashboard4Metrics() {
     );
     const countDistinctCustomers = distinctPhonesAll.size || Object.keys(groupedCustomers).length || (allEnrichedConvs.length > 0 ? 1 : 0);
 
-    // 2. Average Call Duration = SUM(duration of valid completed calls) / COUNT(DISTINCT phone_number)
+    // 2. Average Call Duration = SUM(duration of valid completed calls) / TOTAL NUMBER OF COMPLETED CALLS
     const validCompletedCalls = allEnrichedConvs.filter(c => 
         typeof c.duration === "number" && 
         c.duration > 0 && 
         c.duration < 14400
     );
     const sumTotalDurationSec = validCompletedCalls.reduce((acc, c) => acc + c.duration, 0);
+    const totalCompletedCalls = validCompletedCalls.length || allEnrichedConvs.length || 0;
 
     let avgDurationFormatted = "No Data Available";
-    if (countDistinctCustomers > 0 && sumTotalDurationSec > 0) {
-        const avgDurationSec = Math.round(sumTotalDurationSec / countDistinctCustomers);
+    if (totalCompletedCalls > 0 && sumTotalDurationSec > 0) {
+        const avgDurationSec = Math.round(sumTotalDurationSec / totalCompletedCalls);
         const hours = Math.floor(avgDurationSec / 3600);
         const mins = Math.floor((avgDurationSec % 3600) / 60);
         const secs = avgDurationSec % 60;
@@ -449,42 +450,33 @@ function renderDashboardCharts() {
         });
     }
 
-    // 4. Rating Distribution Chart (Percentage of Rating Customers for 1 to 10 Stars)
+    // 4. Rating Distribution Chart (Percentage of ALL PostgreSQL Feedback Records for 1 to 10 Stars)
     const ctxRate = document.getElementById("chartRatingsTrend")?.getContext("2d");
     if (ctxRate) {
         if (chartRatingsTrendInst) chartRatingsTrendInst.destroy();
 
-        // Collect all ratings and deduplicate by customer phone or unique session/review ID
-        const allRatingItems = [];
+        // Collect ALL valid rating records from PostgreSQL (allReviews + allEnrichedConvs)
+        const validRatings = [];
         allReviews.forEach(r => {
             if (typeof r.rating === "number" && r.rating >= 1 && r.rating <= 10) {
-                const key = (r.user_phone && r.user_phone !== "Unknown") ? r.user_phone : (r.conversation_id || r.id);
-                allRatingItems.push({ key, rating: r.rating });
+                validRatings.push(r.rating);
             }
         });
         allEnrichedConvs.forEach(c => {
             if (typeof c.rating === "number" && c.rating >= 1 && c.rating <= 10) {
-                const key = (c.user_phone && c.user_phone !== "Unknown") ? c.user_phone : (c.id || c.session_id);
-                allRatingItems.push({ key, rating: c.rating });
+                validRatings.push(c.rating);
             }
         });
 
-        const customerRatings = {};
-        allRatingItems.forEach(item => {
-            customerRatings[item.key] = item.rating;
-        });
-
-        const ratingCustomerKeys = Object.keys(customerRatings);
-        const totalRatingCustomers = ratingCustomerKeys.length;
+        const totalValidReviews = validRatings.length;
 
         const ratingCounts = new Array(10).fill(0);
-        ratingCustomerKeys.forEach(k => {
-            const star = customerRatings[k];
+        validRatings.forEach(star => {
             ratingCounts[star - 1]++;
         });
 
         const ratingPercentages = ratingCounts.map(count => 
-            totalRatingCustomers > 0 ? parseFloat(((count / totalRatingCustomers) * 100).toFixed(1)) : 0
+            totalValidReviews > 0 ? parseFloat(((count / totalValidReviews) * 100).toFixed(1)) : 0
         );
 
         chartRatingsTrendInst = new Chart(ctxRate, {
@@ -509,7 +501,7 @@ function renderDashboardCharts() {
                                 const starIdx = context.dataIndex;
                                 const count = ratingCounts[starIdx];
                                 const pct = context.raw || 0;
-                                return `${pct}% (${count} of ${totalRatingCustomers} rating customers)`;
+                                return `${pct}% (${count} of ${totalValidReviews} reviews)`;
                             }
                         }
                     }
@@ -908,28 +900,21 @@ function renderFeedbackTab() {
 
     const distContainer = document.getElementById("rating-distribution-bars");
     if (distContainer) {
-        const allRatingItems = [];
+        const validRatings = [];
         allReviews.forEach(r => {
             if (typeof r.rating === "number" && r.rating >= 1 && r.rating <= 10) {
-                const key = (r.user_phone && r.user_phone !== "Unknown") ? r.user_phone : (r.conversation_id || r.id);
-                allRatingItems.push({ key, rating: r.rating });
+                validRatings.push(r.rating);
             }
         });
         allEnrichedConvs.forEach(c => {
             if (typeof c.rating === "number" && c.rating >= 1 && c.rating <= 10) {
-                const key = (c.user_phone && c.user_phone !== "Unknown") ? c.user_phone : (c.id || c.session_id);
-                allRatingItems.push({ key, rating: c.rating });
+                validRatings.push(c.rating);
             }
         });
 
-        const customerRatingsMap = {};
-        allRatingItems.forEach(item => {
-            customerRatingsMap[item.key] = item.rating;
-        });
-
-        const totalRatedItems = Object.keys(customerRatingsMap).length;
+        const totalValidReviews = validRatings.length;
         const counts = new Array(11).fill(0);
-        Object.values(customerRatingsMap).forEach(star => {
+        validRatings.forEach(star => {
             if (star >= 1 && star <= 10) counts[star]++;
         });
 
@@ -938,7 +923,7 @@ function renderFeedbackTab() {
         let barsHtml = "";
         for (let star = 10; star >= 1; star--) {
             const count = counts[star];
-            const pct = totalRatedItems > 0 ? Math.round((count / totalRatedItems) * 100) : 0;
+            const pct = totalValidReviews > 0 ? Math.round((count / totalValidReviews) * 100) : 0;
             const barPct = Math.round((count / maxCount) * 100);
 
             barsHtml += `
