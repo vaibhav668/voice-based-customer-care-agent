@@ -231,20 +231,18 @@ function renderDashboard4Metrics() {
     );
     const activeCallsCount = distinctActive24hPhones.size;
 
-    // 2. Average Call Duration = SUM(duration of valid completed calls) / COUNT(DISTINCT phone_number)
-    const validCompletedCalls = allEnrichedConvs.filter(c => typeof c.duration === "number" && c.duration > 0);
-    const sumTotalDurationSec = validCompletedCalls.reduce((acc, c) => acc + c.duration, 0);
-
-    const distinctPhonesAll = new Set(
-        allEnrichedConvs
-            .map(c => c.user_phone)
-            .filter(p => p && p !== "Unknown")
+    // 2. Average Call Duration = Total call duration divided by total calls done (filtering out unended stale sessions > 4h)
+    const validCompletedCalls = allEnrichedConvs.filter(c => 
+        typeof c.duration === "number" && 
+        c.duration > 0 && 
+        c.duration < 14400
     );
-    const countDistinctCustomers = distinctPhonesAll.size || Object.keys(groupedCustomers).length || 0;
+    const sumTotalDurationSec = validCompletedCalls.reduce((acc, c) => acc + c.duration, 0);
+    const totalCallsCount = validCompletedCalls.length || allEnrichedConvs.length || 0;
 
     let avgDurationFormatted = "No Data Available";
-    if (countDistinctCustomers > 0 && sumTotalDurationSec > 0) {
-        const avgDurationSec = Math.round(sumTotalDurationSec / countDistinctCustomers);
+    if (totalCallsCount > 0 && sumTotalDurationSec > 0) {
+        const avgDurationSec = Math.round(sumTotalDurationSec / totalCallsCount);
         const hours = Math.floor(avgDurationSec / 3600);
         const mins = Math.floor((avgDurationSec % 3600) / 60);
         const secs = avgDurationSec % 60;
@@ -450,13 +448,24 @@ function renderDashboardCharts() {
     if (ctxRate) {
         if (chartRatingsTrendInst) chartRatingsTrendInst.destroy();
 
-        // Deduplicate ratings by customer phone/user ID so each rating customer counts once
-        const customerRatings = {};
+        // Collect all ratings and deduplicate by customer phone or unique session/review ID
+        const allRatingItems = [];
         allReviews.forEach(r => {
-            const key = r.user_phone || r.id;
-            if (r.rating >= 1 && r.rating <= 10) {
-                customerRatings[key] = r.rating;
+            if (typeof r.rating === "number" && r.rating >= 1 && r.rating <= 10) {
+                const key = (r.user_phone && r.user_phone !== "Unknown") ? r.user_phone : (r.conversation_id || r.id);
+                allRatingItems.push({ key, rating: r.rating });
             }
+        });
+        allEnrichedConvs.forEach(c => {
+            if (typeof c.rating === "number" && c.rating >= 1 && c.rating <= 10) {
+                const key = (c.user_phone && c.user_phone !== "Unknown") ? c.user_phone : (c.id || c.session_id);
+                allRatingItems.push({ key, rating: c.rating });
+            }
+        });
+
+        const customerRatings = {};
+        allRatingItems.forEach(item => {
+            customerRatings[item.key] = item.rating;
         });
 
         const ratingCustomerKeys = Object.keys(customerRatings);
@@ -889,9 +898,29 @@ function renderFeedbackTab() {
 
     const distContainer = document.getElementById("rating-distribution-bars");
     if (distContainer) {
-        const counts = new Array(11).fill(0);
+        const allRatingItems = [];
         allReviews.forEach(r => {
-            if (r.rating >= 1 && r.rating <= 10) counts[r.rating]++;
+            if (typeof r.rating === "number" && r.rating >= 1 && r.rating <= 10) {
+                const key = (r.user_phone && r.user_phone !== "Unknown") ? r.user_phone : (r.conversation_id || r.id);
+                allRatingItems.push({ key, rating: r.rating });
+            }
+        });
+        allEnrichedConvs.forEach(c => {
+            if (typeof c.rating === "number" && c.rating >= 1 && c.rating <= 10) {
+                const key = (c.user_phone && c.user_phone !== "Unknown") ? c.user_phone : (c.id || c.session_id);
+                allRatingItems.push({ key, rating: c.rating });
+            }
+        });
+
+        const customerRatingsMap = {};
+        allRatingItems.forEach(item => {
+            customerRatingsMap[item.key] = item.rating;
+        });
+
+        const totalRatedItems = Object.keys(customerRatingsMap).length;
+        const counts = new Array(11).fill(0);
+        Object.values(customerRatingsMap).forEach(star => {
+            if (star >= 1 && star <= 10) counts[star]++;
         });
 
         const maxCount = Math.max(...counts, 1);
@@ -899,7 +928,7 @@ function renderFeedbackTab() {
         let barsHtml = "";
         for (let star = 10; star >= 1; star--) {
             const count = counts[star];
-            const pct = Math.round((count / (totalReviews || 1)) * 100);
+            const pct = totalRatedItems > 0 ? Math.round((count / totalRatedItems) * 100) : 0;
             const barPct = Math.round((count / maxCount) * 100);
 
             barsHtml += `
