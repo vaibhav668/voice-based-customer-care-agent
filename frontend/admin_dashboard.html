@@ -3,311 +3,438 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EchoCore AI - Enterprise Console</title>
+    <title>EchoCore AI - Enterprise Support Console</title>
     
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="css/admin_dashboard.css">
 </head>
 <body>
 
-    <!-- Ambient Glowing Background Orbs -->
-    <div class="glow-orb orb-1"></div>
-    <div class="glow-orb orb-2"></div>
-    <div class="glow-orb orb-3"></div>
-
     <div class="admin-wrapper">
-        <!-- Sidebar Navigation -->
+        <!-- LEFT SIDEBAR (EXACTLY 4 MENU ITEMS) -->
         <aside class="sidebar">
             <div class="brand-section">
                 <div class="brand-icon">
-                    <i class="fa-solid fa-tower-broadcast"></i>
+                    <i class="fa-solid fa-headset"></i>
                 </div>
                 <div class="brand-text">
                     <h2>EchoCore AI</h2>
-                    <p>Enterprise Voice Ops</p>
+                    <p>Enterprise Customer Care</p>
                 </div>
             </div>
 
             <nav class="nav-menu">
                 <button class="nav-item active" data-tab="dashboard">
-                    <i class="fa-solid fa-chart-line"></i>
+                    <i class="fa-solid fa-chart-pie"></i>
                     <span>Dashboard</span>
-                </button>
-                <button class="nav-item" data-tab="chat-support">
-                    <i class="fa-solid fa-comments"></i>
-                    <span>Chat Support</span>
                 </button>
                 <button class="nav-item" data-tab="call-support">
                     <i class="fa-solid fa-phone-volume"></i>
                     <span>Call Support</span>
-                    <span class="pulse-badge">LIVE</span>
-                </button>
-                <button class="nav-item" data-tab="bookings">
-                    <i class="fa-solid fa-ticket"></i>
-                    <span>Bookings</span>
+                    <span class="nav-badge" id="live-calls-badge">LIVE</span>
                 </button>
                 <button class="nav-item" data-tab="reviews">
                     <i class="fa-solid fa-star"></i>
                     <span>Customer Feedback</span>
                 </button>
-                <button class="nav-item" data-tab="drivers">
-                    <i class="fa-solid fa-id-card"></i>
-                    <span>Drivers</span>
-                </button>
-                <button class="nav-item" data-tab="tickets">
-                    <i class="fa-solid fa-receipt"></i>
-                    <span>Tickets</span>
-                </button>
-                <button class="nav-item" data-tab="analytics">
-                    <i class="fa-solid fa-square-poll-vertical"></i>
-                    <span>Analytics</span>
-                </button>
-                <button class="nav-item" data-tab="knowledge-base">
-                    <i class="fa-solid fa-book-open"></i>
-                    <span>Knowledge Base</span>
-                </button>
-                <button class="nav-item" data-tab="settings">
-                    <i class="fa-solid fa-sliders"></i>
-                    <span>Settings</span>
+                <button class="nav-item" data-tab="bookings">
+                    <i class="fa-solid fa-ticket"></i>
+                    <span>Bookings</span>
                 </button>
             </nav>
 
             <div class="sidebar-footer">
-                <button class="btn-campaign" id="btn-new-campaign">
-                    <i class="fa-solid fa-plus"></i>
-                    <span>New Campaign</span>
-                </button>
-                <button class="btn-logout" id="admin-logout">
+                <div class="user-meta-footer">
+                    <div class="avatar-circle" id="admin-avatar-initials">AD</div>
+                    <div class="user-info-text">
+                        <strong id="admin-name">Admin Console</strong>
+                        <span>Super Administrator</span>
+                    </div>
+                </div>
+                <button class="btn-logout" id="admin-logout" title="Sign Out">
                     <i class="fa-solid fa-right-from-bracket"></i>
-                    <span>Logout</span>
                 </button>
             </div>
         </aside>
 
-        <!-- Main Content Area -->
+        <!-- MAIN CONTENT AREA -->
         <main class="main-content">
-            <!-- Header -->
+            <!-- HEADER -->
             <header class="header">
                 <div class="search-bar">
                     <i class="fa-solid fa-magnifying-glass"></i>
-                    <input type="text" id="global-search" placeholder="Search operations, agents, or logs...">
+                    <input type="text" id="global-search" placeholder="Search customer, booking, phone, or transcript...">
                 </div>
 
                 <div class="header-actions">
-                    <div class="status-indicator">
+                    <div class="status-pill">
                         <span class="status-dot"></span>
-                        <span class="status-text">AI: STABLE</span>
+                        <span>AI Engine: Operational</span>
                     </div>
 
-                    <button class="btn-live-ops">Live Ops</button>
-
-                    <button class="icon-btn" title="Notifications">
-                        <i class="fa-regular fa-bell"></i>
-                        <span class="badge-dot"></span>
+                    <button class="refresh-btn" id="btn-refresh-data">
+                        <i class="fa-solid fa-arrows-rotate"></i>
+                        <span>Sync Live Data</span>
                     </button>
-                    <button class="icon-btn" title="Headset Diagnostics">
-                        <i class="fa-solid fa-headphones"></i>
-                    </button>
-                    <button class="icon-btn" title="Cloud Database Status">
-                        <i class="fa-solid fa-cloud"></i>
-                    </button>
-
-                    <div class="user-profile">
-                        <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=100" alt="Admin Avatar" id="profile-avatar">
-                        <div class="profile-meta">
-                            <span class="profile-name" id="admin-name">Loading...</span>
-                            <span class="profile-role">Admin Console</span>
-                        </div>
-                    </div>
                 </div>
             </header>
 
-            <!-- TABS CONTAINER -->
+            <!-- TAB CONTAINER -->
             <div class="tab-content-container">
 
-                <!-- 1. DASHBOARD OVERVIEW TAB -->
+                <!-- 1. DASHBOARD TAB -->
                 <section class="tab-pane active" id="tab-dashboard">
-                    <!-- Stats Grid -->
-                    <div class="stats-grid">
-                        <div class="stat-card">
-                            <div class="stat-header">
-                                <span class="stat-title">TODAYS CALLS</span>
-                                <span class="trend positive"><i class="fa-solid fa-arrow-trend-up"></i> +14.2%</span>
+                    <div class="page-header">
+                        <h1>Operations Overview</h1>
+                        <p>Real-time AI voice support analytics and customer session intelligence from PostgreSQL.</p>
+                    </div>
+
+                    <!-- 11 OPERATIONAL METRIC CARDS -->
+                    <div class="metrics-grid-11">
+                        <div class="metric-card">
+                            <div class="metric-header">
+                                <span class="metric-title">Today's Calls</span>
+                                <div class="metric-icon"><i class="fa-solid fa-phone"></i></div>
                             </div>
-                            <div class="stat-value" id="stat-todays-calls">—</div>
-                            <div class="stat-description">Total voice bookings handled</div>
+                            <div class="metric-value" id="stat-todays-calls">—</div>
+                            <div class="metric-sub">Voice sessions logged today</div>
                         </div>
 
-                        <div class="stat-card">
-                            <div class="stat-header">
-                                <span class="stat-title">ACTIVE CALLS</span>
-                                <span class="realtime-tag"><span class="tiny-pulse"></span> Real-time</span>
+                        <div class="metric-card">
+                            <div class="metric-header">
+                                <span class="metric-title">Active Calls</span>
+                                <div class="metric-icon"><i class="fa-solid fa-signal" style="color:var(--green-success)"></i></div>
                             </div>
-                            <div class="stat-value" id="stat-active-calls">—</div>
-                            <div class="stat-sub-visual">
-                                <div class="mini-bar-chart">
-                                    <div style="height: 40%"></div>
-                                    <div style="height: 60%"></div>
-                                    <div style="height: 30%"></div>
-                                    <div style="height: 80%"></div>
-                                    <div style="height: 50%"></div>
-                                    <div style="height: 70%"></div>
-                                    <div style="height: 90%"></div>
-                                </div>
-                            </div>
+                            <div class="metric-value" id="stat-active-calls">—</div>
+                            <div class="metric-sub">Currently in progress</div>
                         </div>
 
-                        <div class="stat-card">
-                            <div class="stat-header">
-                                <span class="stat-title">AI RESOLUTION RATE</span>
+                        <div class="metric-card">
+                            <div class="metric-header">
+                                <span class="metric-title">Resolved Calls</span>
+                                <div class="metric-icon"><i class="fa-solid fa-circle-check" style="color:var(--green-text)"></i></div>
                             </div>
-                            <div class="stat-value" id="stat-resolution-rate">—</div>
-                            <div class="stat-progress-bar">
-                                <div class="progress-fill" style="width: 0%;"></div>
-                            </div>
+                            <div class="metric-value" id="stat-resolved-calls">—</div>
+                            <div class="metric-sub">Fully handled by AI</div>
                         </div>
 
-                        <div class="stat-card">
-                            <div class="stat-header">
-                                <span class="stat-title">TRANSFERRED TO HUMAN</span>
+                        <div class="metric-card">
+                            <div class="metric-header">
+                                <span class="metric-title">Unresolved Calls</span>
+                                <div class="metric-icon"><i class="fa-solid fa-triangle-exclamation" style="color:var(--red-text)"></i></div>
                             </div>
-                            <div class="stat-value" id="stat-transfer-rate">—</div>
-                            <div class="stat-description"><i class="fa-solid fa-bullseye"></i> Target: &lt; 3.5%</div>
+                            <div class="metric-value" id="stat-unresolved-calls">—</div>
+                            <div class="metric-sub">Escalated or pending review</div>
+                        </div>
+
+                        <div class="metric-card">
+                            <div class="metric-header">
+                                <span class="metric-title">Avg Call Duration</span>
+                                <div class="metric-icon"><i class="fa-regular fa-clock"></i></div>
+                            </div>
+                            <div class="metric-value" id="stat-avg-duration">—</div>
+                            <div class="metric-sub">Average talk time</div>
+                        </div>
+
+                        <div class="metric-card">
+                            <div class="metric-header">
+                                <span class="metric-title">Avg Customer Rating</span>
+                                <div class="metric-icon"><i class="fa-solid fa-star" style="color:var(--amber-warning)"></i></div>
+                            </div>
+                            <div class="metric-value" id="stat-avg-rating">—</div>
+                            <div class="metric-sub">Customer satisfaction score</div>
+                        </div>
+
+                        <div class="metric-card">
+                            <div class="metric-header">
+                                <span class="metric-title">Total Customers</span>
+                                <div class="metric-icon"><i class="fa-solid fa-users"></i></div>
+                            </div>
+                            <div class="metric-value" id="stat-total-customers">—</div>
+                            <div class="metric-sub">Unique phone contacts</div>
+                        </div>
+
+                        <div class="metric-card">
+                            <div class="metric-header">
+                                <span class="metric-title">Avg AI Response Time</span>
+                                <div class="metric-icon"><i class="fa-solid fa-bolt" style="color:var(--purple-accent)"></i></div>
+                            </div>
+                            <div class="metric-value" id="stat-ai-latency">—</div>
+                            <div class="metric-sub">Average turn latency</div>
+                        </div>
+
+                        <div class="metric-card">
+                            <div class="metric-header">
+                                <span class="metric-title">Avg Resolution Time</span>
+                                <div class="metric-icon"><i class="fa-solid fa-stopwatch"></i></div>
+                            </div>
+                            <div class="metric-value" id="stat-resolution-time">—</div>
+                            <div class="metric-sub">Time to issue resolution</div>
+                        </div>
+
+                        <div class="metric-card">
+                            <div class="metric-header">
+                                <span class="metric-title">Languages Used</span>
+                                <div class="metric-icon"><i class="fa-solid fa-language"></i></div>
+                            </div>
+                            <div class="metric-value" id="stat-languages-used">—</div>
+                            <div class="metric-sub">Multilingual call volume</div>
+                        </div>
+
+                        <div class="metric-card">
+                            <div class="metric-header">
+                                <span class="metric-title">Bookings Verified</span>
+                                <div class="metric-icon"><i class="fa-solid fa-shield-check" style="color:var(--blue-primary)"></i></div>
+                            </div>
+                            <div class="metric-value" id="stat-bookings-verified">—</div>
+                            <div class="metric-sub">Authenticated voice bookings</div>
                         </div>
                     </div>
 
-                    <!-- Flow and Alerts Grid -->
-                    <div class="flow-grid">
-                        <!-- Live Intelligence Flow -->
-                        <div class="flow-card">
-                            <div class="card-header">
-                                <div>
-                                    <h3>Live Intelligence Flow</h3>
-                                    <p class="subtitle">Neural processing density across global clusters</p>
+                    <!-- DASHBOARD MAIN LAYOUT (CHARTS + LIVE CALLS PANEL) -->
+                    <div class="dashboard-layout">
+                        <!-- LEFT COLUMN: LIVE CHARTS -->
+                        <div class="charts-section">
+                            <div class="chart-grid-2">
+                                <div class="chart-card">
+                                    <div class="chart-header">
+                                        <h3>Calls Activity Timeline</h3>
+                                    </div>
+                                    <div class="chart-container-wrapper">
+                                        <canvas id="chartCallsTimeline"></canvas>
+                                    </div>
                                 </div>
-                                <div class="cluster-toggles">
-                                    <button class="btn-toggle active" data-cluster="A1">CLUSTER A1</button>
-                                    <button class="btn-toggle" data-cluster="B4">CLUSTER B4</button>
+
+                                <div class="chart-card">
+                                    <div class="chart-header">
+                                        <h3>Resolution Status Ratio</h3>
+                                    </div>
+                                    <div class="chart-container-wrapper">
+                                        <canvas id="chartResolutionRatio"></canvas>
+                                    </div>
                                 </div>
                             </div>
-                            
-                            <div class="flow-canvas-container">
-                                <canvas id="flowCanvas"></canvas>
-                                <div class="canvas-glow"></div>
-                            </div>
 
-                            <div class="flow-legend">
-                                <span class="legend-item"><span class="legend-color synth"></span> Synthesizing</span>
-                                <span class="legend-item"><span class="legend-color context"></span> Context Analysis</span>
-                                <span class="legend-item"><span class="legend-color nlp"></span> NLP Scoring</span>
+                            <div class="chart-grid-2">
+                                <div class="chart-card">
+                                    <div class="chart-header">
+                                        <h3>Language Breakdown</h3>
+                                    </div>
+                                    <div class="chart-container-wrapper">
+                                        <canvas id="chartLanguageDist"></canvas>
+                                    </div>
+                                </div>
+
+                                <div class="chart-card">
+                                    <div class="chart-header">
+                                        <h3>Rating Distribution</h3>
+                                    </div>
+                                    <div class="chart-container-wrapper">
+                                        <canvas id="chartRatingsTrend"></canvas>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
-                        <!-- Support Interceptions -->
-                        <div class="interception-card">
-                            <div class="card-header">
-                                <h3>Support Interceptions</h3>
-                                <span class="live-badge">LIVE</span>
+                        <!-- RIGHT COLUMN: LIVE CALLS PANEL -->
+                        <div class="live-calls-panel">
+                            <div class="panel-title">
+                                <h3>Live Active Calls</h3>
+                                <div class="live-pulse-badge">
+                                    <span class="pulse-dot"></span>
+                                    <span>LIVE</span>
+                                </div>
                             </div>
-                            
-                            <div class="interception-list" id="dashboard-interceptions">
-                                <!-- Populated by JS -->
-                            </div>
-                        </div>
-                    </div>
 
-                    <!-- Bottom Grid -->
-                    <div class="bottom-dash-grid">
-                        <!-- Recent Customer Reviews Summary -->
-                        <div class="sub-panel" style="grid-column: span 2;">
-                            <div class="panel-header">
-                                <h4>Recent Customer Feedback Ratings</h4>
-                                <i class="fa-solid fa-star text-teal"></i>
-                            </div>
-                            <div class="scrollable-list" id="dash-feedback-summary" style="max-height: 180px; overflow-y: auto;">
-                                <div style="text-align: center; color: var(--text-dim); padding: 20px;">No feedback logged yet.</div>
-                            </div>
-                        </div>
-
-                        <!-- Overall CSAT Indicator -->
-                        <div class="sub-panel">
-                            <div class="panel-header">
-                                <h4>Customer Satisfaction (CSAT)</h4>
-                                <i class="fa-solid fa-face-smile text-cyan"></i>
-                            </div>
-                            <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:120px; gap:8px;">
-                                <div id="dash-csat-value" style="font-size: 32px; font-weight: 700; font-family: var(--font-display); color: var(--teal);">0.0 / 10</div>
-                                <div style="font-size: 11px; color: var(--text-dim);" id="dash-csat-count">Based on 0 customer ratings</div>
+                            <div class="live-calls-list" id="dashboard-live-calls-list">
+                                <div class="empty-state-box">
+                                    <i class="fa-solid fa-spinner fa-spin"></i>
+                                    <p>Loading live active sessions...</p>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </section>
 
-                <!-- 2a. CHAT SUPPORT TAB -->
-                <section class="tab-pane" id="tab-chat-support">
-                    <div class="pane-split-layout">
-                        <div class="pane-list-column">
-                            <div class="column-header">
-                                <h3>Ongoing Chats</h3>
-                                <div class="live-counter" style="color: var(--cyan); background: rgba(6, 182, 212, 0.08);"><span class="tiny-pulse" style="background: var(--cyan)"></span> <span id="live-chats-count">0</span> Active</div>
-                            </div>
-                            <div class="scrollable-list" id="chat-conversations-list">
-                                <!-- Populated dynamically -->
-                            </div>
-                        </div>
-
-                        <div class="pane-detail-column" id="chat-support-detail">
-                            <div class="empty-state-panel">
-                                <i class="fa-solid fa-comments" style="font-size: 48px; color: var(--text-dim); margin-bottom: 16px;"></i>
-                                <h3>Select an active chat to monitor</h3>
-                                <p>Read live transcripts, inspect customer information, and manage resolutions.</p>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- 2b. CALL SUPPORT TAB -->
+                <!-- 2. CALL SUPPORT TAB (3-PANEL LAYOUT) -->
                 <section class="tab-pane" id="tab-call-support">
-                    <div class="pane-split-layout">
-                        <div class="pane-list-column">
-                            <div class="column-header">
-                                <h3>Ongoing Calls</h3>
-                                <div class="live-counter"><span class="tiny-pulse"></span> <span id="live-calls-count">0</span> Active</div>
+                    <div class="call-support-container">
+
+                        <!-- LEFT PANEL: UNIQUE CUSTOMERS ONLY -->
+                        <div class="panel-customers">
+                            <div class="panel-header-sub">
+                                <h3>Unique Customers</h3>
+                                <div class="panel-search">
+                                    <i class="fa-solid fa-magnifying-glass"></i>
+                                    <input type="text" id="customer-search-input" placeholder="Filter phone or name...">
+                                </div>
                             </div>
-                            <div class="scrollable-list" id="call-conversations-list">
-                                <!-- Populated dynamically -->
+                            <div class="customer-list-scroll" id="unique-customers-list">
+                                <div class="empty-state-box">
+                                    <i class="fa-solid fa-spinner fa-spin"></i>
+                                    <p>Loading customers...</p>
+                                </div>
                             </div>
                         </div>
 
-                        <div class="pane-detail-column" id="call-support-detail">
-                            <div class="empty-state-panel">
-                                <i class="fa-solid fa-phone-volume" style="font-size: 48px; color: var(--text-dim); margin-bottom: 16px;"></i>
-                                <h3>Select an active call to monitor</h3>
-                                <p>You can listen in, read live transcripts, and inspect call logs in real time.</p>
+                        <!-- CENTER PANEL: CONVERSATION HISTORY -->
+                        <div class="panel-history">
+                            <div class="panel-header-sub">
+                                <h3 id="selected-customer-title">Customer History</h3>
+                                <span style="font-size: 11px; color: var(--text-muted);" id="selected-customer-subtitle">Select a customer on the left</span>
+                            </div>
+                            <div class="history-list-scroll" id="customer-history-list">
+                                <div class="empty-state-box">
+                                    <i class="fa-solid fa-hand-pointer"></i>
+                                    <p>Select a customer from the left panel to view their call history.</p>
+                                </div>
                             </div>
                         </div>
+
+                        <!-- RIGHT PANEL: CALL DETAILS & TRANSCRIPT TIMELINE -->
+                        <div class="panel-details">
+                            <div class="details-header">
+                                <div style="display:flex; justify-content:space-between; align-items:center;">
+                                    <div>
+                                        <h3 id="detail-customer-name" style="font-size:15px; font-weight:700; color:var(--text-primary);">Select Conversation</h3>
+                                        <span id="detail-customer-phone" style="font-size:12px; font-family:var(--font-mono); color:var(--text-muted);">—</span>
+                                    </div>
+                                    <div id="detail-resolution-badge"></div>
+                                </div>
+
+                                <div class="details-meta-grid">
+                                    <div class="meta-item">
+                                        <span class="meta-label">Booking Code</span>
+                                        <span class="meta-value" id="detail-booking-code">—</span>
+                                    </div>
+                                    <div class="meta-item">
+                                        <span class="meta-label">Language</span>
+                                        <span class="meta-value" id="detail-language">—</span>
+                                    </div>
+                                    <div class="meta-item">
+                                        <span class="meta-label">Call Duration</span>
+                                        <span class="meta-value" id="detail-duration">—</span>
+                                    </div>
+                                    <div class="meta-item">
+                                        <span class="meta-label">Rating</span>
+                                        <span class="meta-value" id="detail-rating">—</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Full Transcript Timeline -->
+                            <div class="transcript-container" id="transcript-timeline-container">
+                                <div class="empty-state-box">
+                                    <i class="fa-solid fa-comments"></i>
+                                    <p>Select a call from history to inspect full transcript timeline.</p>
+                                </div>
+                            </div>
+
+                            <!-- Audio Player Footer -->
+                            <div class="audio-player-footer" id="audio-player-footer" style="display:none;">
+                                <div class="audio-controls">
+                                    <button class="btn-play" id="audio-play-pause-btn">
+                                        <i class="fa-solid fa-play"></i>
+                                    </button>
+                                    <span id="audio-time-current" style="font-size:11px; font-family:var(--font-mono); color:var(--text-muted);">0:00</span>
+                                    <input type="range" class="audio-seekbar" id="audio-seekbar" value="0" min="0" max="100">
+                                    <span id="audio-time-total" style="font-size:11px; font-family:var(--font-mono); color:var(--text-muted);">0:00</span>
+                                    <audio id="real-audio-element" style="display:none;"></audio>
+                                </div>
+                            </div>
+                        </div>
+
                     </div>
                 </section>
 
-                <!-- 3. BOOKINGS TAB -->
-                <section class="tab-pane" id="tab-bookings">
-                    <div class="data-table-container">
-                        <div class="table-actions">
-                            <h3>Live Booking Database Sync</h3>
-                            <div class="search-filters">
-                                <input type="text" id="booking-table-search" placeholder="Search booking code, source, status...">
-                                <button class="btn-refresh" id="btn-refresh-bookings"><i class="fa-solid fa-rotate"></i> Refresh</button>
-                            </div>
+                <!-- 3. CUSTOMER FEEDBACK TAB -->
+                <section class="tab-pane" id="tab-reviews">
+                    <div class="page-header">
+                        <h1>Customer Feedback & Reviews</h1>
+                        <p>Customer rating distribution, CSAT scores, and direct conversation reviews.</p>
+                    </div>
+
+                    <!-- SUMMARY CARDS -->
+                    <div class="feedback-summary-grid">
+                        <div class="metric-card">
+                            <div class="metric-title">Average Rating</div>
+                            <div class="metric-value" id="fb-avg-rating">—</div>
+                            <div class="metric-sub">Out of 10.0 scale</div>
                         </div>
-                        <table class="dashboard-table">
+                        <div class="metric-card">
+                            <div class="metric-title">Total Reviews</div>
+                            <div class="metric-value" id="fb-total-reviews">—</div>
+                            <div class="metric-sub">Recorded feedbacks</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-title">CSAT Score</div>
+                            <div class="metric-value" id="fb-csat-score">—</div>
+                            <div class="metric-sub">Positive sentiment ratio</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-title">Resolution Ratio</div>
+                            <div class="metric-value" id="fb-resolution-ratio">—</div>
+                            <div class="metric-sub">Reviewed calls resolved</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-title">Positive vs Negative</div>
+                            <div class="metric-value" id="fb-sentiment-split">—</div>
+                            <div class="metric-sub">Sentiment distribution</div>
+                        </div>
+                    </div>
+
+                    <!-- 10-STAR RATING DISTRIBUTION BREAKDOWN -->
+                    <div class="distribution-card">
+                        <h3 style="font-size:14px; font-weight:700; margin-bottom:16px;">Rating Distribution (10 Stars Scale)</h3>
+                        <div id="rating-distribution-bars">
+                            <!-- Dynamically generated 10 to 1 bars -->
+                        </div>
+                    </div>
+
+                    <!-- RECENT REVIEWS TABLE -->
+                    <div class="table-container">
+                        <table class="custom-table">
+                            <thead>
+                                <tr>
+                                    <th>Customer Name</th>
+                                    <th>Phone Number</th>
+                                    <th>Booking Code</th>
+                                    <th>Rating</th>
+                                    <th>Review Date</th>
+                                    <th>Resolution</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="reviews-table-body">
+                                <tr>
+                                    <td colspan="7" class="empty-state-box">
+                                        <i class="fa-solid fa-spinner fa-spin"></i>
+                                        <p>Loading customer reviews...</p>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- 4. BOOKINGS TAB -->
+                <section class="tab-pane" id="tab-bookings">
+                    <div class="page-header">
+                        <h1>Bookings Management</h1>
+                        <p>Verified passenger bookings, seats, travel routes, and payment status.</p>
+                    </div>
+
+                    <div class="table-container">
+                        <table class="custom-table">
                             <thead>
                                 <tr>
                                     <th>Booking Code</th>
-                                    <th>Source</th>
+                                    <th>Origin</th>
                                     <th>Destination</th>
                                     <th>Seat</th>
                                     <th>Departure</th>
@@ -317,254 +444,19 @@
                                 </tr>
                             </thead>
                             <tbody id="bookings-table-body">
-                                <!-- Populated from API -->
+                                <tr>
+                                    <td colspan="8" class="empty-state-box">
+                                        <i class="fa-solid fa-spinner fa-spin"></i>
+                                        <p>Loading bookings...</p>
+                                    </td>
+                                </tr>
                             </tbody>
                         </table>
                     </div>
                 </section>
 
-                <!-- 4. DRIVERS TAB -->
-                <section class="tab-pane" id="tab-drivers">
-                    <div class="grid-layout-3col" id="drivers-grid">
-                        <!-- Populated by JS -->
-                    </div>
-                </section>
-
-                <!-- 5. TICKETS TAB -->
-                <section class="tab-pane" id="tab-tickets">
-                    <div class="pane-split-layout">
-                        <div class="pane-list-column">
-                            <div class="column-header">
-                                <h3>Frustration Alerts & Escalations</h3>
-                                <span class="badge-red">ALERT ACTIVE</span>
-                            </div>
-                            <div class="scrollable-list" id="tickets-list">
-                                <!-- Populated dynamically -->
-                            </div>
-                        </div>
-
-                        <div class="pane-detail-column" id="ticket-detail">
-                            <div class="empty-state-panel">
-                                <i class="fa-solid fa-ticket-simple" style="font-size: 48px; color: var(--text-dim); margin-bottom: 16px;"></i>
-                                <h3>Select a ticket to review</h3>
-                                <p>Inspect transcripts, sentiment analysis scoring, and reason for human hand-offs.</p>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- 6. ANALYTICS TAB -->
-                <section class="tab-pane" id="tab-analytics">
-                    <div class="analytics-grid">
-                        <div class="analytics-card large">
-                            <h3>System Response Times (ms)</h3>
-                            <div class="chart-mock">
-                                <!-- Inline styled SVG for responsive premium graph representation -->
-                                <svg viewBox="0 0 800 250" class="svg-chart">
-                                    <defs>
-                                        <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="0%" stop-color="var(--teal)" stop-opacity="0.4"/>
-                                            <stop offset="100%" stop-color="var(--teal)" stop-opacity="0"/>
-                                        </linearGradient>
-                                    </defs>
-                                    <path d="M 0 200 Q 100 120 200 150 T 400 80 T 600 130 T 800 50 L 800 250 L 0 250 Z" fill="url(#chartGrad)"/>
-                                    <path d="M 0 200 Q 100 120 200 150 T 400 80 T 600 130 T 800 50" fill="none" stroke="var(--teal)" stroke-width="3"/>
-                                    <circle cx="200" cy="150" r="5" fill="var(--teal)"/>
-                                    <circle cx="400" cy="80" r="5" fill="var(--teal)"/>
-                                    <circle cx="600" cy="130" r="5" fill="var(--teal)"/>
-                                </svg>
-                            </div>
-                        </div>
-
-                        <div class="analytics-card">
-                            <h3>Intent Distribution</h3>
-                            <div class="intent-chart-list">
-                                <div class="intent-item">
-                                    <span>Check Delay</span>
-                                    <div class="bar-container">
-                                        <div class="fill" style="width: 45%; background: var(--teal);"></div>
-                                    </div>
-                                    <span>45%</span>
-                                </div>
-                                <div class="intent-item">
-                                    <span>Create Booking</span>
-                                    <div class="bar-container">
-                                        <div class="fill" style="width: 30%; background: var(--blue);"></div>
-                                    </div>
-                                    <span>30%</span>
-                                </div>
-                                <div class="intent-item">
-                                    <span>Cancel Ticket</span>
-                                    <div class="bar-container">
-                                        <div class="fill" style="width: 15%; background: var(--purple);"></div>
-                                    </div>
-                                    <span>15%</span>
-                                </div>
-                                <div class="intent-item">
-                                    <span>Other / FAQ</span>
-                                    <div class="bar-container">
-                                        <div class="fill" style="width: 10%; background: var(--text-dim);"></div>
-                                    </div>
-                                    <span>10%</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="analytics-card">
-                            <h3>Language Breakdown</h3>
-                            <div class="donut-visual">
-                                <svg viewBox="0 0 100 100" class="donut-svg">
-                                    <circle cx="50" cy="50" r="40" fill="transparent" stroke="var(--surface-light)" stroke-width="10"/>
-                                    <!-- Segment 1 English (60%) -->
-                                    <circle cx="50" cy="50" r="40" fill="transparent" stroke="var(--teal)" stroke-width="10" stroke-dasharray="150.7 251.2" stroke-dashoffset="0"/>
-                                    <!-- Segment 2 Hindi (25%) -->
-                                    <circle cx="50" cy="50" r="40" fill="transparent" stroke="var(--blue)" stroke-width="10" stroke-dasharray="62.8 251.2" stroke-dashoffset="-150.7"/>
-                                    <!-- Segment 3 Marathi/Others (15%) -->
-                                    <circle cx="50" cy="50" r="40" fill="transparent" stroke="var(--purple)" stroke-width="10" stroke-dasharray="37.7 251.2" stroke-dashoffset="-213.5"/>
-                                </svg>
-                                <div class="donut-legend">
-                                    <div><span class="dot" style="background:var(--teal)"></span> EN (60%)</div>
-                                    <div><span class="dot" style="background:var(--blue)"></span> HI (25%)</div>
-                                    <div><span class="dot" style="background:var(--purple)"></span> Regional (15%)</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- 7. KNOWLEDGE BASE TAB -->
-                <section class="tab-pane" id="tab-knowledge-base">
-                    <div class="knowledge-container">
-                        <div class="kb-header">
-                            <div>
-                                <h3>Vector Database / RAG Context</h3>
-                                <p>Manage documents searched by the AI agent during customer queries</p>
-                            </div>
-                            <button class="btn-primary"><i class="fa-solid fa-cloud-arrow-up"></i> Upload Document</button>
-                        </div>
-                        <div class="kb-grid">
-                            <div class="kb-file-card">
-                                <div class="file-icon"><i class="fa-regular fa-file-pdf"></i></div>
-                                <h4>Bus_Cancellation_Policy.pdf</h4>
-                                <p>12 chunks | Last indexed 1d ago</p>
-                            </div>
-                            <div class="kb-file-card">
-                                <div class="file-icon"><i class="fa-regular fa-file-pdf"></i></div>
-                                <h4>Refund_Eligibility_Rules.pdf</h4>
-                                <p>8 chunks | Last indexed 2d ago</p>
-                            </div>
-                            <div class="kb-file-card">
-                                <div class="file-icon"><i class="fa-regular fa-file-lines"></i></div>
-                                <h4>Delhi_Jaipur_Bus_Routes.txt</h4>
-                                <p>4 chunks | Last indexed 4h ago</p>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- 8. SETTINGS TAB -->
-                <section class="tab-pane" id="tab-settings">
-                    <div class="settings-form">
-                        <h3>Console Parameters & Model Configuration</h3>
-                        <div class="settings-section">
-                            <h4>Active LLM Model</h4>
-                            <div class="select-group">
-                                <select id="model-select">
-                                    <option value="llama-3.1-8b-instant">Llama-3.1-8b-instant (Groq)</option>
-                                    <option value="llama-3.1-70b-versatile">Llama-3.1-70b-versatile (Groq)</option>
-                                    <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <div class="settings-section">
-                            <h4>NLU Confidence Threshold</h4>
-                            <input type="range" min="0" max="100" value="75" class="slider" id="threshold-slider">
-                            <span class="threshold-val">75%</span>
-                        </div>
-
-                        <div class="settings-section">
-                            <h4>System Parameter Flags</h4>
-                            <label class="switch-container">
-                                <input type="checkbox" checked id="switch-tts">
-                                <span class="switch-slider"></span>
-                                <span>Enable High-fidelity Edge Text-to-Speech (TTS)</span>
-                            </label>
-                            <label class="switch-container">
-                                <input type="checkbox" checked id="switch-cache">
-                                <span class="switch-slider"></span>
-                                <span>Enable Vector RAG Cache</span>
-                            </label>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- 9. CUSTOMER FEEDBACK TAB -->
-                <section class="tab-pane" id="tab-reviews">
-                    <!-- Reviews Dashboard Grid -->
-                    <div class="stats-grid" style="margin-bottom: 24px;">
-                        <div class="stat-card">
-                            <div class="stat-header">
-                                <span class="stat-title">TOTAL REVIEWS</span>
-                            </div>
-                            <div class="stat-value" id="feedback-total-count">0</div>
-                            <div class="stat-description">Real customer ratings logged</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-header">
-                                <span class="stat-title">AVERAGE RATING</span>
-                            </div>
-                            <div class="stat-value" id="feedback-avg-rating">0.0 / 10</div>
-                            <div class="stat-progress-bar">
-                                <div class="progress-fill" id="feedback-avg-fill" style="width: 0%;"></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="pane-split-layout">
-                        <!-- Left Panel: Rating Distribution & Recent Reviews List -->
-                        <div class="pane-list-column" style="flex: 1.2;">
-                            <div class="column-header">
-                                <h3>Rating Distribution</h3>
-                            </div>
-                            <div style="padding: 16px; background: rgba(0,0,0,0.15); border-bottom: 1px solid var(--line); display:flex; flex-direction:column; gap:8px;" id="feedback-distribution">
-                                <!-- Populated dynamically -->
-                            </div>
-
-                            <div class="column-header" style="border-top: 1px solid var(--line);">
-                                <h3>Recent Customer Reviews</h3>
-                            </div>
-                            <div class="scrollable-list" id="feedback-list">
-                                <!-- Populated dynamically -->
-                            </div>
-                        </div>
-
-                        <!-- Right Panel: Related Call Transcript Details -->
-                        <div class="pane-detail-column" id="feedback-detail">
-                            <div class="empty-state-panel">
-                                <i class="fa-solid fa-star" style="font-size: 48px; color: var(--text-dim); margin-bottom: 16px;"></i>
-                                <h3>Select a review to inspect</h3>
-                                <p>View full caller information, rating timestamps, and inspect the underlying telephone conversation transcript.</p>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
             </div>
         </main>
-    </div>
-
-    <!-- Transcript Overlay Modal -->
-    <div class="modal" id="transcript-modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Conversation Detail</h3>
-                <button class="btn-close-modal">&times;</button>
-            </div>
-            <div class="modal-body" id="modal-messages-container">
-                <!-- Messages go here -->
-            </div>
-        </div>
     </div>
 
     <script type="module" src="js/admin_dashboard.js"></script>

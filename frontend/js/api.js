@@ -251,3 +251,7 @@ export function submitCallReview(id, outcome, notes) {
 export function getAdminEnrichedConversations(limit = 100) {
     return request(`/api/v1/conversations/admin/enriched?limit=${limit}`);
 }
+
+export function getAdminReviews() {
+    return request("/api/v1/conversations/admin/reviews");
+}
