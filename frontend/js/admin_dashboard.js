@@ -691,7 +691,14 @@ function appendConversationBlock(detail, enrichedMeta, chatScroll, direction) {
 
         lazy.loadedBlocks.unshift(block);
         const el = buildConvBlockElement(block, startIdx);
-        chatScroll.insertBefore(el, chatScroll.firstChild);
+        
+        // Find top sentinel and insert after it, to keep sentinel at the very top of scroll container
+        const sentinel = chatScroll.querySelector(".lazy-top-sentinel");
+        if (sentinel) {
+            chatScroll.insertBefore(el, sentinel.nextSibling);
+        } else {
+            chatScroll.insertBefore(el, chatScroll.firstChild);
+        }
 
         // Restore scroll position (prevent jump)
         requestAnimationFrame(() => {
@@ -709,8 +716,6 @@ function buildConvBlockElement(block, startIdx) {
     const wrapper = document.createElement("div");
     wrapper.className   = "conv-block";
     wrapper.dataset.convId = detail.id || "";
-    // GPU hint: browser can skip rendering off-screen blocks
-    wrapper.style.cssText = "content-visibility: auto; contain-intrinsic-size: 0 400px;";
 
     // ── Call divider ──
     const callIdx   = lazy.loadedBlocks.indexOf(block); // position among all loaded blocks
@@ -853,7 +858,7 @@ function installTopSentinel(chatScroll, customer, token) {
                 loadNextOlderConversation(chatScroll, customer, token);
             }
         },
-        { root: chatScroll, threshold: 0.1 }
+        { root: chatScroll, threshold: 0, rootMargin: "100px 0px 0px 0px" }
     );
     lazy.topObserver.observe(sentinel);
 }
