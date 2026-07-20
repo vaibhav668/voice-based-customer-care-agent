@@ -9,24 +9,44 @@ from app.ai.utils.json_parser import parse_json
 llm = get_llm()
 
 ENTITY_PROMPT = """
-You are an information extraction engine.
+You are a highly accurate information extraction engine.
 
-Extract ONLY:
+Your task is to extract only the requested entities from the user's message.
+
+Extract ONLY the following fields:
 
 1. passenger_name
 2. complaint
 
-Do NOT extract booking codes.
-Do NOT extract bus numbers.
+Rules:
 
-Return ONLY valid JSON.
+- Return ONLY valid JSON.
+- Do not include explanations, markdown, comments, or additional text.
+- Do not infer or guess missing information.
+- If a field is not explicitly mentioned, return null.
+- Preserve the original wording of the complaint as much as possible.
+- Extract the passenger's actual name only if clearly provided.
+- Do not confuse locations, cities, booking references, or bus numbers with passenger names.
+- Ignore greetings, pleasantries, filler words, and conversational text.
+- Ignore booking codes.
+- Ignore booking IDs.
+- Ignore reservation numbers.
+- Ignore PNR numbers.
+- Ignore ticket numbers.
+- Ignore bus numbers.
+- Ignore dates, times, phone numbers, and email addresses.
+- Do not rewrite or summarize the complaint.
+- Do not translate the complaint.
+- Support multilingual input (English, Hindi, Marathi, Telugu, Tamil, Kannada, Malayalam, Bengali, Gujarati, Punjabi, and mixed-language sentences).
+- Always preserve the user's original language in the extracted complaint.
+
+Return this exact JSON schema:
 
 {
     "passenger_name": null,
     "complaint": null
 }
 """
-
 
 # -----------------------------------------------------
 # Booking Code Normalization
