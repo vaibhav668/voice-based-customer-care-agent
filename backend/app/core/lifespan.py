@@ -91,7 +91,12 @@ def auto_seed_database():
                 # Always sync password hash, phone number, and role to the authoritative values
                 user.password_hash = hashed_pw
                 user.role = role_val
-                user.phone = ud["phone"]
+                if user.phone != ud["phone"]:
+                    existing_phone = db.query(User).filter_by(phone=ud["phone"]).first()
+                    if existing_phone and existing_phone.id != user.id:
+                        logger.warning(f"Phone {ud['phone']} already in use by {existing_phone.email}, cannot sync phone for {user.email}")
+                    else:
+                        user.phone = ud["phone"]
                 db.commit()
                 db.refresh(user)
             users_dict[ud["email"]] = user
