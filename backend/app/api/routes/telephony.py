@@ -932,7 +932,11 @@ async def handle_websocket_stream(websocket: WebSocket):
             tracker.log_stage("Speech Recognition")
             from app.voice.stt import SpeechToText
             stt = SpeechToText()
-            transcription = await stt.transcribe_bytes(wav_bytes, language=session.language if session else "en")
+            import inspect
+            if inspect.iscoroutinefunction(stt.transcribe_bytes):
+                transcription = await stt.transcribe_bytes(wav_bytes, language=session.language if session else "en")
+            else:
+                transcription = await asyncio.to_thread(stt.transcribe_bytes, wav_bytes, language=session.language if session else "en")
             print(f"[STT Raw] Transcription result: '{transcription}'")
             
             if not transcription or not transcription.strip():
