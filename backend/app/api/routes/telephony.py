@@ -15,7 +15,7 @@ from app.database.session import SessionLocal
 from app.utils.latency import LatencyTracker
 
 from app.database.session import get_db
-from app.voice.ivr import ivr_manager, IVRState
+from app.voice.ivr import ivr_manager, IVRState, broadcast_call_event
 from app.voice.telephony_provider import PlivoAdapter
 
 router = APIRouter(
@@ -900,6 +900,10 @@ async def handle_websocket_stream(websocket: WebSocket):
         nonlocal ai_is_speaking, turn_index, awaiting_feedback, playback_task
         nonlocal idle_silence_packet_count, inactivity_timeouts_count
         try:
+            lang_code = session.language if session else "en"
+            from app.voice.ivr import PROMPTS
+            lang_prompts = PROMPTS.get(lang_code, PROMPTS["en"])
+
             tracker = LatencyTracker("WebSocketVoiceTurn")
             tracker.log_stage("Incoming Request")
             
