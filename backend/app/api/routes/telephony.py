@@ -765,7 +765,10 @@ async def handle_websocket_stream(websocket: WebSocket):
     silence_counter = 0
     speech_packet_count = 0
     SILENCE_THRESHOLD_PACKETS = 35  # ~700ms at 20ms chunks to allow natural speech pauses
-    RMS_SPEECH_THRESHOLD = 350.0    # Speech detection sensitivity threshold
+    RMS_SPEECH_THRESHOLD = 480.0    # Raised from 350 → 480: phone echo/sidetone returns at ~10-20%
+                                    # of original amplitude (~RMS 200-400). Real human speech is louder.
+    MIN_SPEECH_PACKETS = 5          # Require ≥5 consecutive packets (100ms) above threshold before
+                                    # treating as real speech — rejects single-packet echo spikes.
     MAX_SPEECH_PACKETS = 600        # Max 12s per utterance turn to prevent infinite buffering
     turn_index = 0
     idle_silence_packet_count = 0
@@ -1074,10 +1077,22 @@ async def handle_websocket_stream(websocket: WebSocket):
             tracker.print_summary()
 
             await tts_queue.join()
-            
+
+            # Echo guard: wait for phone line sidetone/echo to decay before
+            # releasing the half-duplex lock. Without this, the last 200-300ms
+            # of TTS audio echoes back from the phone and triggers a ghost VAD turn.
+            await asyncio.sleep(0.65)
+
         except Exception as err:
             print(f"Error in process_voice_turn: {err}")
         finally:
+            # Flush the caller audio buffer and pre-roll so stale echo audio
+            # from this turn is not prepended to the next turn's STT input.
+            caller_audio_buffer.clear()
+            pre_roll_buffer.clear()
+            is_speaking = False
+            silence_counter = 0
+            speech_packet_count = 0
             ai_is_speaking = False
             idle_silence_packet_count = 0
             inactivity_timeouts_count = 0
@@ -1142,31 +1157,37 @@ async def handle_websocket_stream(websocket: WebSocket):
                     idle_silence_packet_count = 0
                     inactivity_timeouts_count = 0
                     if not is_speaking:
-                        is_speaking = True
-                        speech_packet_count = 0
-                        print(f"[VAD] Caller speaking detected (RMS: {rms:.1f}). Prepending pre-roll lead-in buffer ({len(pre_roll_buffer)} packets / {len(pre_roll_buffer)*20}ms)...")
-                        
-                        stop_playback_flag.set()
-                        if stream_id:
-                            await websocket.send_json({
-                                "event": "clearAudio",
-                                "streamId": stream_id
-                            })
-                        while not tts_queue.empty():
-                            try:
-                                tts_queue.get_nowait()
-                                tts_queue.task_done()
-                            except asyncio.QueueEmpty:
-                                break
+                        speech_packet_count += 1
+                        caller_audio_buffer.extend(payload)
+                        # Require MIN_SPEECH_PACKETS consecutive loud packets before confirming speech.
+                        # This rejects single-packet echo bursts from phone sidetone.
+                        if speech_packet_count >= MIN_SPEECH_PACKETS:
+                            is_speaking = True
+                            print(f"[VAD] Caller speaking detected (RMS: {rms:.1f}). Prepending pre-roll lead-in buffer ({len(pre_roll_buffer)} packets / {len(pre_roll_buffer)*20}ms)...")
+                            
+                            stop_playback_flag.set()
+                            if stream_id:
+                                await websocket.send_json({
+                                    "event": "clearAudio",
+                                    "streamId": stream_id
+                                })
+                            while not tts_queue.empty():
+                                try:
+                                    tts_queue.get_nowait()
+                                    tts_queue.task_done()
+                                except asyncio.QueueEmpty:
+                                    break
 
-                        # Prepend pre-roll lead-in audio to preserve initial soft consonants/words
-                        caller_audio_buffer.clear()
-                        for packet in pre_roll_buffer:
-                            caller_audio_buffer.extend(packet)
-                        pre_roll_buffer.clear()
-
-                    caller_audio_buffer.extend(payload)
-                    speech_packet_count += 1
+                            # Prepend pre-roll lead-in audio to preserve initial soft consonants/words
+                            pre_buf = bytes(caller_audio_buffer)  # save buffered pre-confirm audio
+                            caller_audio_buffer.clear()
+                            for packet in pre_roll_buffer:
+                                caller_audio_buffer.extend(packet)
+                            caller_audio_buffer.extend(pre_buf)   # append the confirmed speech so far
+                            pre_roll_buffer.clear()
+                    else:
+                        caller_audio_buffer.extend(payload)
+                        speech_packet_count += 1
                 else:
                     # Keep continuous 500ms ring buffer of lead-in audio while caller is silent
                     pre_roll_buffer.append(payload)
@@ -1192,6 +1213,11 @@ async def handle_websocket_stream(websocket: WebSocket):
                                 ai_is_speaking = True  # strict half-duplex turn ownership
                                 asyncio.create_task(process_voice_turn(audio_data))
                     else:
+                        # Echo burst decayed before reaching MIN_SPEECH_PACKETS — reset the counter
+                        # so accumulated echo packets don't eventually cross the gate later.
+                        if speech_packet_count > 0 and speech_packet_count < MIN_SPEECH_PACKETS:
+                            speech_packet_count = 0
+                            caller_audio_buffer.clear()
                         # Inactivity timeout tracking (starts only after AI finishes speaking)
                         playback_idle = (playback_task is None or playback_task.done()) and tts_queue.empty()
                         if playback_idle and not awaiting_feedback:
