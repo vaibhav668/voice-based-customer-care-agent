@@ -25,17 +25,17 @@ class SpeechToText:
     # Language-aware Whisper prompts — short, non-enumerable sentences so Whisper cannot
     # hallucinate them verbatim as a transcription when it receives low-quality audio.
     LANGUAGE_PROMPTS = {
-        "en": "A customer is calling a bus company support line about their travel booking.",
-        "hi": "एक यात्री बस सेवा के ग्राहक समर्थन से अपनी यात्रा के बारे में बात कर रहा है।",
-        "te": "ఒక ప్రయాణికుడు బస్ సేవ కస్టమర్ కేర్‌తో తన ప్రయాణం గురించి మాట్లాడుతున్నాడు.",
-        "ta": "ஒரு பயணி ப斯 சேவை வாடிக்கையாளர் ஆதரவிடம் தனது பயணம் பற்றி பேசுகிறார்.",
-        "kn": "ಒಬ್ಬ ಪ್ರಯಾಣಿಕ ಬಸ್ ಸೇವೆಯ ಗ್ರಾಹಕ ಸೇವೆಯೊಂದಿಗೆ ತಮ್ಮ ಪ್ರಯಾಣದ ಬಗ್ಗೆ ಮಾತನಾಡುತ್ತಿದ್ದಾರೆ.",
-        "mr": "एक प्रवासी बस सेवेच्या ग्राहक सहाय्य केंद्राशी आपल्या प्रवासाबद्दल बोलत आहे.",
-        "gu": "એक मुसाफर बस सेवाना ग्राहक सहाय साथे तेनी मुसाफरी विशे वात करी रह्यो छे.",
-        "bn": "একজন যাত্রী বাস সেবার গ্রাহক সহায়তার সাথে তার ভ্রমণ নিয়ে কথা বলছেন।",
-        "ml": "ഒരു യാത്രക്കാരൻ ബസ് സേവനത്തിന്റെ ഗ്രാഹക സേവനവുമായി തന്റെ യാത്രയെ കുറിച്ച് സംസാരിക്കുന്നു.",
-        "pa": "ਇੱਕ ਯਾਤਰੀ ਬੱਸ ਸੇਵਾ ਦੇ ਗਾਹਕ ਸਹਾਇਤਾ ਨਾਲ ਆਪਣੀ ਯਾਤਰਾ ਬਾਰੇ ਗੱਲ ਕਰ ਰਿਹਾ ਹੈ।",
-        "ur": "ایک مسافر بس سروس کے کسٹمر سپورٹ سے اپنے سفر کے بارے میں بات کر رہا ہے۔",
+        "en": "A customer is calling a bus company support line about their travel booking. They may ask about booking status, seat number, delays, refunds, cancellation, luggage, or pets allowed policy.",
+        "hi": "एक यात्री बस सेवा के ग्राहक समर्थन से अपनी यात्रा बुकिंग, बुकिंग कोड, रिफंड, रद्दीकरण (cancellation), सीट नंबर, देरी (delay), सामान (luggage) या पेट्स (pets allowed) की नीति के बारे में बात कर रहा है।",
+        "te": "ఒక ప్రయాణికుడు బస్ కస్టమర్ కేర్‌తో తన బుకింగ్ స్టేటస్, రీఫండ్, టికెట్ క్యాన్సిలేషన్, బస్సు ఆలస్యం, సీటు నంబర్ లేదా లగేజ్ పాలసీ గురించి మాట్లాడుతున్నాడు.",
+        "ta": "ஒரு பயணி பஸ் வாடிக்கையாளர் சேவையிடம் தனது முன்பதிவு நிலை, ரீஃபண்ட், ரத்து செய்தல், பஸ் தாமதம், இருக்கை எண் அல்லது லக்கேஜ் கொள்கை பற்றி பேசுகிறார்.",
+        "kn": "ಒಬ್ಬ ಪ್ರಯಾಣಿಕ ಬಸ್ ಗ್ರಾಹಕ ಸೇವೆಯೊಂದಿಗೆ ತಮ್ಮ ಬುಕಿಂಗ್ ಸ್ಥಿತಿ, ಮರುಪಾವತಿ (refund), ರದ್ದತಿ (cancellation), ಬಸ್ ವಿಳಂಬ (delay), ಸೀಟ್ ಸಂಖ್ಯೆ ಅಥವಾ ಲಗೇಜ್ ನೀತಿಯ ಬಗ್ಗೆ ಮಾತನಾಡುತ್ತಿದ್ದಾರೆ.",
+        "mr": "एक प्रवासी बस सेवेच्या ग्राहक केंद्राशी आपल्या बुकिंग स्थिती, रिफंड, तिकीट रद्द करणे, बस उशीर (delay), सीट नंबर किंवा सामान (luggage) पॉलिसीबद्दल बोलत आहे.",
+        "gu": "એક મુસાફર બસ સેવાના ગ્રાહક પ્રતિનિધિ સાથે બુકિંગ સ્ટેટસ, રિફંડ, કેન્સલેશન, બસ મોડી (delay) હોવા અંગે, સીટ નંબર અથવા સામાન (luggage) પોલિસી વિશે વાત કરી રહ્યો છે.",
+        "bn": "একজন যাত্রী বাস গ্রাহক পরিষেবার সাথে তার বুকিং স্ট্যাটাস, রিফান্ড, বুকিং বাতিলকরণ, বাস বিলম্ব, সিট নম্বর বা লাগেজ পলিসি নিয়ে কথা বলছেন।",
+        "ml": "ഒരു യാത്രക്കാരൻ ബസ് കസ്റ്റമർ സർവീസുമായി തന്റെ ബുക്കിംഗ് നില, റീഫണ്ട്, റദ്ദാക്കൽ, ബസ് വൈകൽ, സീറ്റ് നമ്പർ അല്ലെങ്കിൽ ലഗേജ് പോളിസി എന്നിവയെക്കുറിച്ച് സംസാരിക്കുന്നു.",
+        "pa": "ਇੱਕ ਯਾਤਰੀ ਬੱਸ ਸੇਵਾ ਦੇ ਗਾਹਕ ਸਹਾਇਤਾ ਨਾਲ ਆਪਣੀ ਬੁਕਿੰਗ ਸਥਿਤੀ, ਰਿਫੰਡ, ਰੱਦ ਕਰਨ (cancellation), ਬੱਸ ਦੇਰੀ (delay), ਸੀਟ ਨੰਬਰ ਜਾਂ ਸਮਾਨ (luggage) ਦੀ ਨੀਤੀ ਬਾਰੇ ਗੱਲ ਕਰ ਰਿਹਾ ਹੈ।",
+        "ur": "ایک مسافر بس کسٹمر سروس سے بکنگ، ریفنڈ، منسوخی (cancellation)، تاخیر (delay)، سیٹ نمبر یا سامان کی پالیسی کے بارے میں بات کر رہا ہے۔",
     }
 
     # Prompt keyword fragments — used to detect Whisper hallucinating the prompt verbatim
@@ -133,10 +133,9 @@ class SpeechToText:
         if not result:
             return ""
 
-        # Hallucination Guard 1: Detect comma-separated keyword enumerations or repetitive outputs
         result_lower = result.lower()
         keyword_hits = sum(1 for kw in self.HALLUCINATION_KEYWORDS if kw.lower() in result_lower)
-        if keyword_hits >= 2:
+        if keyword_hits >= 3 and ("," in result or "•" in result):
             print(f"[STT] Keyword list hallucination detected ({keyword_hits} hits), discarding: {result[:80]}")
             return ""
 

@@ -241,6 +241,10 @@ class IVRCallSession:
         self.session_id: str = f"ivr-{call_id}"
         self.booking_code: Optional[str] = None
         
+        self.last_response: str = ""
+        self.history: list = []
+        self.entities: dict = {}
+        
         # Resolve caller identity securely
         self._identify_caller()
 
@@ -254,6 +258,9 @@ class IVRCallSession:
         self.user_id = row.user_id
         self.session_id = row.session_id
         self.booking_code = row.booking_code
+        self.last_response = ""
+        self.history = []
+        self.entities = {}
 
     def _save_to_db(self):
         """Persists the session details back to PostgreSQL/SQLite."""

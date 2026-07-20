@@ -764,10 +764,12 @@ async def handle_websocket_stream(websocket: WebSocket):
     is_speaking = False
     silence_counter = 0
     speech_packet_count = 0
-    SILENCE_THRESHOLD_PACKETS = 55  # ~1100ms at 20ms chunks to allow natural speech pauses
+    SILENCE_THRESHOLD_PACKETS = 35  # ~700ms at 20ms chunks to allow natural speech pauses
     RMS_SPEECH_THRESHOLD = 350.0    # Speech detection sensitivity threshold
     MAX_SPEECH_PACKETS = 600        # Max 12s per utterance turn to prevent infinite buffering
     turn_index = 0
+    idle_silence_packet_count = 0
+    inactivity_timeouts_count = 0
     
     tts_queue = asyncio.Queue()
     stop_playback_flag = asyncio.Event()
@@ -820,6 +822,10 @@ async def handle_websocket_stream(websocket: WebSocket):
                     }
                 })
                 await asyncio.sleep(0.04)
+        except (RuntimeError, WebSocketDisconnect) as conn_err:
+            # Silence expected websocket disconnect / closure exceptions
+            stop_playback_flag.set()
+            return
         except Exception as e:
             print(f"Error in stream_sentence_audio: {e}")
 
@@ -890,6 +896,8 @@ async def handle_websocket_stream(websocket: WebSocket):
                 
                 if rms > RMS_SPEECH_THRESHOLD:
                     silence_counter = 0
+                    idle_silence_packet_count = 0
+                    inactivity_timeouts_count = 0
                     if not is_speaking:
                         is_speaking = True
                         speech_packet_count = 0
@@ -1017,8 +1025,9 @@ async def handle_websocket_stream(websocket: WebSocket):
 
                                                 print(f"[WebSocket Stream Feedback] Verbal rating received: {rating}/10 for Call UUID: {call_uuid}")
                                                 if session:
-                                                    session.sentiment = f"RATING_{rating}_OUT_OF_10"
-                                                    session.resolution_status = "RESOLVED"
+                                                    from app.voice.ivr import IVRState
+                                                    session.state = IVRState.FEEDBACK_PENDING
+                                                    session.advance_state("DTMF", str(rating))
                                                     db.commit()
 
                                                 stop_playback_flag.set()
@@ -1144,7 +1153,9 @@ async def handle_websocket_stream(websocket: WebSocket):
                                                 await tts_queue.put(sentence_accum.strip())
                                             
                                             # Broadcast AI response to admin dashboard
-                                            full_resp = session.last_response if session else ""
+                                            from app.conversation.memory import memory
+                                            mem_session = memory.get(session.session_id) if session else None
+                                            full_resp = mem_session.last_response if mem_session else ""
                                             broadcast_call_event("new_transcript", session.session_id if session else call_uuid, f"AI: {full_resp}", {
                                                 "sender": "AI",
                                                 "message": full_resp,
@@ -1174,6 +1185,43 @@ async def handle_websocket_stream(websocket: WebSocket):
                                             
                                     except Exception as err:
                                         print(f"Error executing agent stream: {err}")
+                    else:
+                        # Inactivity timeout tracking
+                        playback_idle = (playback_task is None or playback_task.done()) and tts_queue.empty()
+                        if playback_idle and not awaiting_feedback:
+                            idle_silence_packet_count += 1
+                            if idle_silence_packet_count >= 600:  # ~12 seconds of complete silence (600 * 20ms)
+                                idle_silence_packet_count = 0
+                                lang_code = session.language if session else "en"
+                                from app.voice.ivr import PROMPTS
+                                lang_prompts = PROMPTS.get(lang_code, PROMPTS["en"])
+                                
+                                if inactivity_timeouts_count < 1:
+                                    inactivity_timeouts_count += 1
+                                    print(f"[WebSocket Stream] Inactivity timeout 1 triggered for Call UUID: {call_uuid}")
+                                    timeout_msg = lang_prompts.get(
+                                        "timeout_reminder",
+                                        "We didn't receive any input. Press 1 to continue with another query, or 0 to finish."
+                                    )
+                                    stop_playback_flag.clear()
+                                    if playback_task and not playback_task.done():
+                                        playback_task.cancel()
+                                    playback_task = asyncio.create_task(playback_worker())
+                                    await tts_queue.put(timeout_msg)
+                                else:
+                                    print(f"[WebSocket Stream] Inactivity timeout 2 triggered. Terminating Call UUID: {call_uuid}")
+                                    goodbye_msg = lang_prompts.get("goodbye", "Thank you for calling. Have a great day! Goodbye.")
+                                    stop_playback_flag.clear()
+                                    if playback_task and not playback_task.done():
+                                        playback_task.cancel()
+                                    playback_task = asyncio.create_task(playback_worker())
+                                    await tts_queue.put(goodbye_msg)
+                                    await asyncio.sleep(4.0)
+                                    try:
+                                        await websocket.close()
+                                    except Exception:
+                                        pass
+                                    break
 
             elif event == "dtmf":
                 dtmf_obj = msg.get("dtmf") or msg.get("media") or {}
@@ -1184,6 +1232,8 @@ async def handle_websocket_stream(websocket: WebSocket):
                     or ""
                 ).strip()
                 print(f"[WebSocket Stream DTMF] Received keypress '{digit}' for Call UUID: {call_uuid}")
+                idle_silence_packet_count = 0
+                inactivity_timeouts_count = 0
 
                 lang_code = session.language if session else "en"
                 from app.voice.ivr import PROMPTS
@@ -1194,9 +1244,9 @@ async def handle_websocket_stream(websocket: WebSocket):
                     rating = 10 if digit == "0" else (int(digit) if digit.isdigit() else 10)
                     print(f"[WebSocket Stream Feedback] Caller rated experience: {rating}/10 for Call UUID: {call_uuid}")
                     if session:
-                        session.sentiment = f"RATING_{rating}_OUT_OF_10"
-                        session.resolution_status = "RESOLVED"
-                        db.commit()
+                        from app.voice.ivr import IVRState
+                        session.state = IVRState.FEEDBACK_PENDING
+                        session.advance_state("DTMF", digit)
 
                     stop_playback_flag.set()
                     if stream_id:

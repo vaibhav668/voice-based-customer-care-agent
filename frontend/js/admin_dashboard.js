@@ -1394,11 +1394,72 @@ function initWebSocket() {
         socket.onclose = () => setTimeout(initWebSocket, 4000);
         socket.onerror = (e) => console.warn("[WS] error:", e);
 
-        socket.onmessage = () => {
-            triggerWSUpdate();
+        socket.onmessage = (event) => {
+            try {
+                const payload = JSON.parse(event.data);
+                handleWebSocketEvent(payload);
+            } catch (err) {
+                console.warn("[WS] Failed to parse message, fallback to full sync:", err);
+                triggerWSUpdate();
+            }
         };
     } catch (e) {
         console.error("[WS] Connection failed:", e);
+    }
+}
+
+let convsReloadTimeout = null;
+let convsPendingReload = false;
+
+function triggerConversationsReload() {
+    if (convsReloadTimeout) {
+        convsPendingReload = true;
+        return;
+    }
+    fetchConversations().catch(e => console.error("[WS] convs reload err:", e));
+    convsReloadTimeout = setTimeout(() => {
+        convsReloadTimeout = null;
+        if (convsPendingReload) {
+            convsPendingReload = false;
+            triggerConversationsReload();
+        }
+    }, 2000);
+}
+
+let reviewsReloadTimeout = null;
+let reviewsPendingReload = false;
+
+function triggerReviewsReload() {
+    if (reviewsReloadTimeout) {
+        reviewsPendingReload = true;
+        return;
+    }
+    fetchReviews().catch(e => console.error("[WS] reviews reload err:", e));
+    reviewsReloadTimeout = setTimeout(() => {
+        reviewsReloadTimeout = null;
+        if (reviewsPendingReload) {
+            reviewsPendingReload = false;
+            triggerReviewsReload();
+        }
+    }, 2000);
+}
+
+function handleWebSocketEvent(payload) {
+    const eventType = payload.event;
+    console.log(`[WS Event] Type: ${eventType}`, payload);
+
+    if (eventType === "new_transcript") {
+        if (selectedCustomerPhone) {
+            refreshCustomerConversation(selectedCustomerPhone);
+        }
+        triggerConversationsReload();
+    } else if (eventType === "call_started" || eventType === "call_updated" || eventType === "new_call") {
+        triggerConversationsReload();
+    } else if (eventType === "feedback_submitted") {
+        triggerReviewsReload();
+        triggerConversationsReload();
+    } else {
+        triggerWSUpdate();
     }
 }
 
