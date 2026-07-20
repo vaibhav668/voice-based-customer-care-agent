@@ -787,34 +787,42 @@ async def handle_websocket_stream(websocket: WebSocket):
     
     awaiting_feedback = False
 
+    websocket_closed = False  # Guard: never send after close
+
     async def stream_sentence_audio(sentence: str):
+        nonlocal websocket_closed
         try:
             from app.voice.tts import TextToSpeech
             tts = TextToSpeech()
             lang = session.language if session else "en"
 
-            # Stream mu-law chunks directly from edge_tts → ffmpeg pipe
-            # No disk I/O: eliminates the MP3 save + ffmpeg read round-trip
-            # that caused extra lag especially for Hindi/regional voices.
+            # Stream mu-law chunks directly from edge_tts → ffmpeg pipe.
+            # No sleep between chunks — Plivo's jitter buffer handles pacing.
+            # Sleeping artificially gaps the audio stream and causes audible pauses.
             async for mulaw_chunk in tts.generate_mulaw_stream(sentence, language=lang):
-                if stop_playback_flag.is_set():
+                if stop_playback_flag.is_set() or websocket_closed:
                     break
                 payload = base64.b64encode(mulaw_chunk).decode("utf-8")
-                await websocket.send_json({
-                    "event": "playAudio",
-                    "media": {
-                        "contentType": "audio/x-mulaw",
-                        "sampleRate": "8000",
-                        "payload": payload
-                    }
-                })
-                await asyncio.sleep(0.04)
+                try:
+                    await websocket.send_json({
+                        "event": "playAudio",
+                        "media": {
+                            "contentType": "audio/x-mulaw",
+                            "sampleRate": "8000",
+                            "payload": payload
+                        }
+                    })
+                except (RuntimeError, WebSocketDisconnect):
+                    websocket_closed = True
+                    stop_playback_flag.set()
+                    return
         except (RuntimeError, WebSocketDisconnect):
-            # Silence expected websocket disconnect / closure exceptions
+            websocket_closed = True
             stop_playback_flag.set()
             return
         except Exception as e:
-            print(f"Error in stream_sentence_audio: {e}")
+            if not websocket_closed:
+                print(f"Error in stream_sentence_audio: {e}")
 
 
     async def playback_worker():
@@ -856,14 +864,21 @@ async def handle_websocket_stream(websocket: WebSocket):
             idle_silence_packet_count = 0
 
     async def terminate_call_with_prompt(prompt_text: str):
-        nonlocal ai_is_speaking, playback_task
+        nonlocal ai_is_speaking, playback_task, websocket_closed
         ai_is_speaking = True
         try:
             stop_playback_flag.set()
-            if stream_id:
-                await websocket.send_json({"event": "clearAudio", "streamId": stream_id})
+            if stream_id and not websocket_closed:
+                try:
+                    await websocket.send_json({"event": "clearAudio", "streamId": stream_id})
+                except Exception:
+                    pass
             if playback_task and not playback_task.done():
                 playback_task.cancel()
+                try:
+                    await playback_task
+                except asyncio.CancelledError:
+                    pass
             while not tts_queue.empty():
                 try:
                     tts_queue.get_nowait()
@@ -873,12 +888,15 @@ async def handle_websocket_stream(websocket: WebSocket):
             stop_playback_flag.clear()
             playback_task = asyncio.create_task(playback_worker())
             await tts_queue.put(prompt_text)
-            await tts_queue.join()
-            await asyncio.sleep(1.0)
-            try:
-                await websocket.close()
-            except Exception:
-                pass
+            await tts_queue.join()          # Wait for goodbye audio to fully stream
+            await asyncio.sleep(1.2)        # Extra buffer so last audio chunk clears the network
+            # Only close the socket after all audio is done
+            if not websocket_closed:
+                websocket_closed = True
+                try:
+                    await websocket.close()
+                except Exception:
+                    pass
         except Exception as e:
             print(f"Error terminating call: {e}")
 
@@ -1269,7 +1287,10 @@ async def handle_websocket_stream(websocket: WebSocket):
                         db.commit()
 
                     goodbye_msg = lang_prompts.get("goodbye", "Thank you for calling. Have a great day! Goodbye.")
-                    asyncio.create_task(terminate_call_with_prompt(goodbye_msg))
+                    # Await directly — do NOT use create_task+break here.
+                    # create_task+break causes the finally block to cancel the playback_task
+                    # before the goodbye audio finishes, producing the ASGI close-then-send error.
+                    await terminate_call_with_prompt(goodbye_msg)
                     break
 
                 elif digit == "0":
@@ -1301,6 +1322,11 @@ async def handle_websocket_stream(websocket: WebSocket):
     except Exception as e:
         print(f"[WebSocket Stream] WebSocket Error: {e}")
     finally:
+        stop_playback_flag.set()
         if playback_task and not playback_task.done():
             playback_task.cancel()
+            try:
+                await playback_task
+            except asyncio.CancelledError:
+                pass
         db.close()
