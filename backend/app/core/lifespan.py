@@ -575,6 +575,15 @@ async def lifespan(app):
         Base.metadata.create_all(bind=engine)
         logger.info("Database tables verified/created successfully.")
 
+        # Create performance-enhancing indexes
+        with engine.begin() as conn:
+            logger.info("Creating performance-enhancing database indexes...")
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_ivr_sessions_session_id ON ivr_sessions (session_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_bookings_user_id ON bookings (user_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_bookings_trip_id ON bookings (trip_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON conversations (user_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_conversations_campaign_id ON conversations (campaign_id)"))
+
         # Check and ensure legacy full_name column exists for compatibility
         with engine.begin() as conn:
             inspector = inspect(conn)

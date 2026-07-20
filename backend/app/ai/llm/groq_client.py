@@ -7,8 +7,8 @@ from app.config.settings import settings
 
 class GroqLLM(BaseLLM):
 
-    def __init__(self):
-        model = settings.groq_model
+    def __init__(self, model: str = None):
+        model = model or settings.groq_model
         # Force switch to llama-3.1-8b-instant to avoid rate limits
         if not model or model == "llama-3.3-70b-versatile":
             model = "llama-3.1-8b-instant"

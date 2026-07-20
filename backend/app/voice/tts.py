@@ -15,6 +15,7 @@ VOICE_MAP = {
     "bn": "bn-IN-TanishaaNeural",
     "ml": "ml-IN-SobhanaNeural",
     "ur": "ur-IN-GulNeural",
+    "pa": "pa-IN-GurpreetNeural",
 }
 
 

@@ -213,8 +213,17 @@ def list_admin_enriched_conversations(
             "duration": duration,
         })
 
+    avg_ai_latency_sec = 0.0
+    try:
+        from app.database.models.conversation_message import ConversationMessage
+        avg_ms = db.scalar(select(func.avg(ConversationMessage.response_time_ms)).where(ConversationMessage.sender == "AI"))
+        if avg_ms:
+            avg_ai_latency_sec = round(avg_ms / 1000, 2)
+    except Exception as e:
+        print(f"Error computing average response time: {e}")
+
     return success_response(
-        data={"conversations": enriched, "total": len(enriched)},
+        data={"conversations": enriched, "total": len(enriched), "avg_ai_latency_sec": avg_ai_latency_sec},
         message="Admin enriched conversations fetched",
     )
 
@@ -435,95 +444,37 @@ def list_analytics_bookings(
         from app.exceptions.common import UnauthorizedException
         raise UnauthorizedException("Access restricted to administrators")
 
-    from app.database.models.conversation_message import ConversationMessage
-    import json
+    from app.database.models.booking import Booking
+    from app.database.models.trip import Trip
+    from app.database.models.route import Route
+    from sqlalchemy.orm import joinedload
 
-    stmt = select(ConversationMessage).where(ConversationMessage.booking_code != None)
-    messages = db.scalars(stmt).all()
+    stmt = (
+        select(Booking)
+        .options(
+            joinedload(Booking.trip).joinedload(Trip.route)
+        )
+        .order_by(Booking.created_at.desc())
+    )
+    bookings = db.scalars(stmt).all()
 
-    # Pre-fill with seeded base booking logs so table stays populated
-    bookings_map = {
-        "BK-1234": {
-            "booking_code": "BK-1234",
-            "source": "Delhi",
-            "destination": "Jaipur",
-            "seat_number": "A12",
-            "departure_time": "2026-07-11 08:00 AM",
-            "arrival_time": "2026-07-11 01:00 PM",
-            "payment_status": "PAID",
-            "booking_status": "CONFIRMED",
-        },
-        "BK-5678": {
-            "booking_code": "BK-5678",
-            "source": "Mumbai",
-            "destination": "Pune",
-            "seat_number": "B07",
-            "departure_time": "2026-07-12 10:00 AM",
-            "arrival_time": "2026-07-12 01:30 PM",
-            "payment_status": "PAID",
-            "booking_status": "CONFIRMED",
-        },
-        "BK-2468": {
-            "booking_code": "BK-2468",
-            "source": "Bengaluru",
-            "destination": "Chennai",
-            "seat_number": "C15",
-            "departure_time": "2026-07-13 06:00 AM",
-            "arrival_time": "2026-07-13 12:00 PM",
-            "payment_status": "PAID",
-            "booking_status": "CANCELLED",
-        },
-        "BK-1357": {
-            "booking_code": "BK-1357",
-            "source": "Hyderabad",
-            "destination": "Vijayawada",
-            "seat_number": "D09",
-            "departure_time": "2026-07-14 09:00 PM",
-            "arrival_time": "2026-07-15 06:00 AM",
-            "payment_status": "PENDING",
-            "booking_status": "CONFIRMED",
-        },
-        "BK-9876": {
-            "booking_code": "BK-9876",
-            "source": "Ahmedabad",
-            "destination": "Mumbai",
-            "seat_number": "A05",
-            "departure_time": "2026-07-15 02:00 PM",
-            "arrival_time": "2026-07-15 09:00 PM",
-            "payment_status": "PAID",
-            "booking_status": "CONFIRMED",
-        }
-    }
-
-    # Dynamically extract any additional booking info logged in message analytics entities
-    for msg in messages:
-        code = msg.booking_code
-        if not code:
-            continue
-        
-        entities_data = msg.entities
-        if isinstance(entities_data, str):
-            try:
-                entities_data = json.loads(entities_data)
-            except:
-                entities_data = {}
-
-        if isinstance(entities_data, dict):
-            last_res = entities_data.get("last_result")
-            if isinstance(last_res, dict) and last_res.get("booking_code") == code:
-                bookings_map[code] = {
-                    "booking_code": code,
-                    "source": last_res.get("source", bookings_map.get(code, {}).get("source", "N/A")),
-                    "destination": last_res.get("destination", bookings_map.get(code, {}).get("destination", "N/A")),
-                    "seat_number": last_res.get("seat_number", bookings_map.get(code, {}).get("seat_number", "N/A")),
-                    "departure_time": last_res.get("departure_time", bookings_map.get(code, {}).get("departure_time", "N/A")),
-                    "arrival_time": last_res.get("arrival_time", bookings_map.get(code, {}).get("arrival_time", "N/A")),
-                    "payment_status": last_res.get("payment_status", bookings_map.get(code, {}).get("payment_status", "PENDING")),
-                    "booking_status": last_res.get("booking_status", bookings_map.get(code, {}).get("booking_status", "PENDING")),
-                }
+    res_bookings = []
+    for bk in bookings:
+        trip = bk.trip
+        route = trip.route if trip else None
+        res_bookings.append({
+            "booking_code": bk.booking_code,
+            "source": route.source_city if route else "N/A",
+            "destination": route.destination_city if route else "N/A",
+            "seat_number": bk.seat_number,
+            "departure_time": trip.departure_time.strftime("%Y-%m-%d %I:%M %p") if (trip and trip.departure_time) else "N/A",
+            "arrival_time": trip.arrival_time.strftime("%Y-%m-%d %I:%M %p") if (trip and trip.arrival_time) else "N/A",
+            "payment_status": bk.payment_status.value if hasattr(bk.payment_status, "value") else str(bk.payment_status),
+            "booking_status": bk.booking_status.value if hasattr(bk.booking_status, "value") else str(bk.booking_status),
+        })
 
     return success_response(
-        data=list(bookings_map.values()),
+        data=res_bookings,
         message="Analytics bookings fetched successfully",
     )
 

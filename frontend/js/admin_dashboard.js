@@ -20,6 +20,7 @@ let allEnrichedConvs = [];
 let allReviews       = [];
 let allBookings      = [];
 let groupedCustomers = {};
+let avgAiLatencySec   = 0;
 
 let selectedCustomerPhone = null;
 let activeLoadToken       = null;  // race-condition guard
@@ -167,6 +168,7 @@ async function loadAllData() {
 async function fetchConversations() {
     const res = await getAdminEnrichedConversations(200);
     allEnrichedConvs = res?.data?.conversations || [];
+    avgAiLatencySec = res?.data?.avg_ai_latency_sec || 0;
     groupCustomersByPhone();
 }
 
@@ -266,7 +268,7 @@ function renderDashboard4Metrics() {
     setEl("stat-active-calls", distinctActive24h.size);
     setEl("stat-avg-duration", avgDurFmt);
     setEl("stat-total-users",  totalUsersCount);
-    setEl("stat-ai-latency",   "1.2s");
+    setEl("stat-ai-latency",   avgAiLatencySec ? `${avgAiLatencySec}s` : "0.0s");
 
     const badge = document.getElementById("live-calls-badge");
     if (badge) badge.textContent = distinctActive24h.size > 0 ? `${distinctActive24h.size} LIVE` : "LIVE";

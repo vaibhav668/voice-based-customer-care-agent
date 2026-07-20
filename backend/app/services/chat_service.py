@@ -2,6 +2,7 @@ import time
 import uuid
 
 from sqlalchemy.orm import Session
+from app.utils.latency import LatencyTracker
 from app.ai.intent.schemas import Intent
 from app.ai.agent.agent import SupportAgent
 from app.ai.context.resolver import ContextResolver
@@ -77,7 +78,10 @@ class ChatService:
         user_id=None,
         channel: str = "CHAT",
         audio_input_path: str | None = None,
+        tracker: LatencyTracker | None = None,
     ):
+        if tracker:
+            tracker.log_stage("Incoming Request")
         start_time = time.time()
         session_id = request.session_id or str(uuid.uuid4())
 
@@ -102,6 +106,9 @@ class ChatService:
             channel=channel,
             language=language,
         )
+
+        if tracker:
+            tracker.log_stage("Conversation Memory")
 
         # Record User Message in Database
         self.msg_repo.add_message(
@@ -130,6 +137,8 @@ class ChatService:
         # ----------------------------------------
 
         understanding = understand(request.message, history=session.history)
+        if tracker:
+            tracker.log_stage("Intent Detection")
 
         # ----------------------------------------
         # Save Extracted Entities to Session
@@ -355,6 +364,9 @@ class ChatService:
             history=session.history,
             search_keywords=understanding.search_keywords,
         )
+        if tracker:
+            tracker.log_stage("Tool Selection")
+            tracker.log_stage("Database")
 
         print("=" * 60)
         print("TOOL:", result.tool)
@@ -445,6 +457,8 @@ class ChatService:
                     rag_context = "\n\n".join(d.page_content for d in docs)
             except Exception:
                 pass
+        if tracker:
+            tracker.log_stage("RAG Retrieval")
 
         response = self.generator.generate(
             result.tool,
@@ -462,7 +476,8 @@ class ChatService:
         except Exception:
             pass
         print("=" * 60)
-
+        if tracker:
+            tracker.log_stage("Response Generation")
         elapsed_ms = round((time.time() - start_time) * 1000, 2)
         ai_msg = self.msg_repo.add_message(
             conversation_id=db_conv.id,
@@ -537,6 +552,7 @@ class ChatService:
         user_id=None,
         channel: str = "CHAT",
         audio_input_path: str | None = None,
+        tracker: LatencyTracker | None = None,
     ):
         """Asynchronous streaming version of process that yields LLM token chunks."""
         import asyncio
@@ -561,6 +577,8 @@ class ChatService:
             channel=channel,
             language=language,
         )
+        if tracker:
+            tracker.log_stage("Conversation Memory")
 
         self.msg_repo.add_message(
             conversation_id=db_conv.id,
@@ -577,6 +595,8 @@ class ChatService:
 
         # Understand current message
         understanding = understand(request.message, history=session.history)
+        if tracker:
+            tracker.log_stage("Intent Detection")
 
         # Save Extracted Entities to Session
         if understanding.booking_code:
@@ -732,6 +752,9 @@ class ChatService:
             history=session.history,
             search_keywords=understanding.search_keywords,
         )
+        if tracker:
+            tracker.log_stage("Tool Selection")
+            tracker.log_stage("Database")
 
         session.entities["last_tool"] = result.tool
         session.entities["last_result"] = result.data
@@ -796,6 +819,8 @@ class ChatService:
                     rag_context = "\n\n".join(d.page_content for d in docs)
             except Exception:
                 pass
+        if tracker:
+            tracker.log_stage("RAG Retrieval")
 
         # Stream generator final response
         response_chunks = []

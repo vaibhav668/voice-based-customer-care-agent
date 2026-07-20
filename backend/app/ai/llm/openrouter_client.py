@@ -7,12 +7,12 @@ from app.config.settings import settings
 
 class OpenRouterLLM(BaseLLM):
 
-    def __init__(self):
+    def __init__(self, model: str = None):
         self.client = openai.OpenAI(
             api_key=settings.openrouter_api_key,
             base_url="https://openrouter.ai/api/v1",
         )
-        self.model = settings.openrouter_model
+        self.model = model or settings.openrouter_model
 
     def _convert_messages(self, messages: list[BaseMessage]) -> list[dict]:
         converted = []

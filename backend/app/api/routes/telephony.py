@@ -12,6 +12,7 @@ import wave
 from app.schemas.chat import ChatRequest
 from app.services.chat_service import ChatService
 from app.database.session import SessionLocal
+from app.utils.latency import LatencyTracker
 
 from app.database.session import get_db
 from app.voice.ivr import ivr_manager, IVRState
@@ -789,26 +790,19 @@ async def handle_websocket_stream(websocket: WebSocket):
             audio_path = await tts.generate(sentence, language=session.language if session else "en")
             full_path = str(tts.output_dir.parent / audio_path)
 
-            # Use ffmpeg to decode MP3 → raw 8kHz mono signed 16-bit PCM (no temp files needed)
-            import subprocess
+            # Use ffmpeg to decode MP3 → raw 8kHz mono G.711 mu-law directly
             ffmpeg_proc = await asyncio.create_subprocess_exec(
                 "ffmpeg", "-y",
                 "-i", full_path,
                 "-ar", "8000",        # resample to 8kHz
                 "-ac", "1",           # mono
-                "-f", "s16le",        # raw signed 16-bit little-endian PCM
+                "-c:a", "pcm_mulaw",  # convert to mu-law directly
+                "-f", "mulaw",        # output raw mu-law bytes
                 "-",                  # output to stdout
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.DEVNULL,
             )
-            pcm16_data, _ = await ffmpeg_proc.communicate()
-
-            num_samples = len(pcm16_data) // 2
-            samples = struct.unpack(f"<{num_samples}h", pcm16_data)
-
-            mulaw_bytes = bytearray(len(samples))
-            for idx, s in enumerate(samples):
-                mulaw_bytes[idx] = pcm16_to_ulaw(s)
+            mulaw_bytes, _ = await ffmpeg_proc.communicate()
                 
             chunk_size = 320  # 40ms of audio at 8000Hz µ-law
             for offset in range(0, len(mulaw_bytes), chunk_size):
@@ -944,50 +938,53 @@ async def handle_websocket_stream(websocket: WebSocket):
                             caller_audio_buffer.clear()
                             
                             if len(audio_data) >= 8000:  # At least 1.0s total audio (with pre-roll)
-                                import tempfile
-                                temp_raw = tempfile.NamedTemporaryFile(suffix=".raw", delete=False)
-                                temp_raw.write(audio_data)
-                                temp_raw_path = temp_raw.name
-                                temp_raw.close()
+                                tracker = LatencyTracker("WebSocketVoiceTurn")
+                                tracker.log_stage("Incoming Request")
                                 
-                                temp_wav_16k_path = None
-                                if SAVE_STREAM_DEBUG_WAV:
-                                    debug_filename = f"stream_{call_uuid or 'test'}_turn{turn_index}_{int(time.time())}.wav"
-                                    temp_wav_16k_path = str(DEBUG_AUDIO_DIR / debug_filename)
-                                else:
-                                    temp_wav_16k = tempfile.NamedTemporaryFile(suffix="_16k.wav", delete=False)
-                                    temp_wav_16k_path = temp_wav_16k.name
-                                    temp_wav_16k.close()
-                                
-                                stt_input_path = None
+                                wav_bytes = None
                                 try:
-                                    # FFMPEG decodes 8kHz µ-law directly and resamples to crisp 16kHz 16-bit PCM WAV (pcm_s16le)
+                                    # FFMPEG decodes 8kHz µ-law directly from stdin and resamples to crisp 16kHz 16-bit PCM WAV (pcm_s16le) to stdout
                                     upsample_proc = await asyncio.create_subprocess_exec(
                                         "ffmpeg", "-y",
                                         "-f", "mulaw",
                                         "-ar", "8000",
                                         "-ac", "1",
-                                        "-i", temp_raw_path,
+                                        "-i", "-",               # read from stdin
                                         "-ar", "16000",
                                         "-ac", "1",
                                         "-c:a", "pcm_s16le",
-                                        temp_wav_16k_path,
-                                        stdout=asyncio.subprocess.DEVNULL,
+                                        "-f", "wav",             # output format wav
+                                        "-",                     # output to stdout
+                                        stdin=asyncio.subprocess.PIPE,
+                                        stdout=asyncio.subprocess.PIPE,
                                         stderr=asyncio.subprocess.DEVNULL,
                                     )
-                                    await upsample_proc.wait()
-                                    stt_input_path = temp_wav_16k_path
+                                    wav_bytes, _ = await upsample_proc.communicate(input=audio_data)
                                 except Exception as ex:
                                     print(f"[WebSocket Stream] FFMPEG conversion error: {ex}")
                                 
-                                if stt_input_path and os.path.exists(stt_input_path):
+                                if wav_bytes:
+                                    # Handle debug saving in background
+                                    if SAVE_STREAM_DEBUG_WAV:
+                                        debug_filename = f"stream_{call_uuid or 'test'}_turn{turn_index}_{int(time.time())}.wav"
+                                        debug_path = str(DEBUG_AUDIO_DIR / debug_filename)
+                                        def _save_file(path, data):
+                                            try:
+                                                with open(path, "wb") as f:
+                                                    f.write(data)
+                                            except:
+                                                pass
+                                        asyncio.create_task(asyncio.to_thread(_save_file, debug_path, wav_bytes))
+
                                     try:
                                         from app.voice.stt import SpeechToText
                                         stt = SpeechToText()
                                         lang_code = session.language if session else "en"
-                                        print(f"[WebSocket Stream VAD Debug] Sending {duration_sec}s audio to STT (language={lang_code}, saved_file={stt_input_path})...")
+                                        print(f"[WebSocket Stream VAD Debug] Sending {duration_sec}s audio to STT (language={lang_code})...")
                                         
-                                        transcription = stt.transcribe(stt_input_path, language=lang_code)
+                                        transcription = await asyncio.to_thread(stt.transcribe_bytes, wav_bytes, language=lang_code)
+                                        tracker.log_stage("Speech Recognition")
+                                        
                                         print(f"[WebSocket Stream] Transcribed user query: {transcription}")
                                         
                                         if transcription.strip():
@@ -1105,14 +1102,37 @@ async def handle_websocket_stream(websocket: WebSocket):
                                                 session_id=session.session_id if session else None,
                                                 language=session.language if session else "en"
                                             )
+
+                                            # Broadcast user transcript to admin dashboard
+                                            from app.voice.ivr import broadcast_call_event
+                                            broadcast_call_event("new_transcript", session.session_id if session else call_uuid, f"Customer: {transcription}", {
+                                                "sender": "USER",
+                                                "message": transcription,
+                                            })
                                             
+                                            # Retrieve DB Conversation representation
+                                            from app.repositories.conversation_repository import ConversationRepository
+                                            conv_repo = ConversationRepository(db)
+                                            db_conv = conv_repo.get_or_create_session(
+                                                session_id=session.session_id if session else call_uuid,
+                                                user_id=session.user_id if session else None,
+                                                channel="TELEPHONY",
+                                                language=session.language if session else "en",
+                                            )
+                                            
+                                            # Run agent stream with timing metrics
                                             sentence_accum = ""
+                                            first_token = True
                                             async for token in chat_service.process_stream(
                                                 request=chat_req,
                                                 user_id=session.user_id if session else None,
                                                 channel="TELEPHONY",
-                                                audio_input_path=stt_input_path
+                                                audio_input_path=None,
+                                                tracker=tracker
                                             ):
+                                                if first_token:
+                                                    tracker.log_stage("LLM")
+                                                    first_token = False
                                                 sentence_accum += token
                                                 if any(sentence_accum.endswith(p) for p in (".", "?", "!", "\n", "।", "॥")):
                                                     sentence = sentence_accum.strip()
@@ -1123,6 +1143,23 @@ async def handle_websocket_stream(websocket: WebSocket):
                                             if sentence_accum.strip():
                                                 await tts_queue.put(sentence_accum.strip())
                                             
+                                            # Broadcast AI response to admin dashboard
+                                            full_resp = session.last_response if session else ""
+                                            broadcast_call_event("new_transcript", session.session_id if session else call_uuid, f"AI: {full_resp}", {
+                                                "sender": "AI",
+                                                "message": full_resp,
+                                            })
+                                            
+                                            # Refresh resolution status and broadcast sync
+                                            if db_conv:
+                                                db.refresh(db_conv)
+                                                res_status = db_conv.resolution_status or "unresolved"
+                                                lang = session.language if session else "en"
+                                                broadcast_call_event("call_updated", session.session_id if session else call_uuid, f"Call state updated: {res_status}.", {
+                                                    "resolution_status": res_status,
+                                                    "language": lang,
+                                                })
+                                            
                                             # Append DTMF choice prompt ("Press 1 for next query, 0 if resolved") to finish turn
                                             if session:
                                                 choose_prompt = lang_prompts.get(
@@ -1131,19 +1168,12 @@ async def handle_websocket_stream(websocket: WebSocket):
                                                 )
                                                 await tts_queue.put(choose_prompt)
                                                 
+                                            tracker.log_stage("Response Generation")
+                                            tracker.log_stage("TTS")
+                                            tracker.print_summary()
+                                            
                                     except Exception as err:
                                         print(f"Error executing agent stream: {err}")
-                                    finally:
-                                        if os.path.exists(temp_raw_path):
-                                            try:
-                                                os.remove(temp_raw_path)
-                                            except Exception:
-                                                pass
-                                        if not SAVE_STREAM_DEBUG_WAV and temp_wav_16k_path and os.path.exists(temp_wav_16k_path):
-                                            try:
-                                                os.remove(temp_wav_16k_path)
-                                            except Exception:
-                                                pass
 
             elif event == "dtmf":
                 dtmf_obj = msg.get("dtmf") or msg.get("media") or {}
