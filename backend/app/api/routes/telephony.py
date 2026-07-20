@@ -788,32 +788,15 @@ async def handle_websocket_stream(websocket: WebSocket):
         try:
             from app.voice.tts import TextToSpeech
             tts = TextToSpeech()
-            
-            # Generate TTS audio (MP3)
-            audio_path = await tts.generate(sentence, language=session.language if session else "en")
-            full_path = str(tts.output_dir.parent / audio_path)
+            lang = session.language if session else "en"
 
-            # Use ffmpeg to decode MP3 → raw 8kHz mono G.711 mu-law directly
-            ffmpeg_proc = await asyncio.create_subprocess_exec(
-                "ffmpeg", "-y",
-                "-i", full_path,
-                "-ar", "8000",        # resample to 8kHz
-                "-ac", "1",           # mono
-                "-c:a", "pcm_mulaw",  # convert to mu-law directly
-                "-f", "mulaw",        # output raw mu-law bytes
-                "-",                  # output to stdout
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.DEVNULL,
-            )
-            mulaw_bytes, _ = await ffmpeg_proc.communicate()
-                
-            chunk_size = 320  # 40ms of audio at 8000Hz µ-law
-            for offset in range(0, len(mulaw_bytes), chunk_size):
+            # Stream mu-law chunks directly from edge_tts → ffmpeg pipe
+            # No disk I/O: eliminates the MP3 save + ffmpeg read round-trip
+            # that caused extra lag especially for Hindi/regional voices.
+            async for mulaw_chunk in tts.generate_mulaw_stream(sentence, language=lang):
                 if stop_playback_flag.is_set():
                     break
-                chunk = mulaw_bytes[offset:offset+chunk_size]
-                payload = base64.b64encode(chunk).decode("utf-8")
-                
+                payload = base64.b64encode(mulaw_chunk).decode("utf-8")
                 await websocket.send_json({
                     "event": "playAudio",
                     "media": {
@@ -823,7 +806,7 @@ async def handle_websocket_stream(websocket: WebSocket):
                     }
                 })
                 await asyncio.sleep(0.04)
-        except (RuntimeError, WebSocketDisconnect) as conn_err:
+        except (RuntimeError, WebSocketDisconnect):
             # Silence expected websocket disconnect / closure exceptions
             stop_playback_flag.set()
             return
@@ -845,7 +828,7 @@ async def handle_websocket_stream(websocket: WebSocket):
             pass
 
     async def play_system_prompt(prompt_text: str):
-        nonlocal ai_is_speaking, idle_silence_packet_count
+        nonlocal ai_is_speaking, idle_silence_packet_count, playback_task
         ai_is_speaking = True
         try:
             stop_playback_flag.set()
@@ -870,7 +853,7 @@ async def handle_websocket_stream(websocket: WebSocket):
             idle_silence_packet_count = 0
 
     async def terminate_call_with_prompt(prompt_text: str):
-        nonlocal ai_is_speaking
+        nonlocal ai_is_speaking, playback_task
         ai_is_speaking = True
         try:
             stop_playback_flag.set()
