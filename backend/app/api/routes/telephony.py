@@ -1013,7 +1013,6 @@ async def handle_websocket_stream(websocket: WebSocket):
             )
             
             tracker.log_stage("Conversation Memory")
-            from app.ai.schemas.chat import ChatRequest
             chat_req = ChatRequest(
                 message=clean_trans,
                 session_id=session.session_id if session else f"ivr-{call_uuid}"
