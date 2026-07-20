@@ -1020,6 +1020,27 @@ async def handle_websocket_stream(websocket: WebSocket):
             
             sentence_accum = ""
             first_token = True
+
+            # --- Start (or restart) the playback worker BEFORE queuing TTS sentences ---
+            stop_playback_flag.set()
+            if stream_id:
+                try:
+                    await websocket.send_json({"event": "clearAudio", "streamId": stream_id})
+                except Exception:
+                    pass
+            if playback_task and not playback_task.done():
+                playback_task.cancel()
+            # Drain any stale queue items
+            while not tts_queue.empty():
+                try:
+                    tts_queue.get_nowait()
+                    tts_queue.task_done()
+                except asyncio.QueueEmpty:
+                    break
+            stop_playback_flag.clear()
+            playback_task = asyncio.create_task(playback_worker())
+            # -----------------------------------------------------------------
+
             async for token in chat_service.process_stream(
                 request=chat_req,
                 user_id=session.user_id if session else None,
@@ -1039,6 +1060,8 @@ async def handle_websocket_stream(websocket: WebSocket):
                     
             if sentence_accum.strip():
                 await tts_queue.put(sentence_accum.strip())
+
+            tracker.log_stage("Response Generation")
 
             from app.conversation.memory import memory
             mem_session = memory.get(session.session_id) if session else None
@@ -1064,7 +1087,6 @@ async def handle_websocket_stream(websocket: WebSocket):
                 )
                 await tts_queue.put(choose_prompt)
 
-            tracker.log_stage("Response Generation")
             tracker.log_stage("TTS")
             tracker.print_summary()
 
