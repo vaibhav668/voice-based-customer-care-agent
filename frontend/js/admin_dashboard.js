@@ -408,7 +408,6 @@ function renderLiveCallsPanel24h() {
         <div class="live-call-card">
             <div class="live-call-header">
                 <span class="live-customer-name">${escapeHtml(name)}</span>
-                <span class="live-call-status ${badgeClass}">${statusLabel}</span>
             </div>
             <div class="live-call-details">
                 <div><i class="fa-solid fa-phone"></i> ${escapeHtml(phone)}</div>

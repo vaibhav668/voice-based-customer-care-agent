@@ -770,6 +770,7 @@ async def handle_websocket_stream(websocket: WebSocket):
     turn_index = 0
     idle_silence_packet_count = 0
     inactivity_timeouts_count = 0
+    ai_is_speaking = False
     
     tts_queue = asyncio.Queue()
     stop_playback_flag = asyncio.Event()
@@ -843,6 +844,232 @@ async def handle_websocket_stream(websocket: WebSocket):
         except asyncio.CancelledError:
             pass
 
+    async def play_system_prompt(prompt_text: str):
+        nonlocal ai_is_speaking, idle_silence_packet_count
+        ai_is_speaking = True
+        try:
+            stop_playback_flag.set()
+            if stream_id:
+                await websocket.send_json({"event": "clearAudio", "streamId": stream_id})
+            if playback_task and not playback_task.done():
+                playback_task.cancel()
+            while not tts_queue.empty():
+                try:
+                    tts_queue.get_nowait()
+                    tts_queue.task_done()
+                except asyncio.QueueEmpty:
+                    break
+            stop_playback_flag.clear()
+            playback_task = asyncio.create_task(playback_worker())
+            await tts_queue.put(prompt_text)
+            await tts_queue.join()
+        except Exception as e:
+            print(f"Error playing system prompt: {e}")
+        finally:
+            ai_is_speaking = False
+            idle_silence_packet_count = 0
+
+    async def terminate_call_with_prompt(prompt_text: str):
+        nonlocal ai_is_speaking
+        ai_is_speaking = True
+        try:
+            stop_playback_flag.set()
+            if stream_id:
+                await websocket.send_json({"event": "clearAudio", "streamId": stream_id})
+            if playback_task and not playback_task.done():
+                playback_task.cancel()
+            while not tts_queue.empty():
+                try:
+                    tts_queue.get_nowait()
+                    tts_queue.task_done()
+                except asyncio.QueueEmpty:
+                    break
+            stop_playback_flag.clear()
+            playback_task = asyncio.create_task(playback_worker())
+            await tts_queue.put(prompt_text)
+            await tts_queue.join()
+            await asyncio.sleep(1.0)
+            try:
+                await websocket.close()
+            except Exception:
+                pass
+        except Exception as e:
+            print(f"Error terminating call: {e}")
+
+    async def process_voice_turn(audio_data: bytes):
+        nonlocal ai_is_speaking, turn_index, awaiting_feedback, playback_task
+        nonlocal idle_silence_packet_count, inactivity_timeouts_count
+        try:
+            tracker = LatencyTracker("WebSocketVoiceTurn")
+            tracker.log_stage("Incoming Request")
+            
+            wav_bytes = None
+            try:
+                upsample_proc = await asyncio.create_subprocess_exec(
+                    "ffmpeg", "-y",
+                    "-f", "mulaw",
+                    "-ar", "8000",
+                    "-ac", "1",
+                    "-i", "-",
+                    "-ar", "16000",
+                    "-ac", "1",
+                    "-c:a", "pcm_s16le",
+                    "-f", "wav",
+                    "-",
+                    stdin=asyncio.subprocess.PIPE,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.DEVNULL,
+                )
+                wav_bytes, _ = await upsample_proc.communicate(input=audio_data)
+            except Exception as ex:
+                print(f"[WebSocket Stream] FFMPEG conversion error: {ex}")
+                wav_bytes = None
+                
+            if not wav_bytes:
+                ai_is_speaking = False
+                return
+
+            tracker.log_stage("Speech Recognition")
+            from app.voice.stt import SpeechToText
+            stt = SpeechToText()
+            transcription = await stt.transcribe_bytes(wav_bytes, language=session.language if session else "en")
+            print(f"[STT Raw] Transcription result: '{transcription}'")
+            
+            if not transcription or not transcription.strip():
+                ai_is_speaking = False
+                return
+                
+            clean_trans = transcription.strip()
+            broadcast_call_event("new_transcript", session.session_id if session else call_uuid, f"Customer: {clean_trans}", {
+                "sender": "USER",
+                "message": clean_trans,
+            })
+            
+            if awaiting_feedback:
+                num_map = {
+                    "0": 10, "10": 10, "zero": 10, "ten": 10, "shunya": 10, "शून्य": 10, "दस": 10,
+                    "1": 1, "one": 1, "ek": 1, "एक": 1,
+                    "2": 2, "two": 2, "do": 2, "दो": 2,
+                    "3": 3, "three": 3, "teen": 3, "तीन": 3,
+                    "4": 4, "four": 4, "chaar": 4, "चार": 4,
+                    "5": 5, "five": 5, "paanch": 5, "पांच": 5, "पाँच": 5,
+                    "6": 6, "six": 6, "chhah": 6, "छह": 6,
+                    "7": 7, "seven": 7, "saat": 7, "सात": 7,
+                    "8": 8, "eight": 8, "aath": 8, "आठ": 8,
+                    "9": 9, "nine": 9, "nau": 9, "नौ": 9,
+                }
+                rating = None
+                for word in clean_trans.split():
+                    if word in num_map:
+                        rating = num_map[word]
+                        break
+                if rating is None:
+                    rating = 10
+                print(f"[WebSocket Stream Feedback] Verbal rating received: {rating}/10 for Call UUID: {call_uuid}")
+                if session:
+                    session.state = IVRState.FEEDBACK_PENDING
+                    session.advance_state("DTMF", str(rating))
+                    db.commit()
+                
+                stop_playback_flag.set()
+                if stream_id:
+                    await websocket.send_json({"event": "clearAudio", "streamId": stream_id})
+                if playback_task and not playback_task.done():
+                    playback_task.cancel()
+                while not tts_queue.empty():
+                    try:
+                        tts_queue.get_nowait()
+                        tts_queue.task_done()
+                    except asyncio.QueueEmpty:
+                        break
+                stop_playback_flag.clear()
+                playback_task = asyncio.create_task(playback_worker())
+                goodbye_msg = lang_prompts.get("goodbye", "Thank you for calling. Have a great day! Goodbye.")
+                await tts_queue.put(goodbye_msg)
+                await tts_queue.join()
+                await asyncio.sleep(1.0)
+                try:
+                    await websocket.close()
+                except:
+                    pass
+                return
+
+            # Conversational turn
+            from app.repositories.conversation_repository import ConversationRepository
+            conv_repo = ConversationRepository(db)
+            db_conv = conv_repo.get_or_create_session(
+                session_id=session.session_id if session else f"ivr-{call_uuid}",
+                user_id=session.user_id if session else None,
+                channel="VOICE",
+                language=session.language if session else "en"
+            )
+            
+            tracker.log_stage("Conversation Memory")
+            from app.ai.schemas.chat import ChatRequest
+            chat_req = ChatRequest(
+                message=clean_trans,
+                session_id=session.session_id if session else f"ivr-{call_uuid}"
+            )
+            
+            sentence_accum = ""
+            first_token = True
+            async for token in chat_service.process_stream(
+                request=chat_req,
+                user_id=session.user_id if session else None,
+                channel="TELEPHONY",
+                audio_input_path=None,
+                tracker=tracker
+            ):
+                if first_token:
+                    tracker.log_stage("LLM")
+                    first_token = False
+                sentence_accum += token
+                if any(sentence_accum.endswith(p) for p in (".", "?", "!", "\n", "।", "॥")):
+                    sentence = sentence_accum.strip()
+                    if sentence:
+                        await tts_queue.put(sentence)
+                    sentence_accum = ""
+                    
+            if sentence_accum.strip():
+                await tts_queue.put(sentence_accum.strip())
+
+            from app.conversation.memory import memory
+            mem_session = memory.get(session.session_id) if session else None
+            full_resp = mem_session.last_response if mem_session else ""
+            broadcast_call_event("new_transcript", session.session_id if session else call_uuid, f"AI: {full_resp}", {
+                "sender": "AI",
+                "message": full_resp,
+            })
+            
+            if db_conv:
+                db.refresh(db_conv)
+                res_status = db_conv.resolution_status or "unresolved"
+                lang = session.language if session else "en"
+                broadcast_call_event("call_updated", session.session_id if session else call_uuid, f"Call state updated: {res_status}.", {
+                    "resolution_status": res_status,
+                    "language": lang,
+                })
+
+            if session:
+                choose_prompt = lang_prompts.get(
+                    "choose_query",
+                    "If you want to ask another query, press 1. If your query is resolved, press 0."
+                )
+                await tts_queue.put(choose_prompt)
+
+            tracker.log_stage("Response Generation")
+            tracker.log_stage("TTS")
+            tracker.print_summary()
+
+            await tts_queue.join()
+            
+        except Exception as err:
+            print(f"Error in process_voice_turn: {err}")
+        finally:
+            ai_is_speaking = False
+            idle_silence_packet_count = 0
+            inactivity_timeouts_count = 0
+
     try:
         while True:
             data = await websocket.receive_text()
@@ -886,6 +1113,10 @@ async def handle_websocket_stream(websocket: WebSocket):
                     print(f"[WebSocket Stream] WARNING: No session found for call_uuid={call_uuid}. Cannot greet caller.")
                 
             elif event == "media":
+                if ai_is_speaking:
+                    # Strict half-duplex turn-taking: ignore inbound audio while AI is speaking
+                    continue
+                
                 media = msg.get("media", {})
                 payload_b64 = media.get("payload")
                 if not payload_b64:
@@ -916,7 +1147,7 @@ async def handle_websocket_stream(websocket: WebSocket):
                             except asyncio.QueueEmpty:
                                 break
 
-                        # Prepend 500ms pre-roll lead-in audio to preserve initial soft consonants/words
+                        # Prepend pre-roll lead-in audio to preserve initial soft consonants/words
                         caller_audio_buffer.clear()
                         for packet in pre_roll_buffer:
                             caller_audio_buffer.extend(packet)
@@ -945,252 +1176,15 @@ async def handle_websocket_stream(websocket: WebSocket):
                             audio_data = bytes(caller_audio_buffer)
                             caller_audio_buffer.clear()
                             
-                            if len(audio_data) >= 8000:  # At least 1.0s total audio (with pre-roll)
-                                tracker = LatencyTracker("WebSocketVoiceTurn")
-                                tracker.log_stage("Incoming Request")
-                                
-                                wav_bytes = None
-                                try:
-                                    # FFMPEG decodes 8kHz µ-law directly from stdin and resamples to crisp 16kHz 16-bit PCM WAV (pcm_s16le) to stdout
-                                    upsample_proc = await asyncio.create_subprocess_exec(
-                                        "ffmpeg", "-y",
-                                        "-f", "mulaw",
-                                        "-ar", "8000",
-                                        "-ac", "1",
-                                        "-i", "-",               # read from stdin
-                                        "-ar", "16000",
-                                        "-ac", "1",
-                                        "-c:a", "pcm_s16le",
-                                        "-f", "wav",             # output format wav
-                                        "-",                     # output to stdout
-                                        stdin=asyncio.subprocess.PIPE,
-                                        stdout=asyncio.subprocess.PIPE,
-                                        stderr=asyncio.subprocess.DEVNULL,
-                                    )
-                                    wav_bytes, _ = await upsample_proc.communicate(input=audio_data)
-                                except Exception as ex:
-                                    print(f"[WebSocket Stream] FFMPEG conversion error: {ex}")
-                                
-                                if wav_bytes:
-                                    # Handle debug saving in background
-                                    if SAVE_STREAM_DEBUG_WAV:
-                                        debug_filename = f"stream_{call_uuid or 'test'}_turn{turn_index}_{int(time.time())}.wav"
-                                        debug_path = str(DEBUG_AUDIO_DIR / debug_filename)
-                                        def _save_file(path, data):
-                                            try:
-                                                with open(path, "wb") as f:
-                                                    f.write(data)
-                                            except:
-                                                pass
-                                        asyncio.create_task(asyncio.to_thread(_save_file, debug_path, wav_bytes))
-
-                                    try:
-                                        from app.voice.stt import SpeechToText
-                                        stt = SpeechToText()
-                                        lang_code = session.language if session else "en"
-                                        print(f"[WebSocket Stream VAD Debug] Sending {duration_sec}s audio to STT (language={lang_code})...")
-                                        
-                                        transcription = await asyncio.to_thread(stt.transcribe_bytes, wav_bytes, language=lang_code)
-                                        tracker.log_stage("Speech Recognition")
-                                        
-                                        print(f"[WebSocket Stream] Transcribed user query: {transcription}")
-                                        
-                                        if transcription.strip():
-                                            lang_code = session.language if session else "en"
-                                            from app.voice.ivr import PROMPTS
-                                            lang_prompts = PROMPTS.get(lang_code, PROMPTS["en"])
-                                            clean_trans = transcription.strip().lower().translate(str.maketrans("", "", ".,!?।॥"))
-
-                                            # Handle verbal feedback rating if currently awaiting feedback
-                                            if awaiting_feedback:
-                                                num_map = {
-                                                    "0": 10, "10": 10, "zero": 10, "ten": 10, "shunya": 10, "शून्य": 10, "दस": 10,
-                                                    "1": 1, "one": 1, "ek": 1, "एक": 1,
-                                                    "2": 2, "two": 2, "do": 2, "दो": 2,
-                                                    "3": 3, "three": 3, "teen": 3, "तीन": 3,
-                                                    "4": 4, "four": 4, "chaar": 4, "चार": 4,
-                                                    "5": 5, "five": 5, "paanch": 5, "पांच": 5, "पाँच": 5,
-                                                    "6": 6, "six": 6, "chhah": 6, "छह": 6,
-                                                    "7": 7, "seven": 7, "saat": 7, "सात": 7,
-                                                    "8": 8, "eight": 8, "aath": 8, "आठ": 8,
-                                                    "9": 9, "nine": 9, "nau": 9, "नौ": 9,
-                                                }
-                                                rating = None
-                                                for word in clean_trans.split():
-                                                    if word in num_map:
-                                                        rating = num_map[word]
-                                                        break
-                                                if rating is None:
-                                                    rating = 10  # default rating fallback
-
-                                                print(f"[WebSocket Stream Feedback] Verbal rating received: {rating}/10 for Call UUID: {call_uuid}")
-                                                if session:
-                                                    from app.voice.ivr import IVRState
-                                                    session.state = IVRState.FEEDBACK_PENDING
-                                                    session.advance_state("DTMF", str(rating))
-                                                    db.commit()
-
-                                                stop_playback_flag.set()
-                                                if stream_id:
-                                                    await websocket.send_json({"event": "clearAudio", "streamId": stream_id})
-                                                if playback_task and not playback_task.done():
-                                                    playback_task.cancel()
-                                                while not tts_queue.empty():
-                                                    try:
-                                                        tts_queue.get_nowait()
-                                                        tts_queue.task_done()
-                                                    except asyncio.QueueEmpty:
-                                                        break
-                                                stop_playback_flag.clear()
-                                                playback_task = asyncio.create_task(playback_worker())
-                                                goodbye_msg = lang_prompts.get("goodbye", "Thank you for calling. Have a great day! Goodbye.")
-                                                await tts_queue.put(goodbye_msg)
-                                                await asyncio.sleep(4.0)
-                                                try:
-                                                    await websocket.close()
-                                                except Exception:
-                                                    pass
-                                                break
-
-                                            if clean_trans in {"0", "zero", "shunya", "शून्य", "no", "thanks", "thank you", "धन्यवाद", "resolved", "हल हो गया"}:
-                                                print(f"[WebSocket Stream] Verbal 0 (Query Resolved). Prompting for 1-10 feedback rating...")
-                                                awaiting_feedback = True
-                                                stop_playback_flag.set()
-                                                if stream_id:
-                                                    await websocket.send_json({"event": "clearAudio", "streamId": stream_id})
-                                                if playback_task and not playback_task.done():
-                                                    playback_task.cancel()
-                                                while not tts_queue.empty():
-                                                    try:
-                                                        tts_queue.get_nowait()
-                                                        tts_queue.task_done()
-                                                    except asyncio.QueueEmpty:
-                                                        break
-                                                stop_playback_flag.clear()
-                                                playback_task = asyncio.create_task(playback_worker())
-                                                feedback_msg = lang_prompts.get(
-                                                    "feedback",
-                                                    "Thank you. Please rate your support experience from 1 to 10 using your telephone keypad, where 0 represents a rating of 10."
-                                                )
-                                                await tts_queue.put(feedback_msg)
-                                                continue
-
-                                            elif clean_trans in {"1", "one", "ek", "एक", "next", "another", "अगला", "दूसरा"}:
-                                                print(f"[WebSocket Stream] Verbal 1 detected ({clean_trans}). Clearing audio, prompting for next query...")
-                                                awaiting_feedback = False
-                                                stop_playback_flag.set()
-                                                if stream_id:
-                                                    await websocket.send_json({"event": "clearAudio", "streamId": stream_id})
-                                                if playback_task and not playback_task.done():
-                                                    playback_task.cancel()
-                                                while not tts_queue.empty():
-                                                    try:
-                                                        tts_queue.get_nowait()
-                                                        tts_queue.task_done()
-                                                    except asyncio.QueueEmpty:
-                                                        break
-                                                caller_audio_buffer.clear()
-                                                pre_roll_buffer.clear()
-                                                is_speaking = False
-                                                silence_counter = 0
-                                                speech_packet_count = 0
-
-                                                stop_playback_flag.clear()
-                                                playback_task = asyncio.create_task(playback_worker())
-                                                speak_msg = lang_prompts.get("speak_query", "Please speak your query now.")
-                                                await tts_queue.put(speak_msg)
-                                                continue
-
-                                            if playback_task and not playback_task.done():
-                                                playback_task.cancel()
-                                            stop_playback_flag.clear()
-                                            playback_task = asyncio.create_task(playback_worker())
-                                            
-                                            chat_req = ChatRequest(
-                                                message=transcription,
-                                                session_id=session.session_id if session else None,
-                                                language=session.language if session else "en"
-                                            )
-
-                                            # Broadcast user transcript to admin dashboard
-                                            from app.voice.ivr import broadcast_call_event
-                                            broadcast_call_event("new_transcript", session.session_id if session else call_uuid, f"Customer: {transcription}", {
-                                                "sender": "USER",
-                                                "message": transcription,
-                                            })
-                                            
-                                            # Retrieve DB Conversation representation
-                                            from app.repositories.conversation_repository import ConversationRepository
-                                            conv_repo = ConversationRepository(db)
-                                            db_conv = conv_repo.get_or_create_session(
-                                                session_id=session.session_id if session else call_uuid,
-                                                user_id=session.user_id if session else None,
-                                                channel="TELEPHONY",
-                                                language=session.language if session else "en",
-                                            )
-                                            
-                                            # Run agent stream with timing metrics
-                                            sentence_accum = ""
-                                            first_token = True
-                                            async for token in chat_service.process_stream(
-                                                request=chat_req,
-                                                user_id=session.user_id if session else None,
-                                                channel="TELEPHONY",
-                                                audio_input_path=None,
-                                                tracker=tracker
-                                            ):
-                                                if first_token:
-                                                    tracker.log_stage("LLM")
-                                                    first_token = False
-                                                sentence_accum += token
-                                                if any(sentence_accum.endswith(p) for p in (".", "?", "!", "\n", "।", "॥")):
-                                                    sentence = sentence_accum.strip()
-                                                    if sentence:
-                                                        await tts_queue.put(sentence)
-                                                    sentence_accum = ""
-                                                    
-                                            if sentence_accum.strip():
-                                                await tts_queue.put(sentence_accum.strip())
-                                            
-                                            # Broadcast AI response to admin dashboard
-                                            from app.conversation.memory import memory
-                                            mem_session = memory.get(session.session_id) if session else None
-                                            full_resp = mem_session.last_response if mem_session else ""
-                                            broadcast_call_event("new_transcript", session.session_id if session else call_uuid, f"AI: {full_resp}", {
-                                                "sender": "AI",
-                                                "message": full_resp,
-                                            })
-                                            
-                                            # Refresh resolution status and broadcast sync
-                                            if db_conv:
-                                                db.refresh(db_conv)
-                                                res_status = db_conv.resolution_status or "unresolved"
-                                                lang = session.language if session else "en"
-                                                broadcast_call_event("call_updated", session.session_id if session else call_uuid, f"Call state updated: {res_status}.", {
-                                                    "resolution_status": res_status,
-                                                    "language": lang,
-                                                })
-                                            
-                                            # Append DTMF choice prompt ("Press 1 for next query, 0 if resolved") to finish turn
-                                            if session:
-                                                choose_prompt = lang_prompts.get(
-                                                    "choose_query",
-                                                    "If you want to ask another query, press 1. If your query is resolved, press 0."
-                                                )
-                                                await tts_queue.put(choose_prompt)
-                                                
-                                            tracker.log_stage("Response Generation")
-                                            tracker.log_stage("TTS")
-                                            tracker.print_summary()
-                                            
-                                    except Exception as err:
-                                        print(f"Error executing agent stream: {err}")
+                            if len(audio_data) >= 8000:  # At least 1.0s total audio
+                                ai_is_speaking = True  # strict half-duplex turn ownership
+                                asyncio.create_task(process_voice_turn(audio_data))
                     else:
-                        # Inactivity timeout tracking
+                        # Inactivity timeout tracking (starts only after AI finishes speaking)
                         playback_idle = (playback_task is None or playback_task.done()) and tts_queue.empty()
                         if playback_idle and not awaiting_feedback:
                             idle_silence_packet_count += 1
-                            if idle_silence_packet_count >= 600:  # ~12 seconds of complete silence (600 * 20ms)
+                            if idle_silence_packet_count >= 300:  # ~6 seconds of complete silence (300 * 20ms)
                                 idle_silence_packet_count = 0
                                 lang_code = session.language if session else "en"
                                 from app.voice.ivr import PROMPTS
@@ -1203,24 +1197,11 @@ async def handle_websocket_stream(websocket: WebSocket):
                                         "timeout_reminder",
                                         "We didn't receive any input. Press 1 to continue with another query, or 0 to finish."
                                     )
-                                    stop_playback_flag.clear()
-                                    if playback_task and not playback_task.done():
-                                        playback_task.cancel()
-                                    playback_task = asyncio.create_task(playback_worker())
-                                    await tts_queue.put(timeout_msg)
+                                    asyncio.create_task(play_system_prompt(timeout_msg))
                                 else:
                                     print(f"[WebSocket Stream] Inactivity timeout 2 triggered. Terminating Call UUID: {call_uuid}")
                                     goodbye_msg = lang_prompts.get("goodbye", "Thank you for calling. Have a great day! Goodbye.")
-                                    stop_playback_flag.clear()
-                                    if playback_task and not playback_task.done():
-                                        playback_task.cancel()
-                                    playback_task = asyncio.create_task(playback_worker())
-                                    await tts_queue.put(goodbye_msg)
-                                    await asyncio.sleep(4.0)
-                                    try:
-                                        await websocket.close()
-                                    except Exception:
-                                        pass
+                                    asyncio.create_task(terminate_call_with_prompt(goodbye_msg))
                                     break
 
             elif event == "dtmf":
@@ -1234,7 +1215,7 @@ async def handle_websocket_stream(websocket: WebSocket):
                 print(f"[WebSocket Stream DTMF] Received keypress '{digit}' for Call UUID: {call_uuid}")
                 idle_silence_packet_count = 0
                 inactivity_timeouts_count = 0
-
+                
                 lang_code = session.language if session else "en"
                 from app.voice.ivr import PROMPTS
                 lang_prompts = PROMPTS.get(lang_code, PROMPTS["en"])
@@ -1247,75 +1228,32 @@ async def handle_websocket_stream(websocket: WebSocket):
                         from app.voice.ivr import IVRState
                         session.state = IVRState.FEEDBACK_PENDING
                         session.advance_state("DTMF", digit)
+                        db.commit()
 
-                    stop_playback_flag.set()
-                    if stream_id:
-                        await websocket.send_json({"event": "clearAudio", "streamId": stream_id})
-                    if playback_task and not playback_task.done():
-                        playback_task.cancel()
-                    while not tts_queue.empty():
-                        try:
-                            tts_queue.get_nowait()
-                            tts_queue.task_done()
-                        except asyncio.QueueEmpty:
-                            break
-                    stop_playback_flag.clear()
-                    playback_task = asyncio.create_task(playback_worker())
                     goodbye_msg = lang_prompts.get("goodbye", "Thank you for calling. Have a great day! Goodbye.")
-                    await tts_queue.put(goodbye_msg)
-                    await asyncio.sleep(4.0)
-                    try:
-                        await websocket.close()
-                    except Exception:
-                        pass
+                    asyncio.create_task(terminate_call_with_prompt(goodbye_msg))
                     break
 
                 elif digit == "0":
                     print(f"[WebSocket Stream DTMF] User selected 0 (Query Resolved). Prompting for 1-10 feedback rating...")
                     awaiting_feedback = True
-                    stop_playback_flag.set()
-                    if stream_id:
-                        await websocket.send_json({"event": "clearAudio", "streamId": stream_id})
-                    if playback_task and not playback_task.done():
-                        playback_task.cancel()
-                    while not tts_queue.empty():
-                        try:
-                            tts_queue.get_nowait()
-                            tts_queue.task_done()
-                        except asyncio.QueueEmpty:
-                            break
-                    stop_playback_flag.clear()
-                    playback_task = asyncio.create_task(playback_worker())
                     feedback_msg = lang_prompts.get(
                         "feedback",
                         "Thank you. Please rate your support experience from 1 to 10 using your telephone keypad, where 0 represents a rating of 10."
                     )
-                    await tts_queue.put(feedback_msg)
+                    asyncio.create_task(play_system_prompt(feedback_msg))
 
                 elif digit == "1":
                     print(f"[WebSocket Stream DTMF] User selected 1 (Ask another query). Clearing audio, prompting for next question...")
                     awaiting_feedback = False
-                    stop_playback_flag.set()
-                    if stream_id:
-                        await websocket.send_json({"event": "clearAudio", "streamId": stream_id})
-                    if playback_task and not playback_task.done():
-                        playback_task.cancel()
-                    while not tts_queue.empty():
-                        try:
-                            tts_queue.get_nowait()
-                            tts_queue.task_done()
-                        except asyncio.QueueEmpty:
-                            break
                     caller_audio_buffer.clear()
                     pre_roll_buffer.clear()
                     is_speaking = False
                     silence_counter = 0
                     speech_packet_count = 0
-
-                    stop_playback_flag.clear()
-                    playback_task = asyncio.create_task(playback_worker())
+                    
                     speak_msg = lang_prompts.get("speak_query", "Please speak your query now.")
-                    await tts_queue.put(speak_msg)
+                    asyncio.create_task(play_system_prompt(speak_msg))
 
             elif event == "stop":
                 print(f"[WebSocket Stream] Stop event for Call UUID: {call_uuid}")
