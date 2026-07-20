@@ -51,42 +51,37 @@ class ResponseGenerator:
         - Do not use special characters or symbols (&, *, #, etc.) that a TTS engine cannot pronounce.
         """
 
-    def general_chat(self, message: str, language: str = "en", history: list = None) -> str:
+    def _build_history_str(self, history: list | None, turns: int = 3) -> str:
+        if not history:
+            return ""
+        return "\n".join(
+            f"{'Customer' if msg.get('role') == 'user' else 'Assistant'}: {msg.get('message')}"
+            for msg in history[-turns:]
+        )
+
+    def _build_system_message(self, language: str, context_body: str) -> SystemMessage:
+        """Builds a compact system message with shared language/voice rules."""
         lang_name = self._get_lang_name(language)
         hindi_rule = self._get_hindi_feminine_rule(language)
-        voice_rule = self._get_voice_speech_rule(language)
-
-        history_str = ""
-        if history:
-            history_str = "\n".join(
-                f"{'Customer' if msg.get('role') == 'user' else 'Assistant'}: {msg.get('message')}"
-                for msg in history[-5:]
+        return SystemMessage(
+            content=(
+                f"You are a professional bus company customer support agent.\n"
+                f"Respond ONLY in {lang_name}. Be warm, concise (1-2 spoken sentences max). "
+                f"Never sound robotic. Do not invent information. "
+                f"Do not use bullet points or lists — this will be spoken aloud via TTS.\n"
+                + (hindi_rule.strip() + "\n" if hindi_rule.strip() else "")
+                + context_body
             )
-
-        system = SystemMessage(
-            content=f"""
-You are a warm, highly empathetic, and professional customer support agent for a bus company.
-
-You can:
-- Greet users.
-- Answer casual conversations.
-- Introduce yourself.
-- Answer general knowledge questions.
-- Chat naturally and friendly.
-
-If the user asks about bookings, trips, refunds, cancellations, delays, or complaints, respond naturally like a real agent, tell them you'd love to help, and explain that you'd need their booking code (e.g. BK-1234) to look it up.
-
-CRITICAL REQUIREMENTS:
-1. You MUST respond ONLY in the following language: {lang_name}.
-2. Speak like a professional travel support executive. Avoid repeating greetings or introductory phrases (like "Hello", "How can I help you today?") if the message history indicates the conversation is already in progress.
-3. Be concise, polite, and context-aware. Never sound robotic.
-{hindi_rule}
-{voice_rule}
-
-Recent Conversation History:
-{history_str}
-"""
         )
+
+    def general_chat(self, message: str, language: str = "en", history: list = None) -> str:
+        history_str = self._build_history_str(history)
+        context = (
+            "You can greet users, answer general questions, and chat naturally. "
+            "If the user asks about bookings/refunds/cancellations, explain you need their booking code (e.g. BK-1234).\n"
+            + (f"Recent history:\n{history_str}" if history_str else "")
+        )
+        system = self._build_system_message(language, context)
 
         human = HumanMessage(content=message)
 
@@ -96,6 +91,36 @@ Recent Conversation History:
             return response.content.strip()
 
         return str(response)
+
+    def _build_tool_context(self, tool_name: str, data: dict, user_message: str | None, rag_context: str | None, history_str: str) -> str:
+        """Builds the focused tool-call context body, trimming to essential fields."""
+        tool_lower = (tool_name or "").lower()
+        focus = ""
+        if "refund" in tool_lower:
+            focus = "State ONLY the refund status/timeline. Do NOT mention departure, arrival, seat, route."
+        elif "delay" in tool_lower:
+            focus = "State ONLY whether bus is delayed and updated ETA. Do NOT mention payment or refund."
+        elif "tracking" in tool_lower:
+            focus = "State ONLY the current bus location/tracking status."
+        elif "booking" in tool_lower or "status" in tool_lower:
+            focus = (
+                "Answer ONLY the specific field the user asked about (e.g. arrival time, departure, seat, destination). "
+                "Do NOT recite all fields."
+            )
+
+        rag_note = ""
+        if rag_context:
+            # Trim RAG context to first 500 chars to limit token usage
+            trimmed_rag = rag_context[:500].rstrip() + ("..." if len(rag_context) > 500 else "")
+            rag_note = f"\nPolicy context: {trimmed_rag}"
+
+        return (
+            f"Tool '{tool_name}' returned: {data}\n"
+            f"User asked: {user_message or 'N/A'}{rag_note}\n"
+            + (f"Focus: {focus}\n" if focus else "")
+            + (f"If 'requires_confirmation' is True, ask user to confirm before proceeding.\n")
+            + (f"Recent history:\n{history_str}" if history_str else "")
+        )
 
     def generate(
         self,
@@ -106,184 +131,38 @@ Recent Conversation History:
         rag_context: str | None = None,
         history: list = None,
     ) -> str:
-        lang_name = self._get_lang_name(language)
-        hindi_rule = self._get_hindi_feminine_rule(language)
-        voice_rule = self._get_voice_speech_rule(language)
-
-        history_str = ""
-        if history:
-            history_str = "\n".join(
-                f"{'Customer' if msg.get('role') == 'user' else 'Assistant'}: {msg.get('message')}"
-                for msg in history[-5:]
-            )
-
-        rag_instruction = ""
-        if rag_context:
-            rag_instruction = f"""
-            You also have the following official company policy and FAQ context from our knowledge base:
-            {rag_context}
-            
-            Synthesize the status data from the tool with these official company policies. For example, if a cancellation or reschedule is processed or requested, inform them of the refund timelines or rescheduled charges described in the policy.
-            """
-
-        tool_lower = (tool_name or "").lower()
-        intent_focus_directive = ""
-        if "refund" in tool_lower:
-            intent_focus_directive = """
-            CRITICAL INTENT RULE (REFUND):
-            The user is asking ONLY about their REFUND. You MUST state ONLY the refund status or refund timeline (e.g. refund_message).
-            STRICTLY DO NOT mention booking code, departure time, arrival time, seat number, source, destination, or bus name unless specifically asked by the user!
-            """
-        elif "delay" in tool_lower:
-            intent_focus_directive = """
-            CRITICAL INTENT RULE (DELAY):
-            The user is asking ONLY about BUS DELAY. State ONLY whether the bus is delayed, by how many minutes, and the updated ETA.
-            STRICTLY DO NOT mention payment status, refund status, or seat number.
-            """
-        elif "tracking" in tool_lower:
-            intent_focus_directive = """
-            CRITICAL INTENT RULE (TRACKING):
-            The user is asking ONLY about LIVE BUS TRACKING. State ONLY the current bus location or tracking status.
-            STRICTLY DO NOT mention payment status, refund status, or seat number.
-            """
-        elif "booking" in tool_lower or "status" in tool_lower:
-            intent_focus_directive = """
-            CRITICAL INTENT RULE (SPECIFIC QUERY FOCUS):
-            - If the user asks about arrival time / arrival / आगमन / पहुंचने का समय (including phonetic STT variations like 'अराइवर्डा', 'विल्टेम', 'अराइवल'), state ONLY their expected arrival time (e.g. arrival_time / arrival / arrival_date).
-            - If the user asks about departure time / प्रस्थान समय, state ONLY their departure time (e.g. departure_time / departure).
-            - If the user asks about destination / मंजिल / गंतव्य (including phonetic STT variations like 'विप्तिनीशन' or 'रशने'), state ONLY their destination city (e.g. destination / destination_city).
-            - If the user asks about seat number, state ONLY the seat number.
-            - Answer ONLY the specific property requested by the user in 1-2 friendly spoken sentences. DO NOT recite every single field in the JSON tool output.
-            """
-
-        system = SystemMessage(
-            content=f"""
-You are a warm, highly empathetic, and professional customer support agent for a bus company.
-
-The following information came from the '{tool_name}' tool:
-{data}
-{rag_instruction}
-
-User's Input / Request: {user_message or 'Answer user query based on data.'}
-
-{intent_focus_directive}
-
-INSTRUCTIONS:
-1. FOCUS: Answer ONLY what the user specifically asked. The tool data may contain many fields (booking code, seat, departure, arrival, refund, delay, status, etc.) — do NOT recite all of them. Mention only the field(s) directly relevant to the user's specific question. Treat all other fields as background context only.
-2. If the tool is 'refund_status' or the query is about refund, speak ONLY about the refund status and refund timeline. DO NOT mention departure time, arrival time, seat number, or route details.
-   - Example style for refund: "I've initiated your refund. It should be processed shortly. Let me know if you'd like me to check its status later." (Avoid robotic "Refund initiated.")
-3. If the tool is 'booking_cancel' or the query is about cancellation, confirm the cancellation in a warm, polite, and helpful customer executive tone:
-   - Example style for cancellation: "I've successfully cancelled your booking. Is there anything else I can help you with today?" (Avoid robotic "Your booking has been cancelled.")
-4. If the tool is 'bus_delay' or the query is about delay, speak ONLY about delay minutes and updated ETA. DO NOT mention payment or refund status.
-5. If the tool is 'bus_tracking' or the query is about tracking, speak ONLY about current location and live tracking link/status. DO NOT mention payment or refund details.
-6. If the data explicitly says 'requires_confirmation' is True, you MUST ask the user if they want to proceed (e.g. "Would you like me to proceed with the cancellation? Reply YES to confirm."). Do not say the action was already completed.
-7. If the data indicates that no booking was found (or an error occurred), explain politely that no booking was found or they are not authorized to view it.
-8. Do NOT say a new booking was created unless the data explicitly says a new booking was created.
-9. Do NOT invent refund status, payment status, delay ETA, tracking info, or bus status. Use ONLY what is provided in the data. Never fabricate details.
-10. Speak like a seasoned travel support executive. Avoid repeating greetings or introductory phrases (like "Hello", "How can I help you today?") if the message history indicates the conversation is already in progress.
-11. Keep your response concise — 1 to 2 sentences maximum. Never sound robotic. Never read out a list of facts or key-value pairs.
-
-CRITICAL REQUIREMENTS:
-1. You MUST generate your response ONLY in the following language: {lang_name}.
-2. Do not invent information. Only use the supplied data.
-{hindi_rule}
-{voice_rule}
-
-Recent Conversation History:
-{history_str}
-"""
-        )
-
-        human = HumanMessage(content=f"User request: {user_message or ''}\nTool Data: {data}")
-
+        history_str = self._build_history_str(history)
+        context = self._build_tool_context(tool_name, data, user_message, rag_context, history_str)
+        system = self._build_system_message(language, context)
+        human = HumanMessage(content=f"User: {user_message or ''}")
         response = self.llm.invoke([system, human])
-
         if hasattr(response, "content"):
             return response.content.strip()
-
         return str(response)
 
     def request_booking_code(self, language: str = "en", user_message: str | None = None, history: list = None) -> str:
-        lang_name = self._get_lang_name(language)
-        hindi_rule = self._get_hindi_feminine_rule(language)
-        voice_rule = self._get_voice_speech_rule(language)
-
-        history_str = ""
-        if history:
-            history_str = "\n".join(
-                f"{'Customer' if msg.get('role') == 'user' else 'Assistant'}: {msg.get('message')}"
-                for msg in history[-5:]
-            )
-
-        system = SystemMessage(
-            content=f"""
-You are a warm, friendly, and natural customer support agent for a bus company.
-
-The user has messaged you: "{user_message or 'Hello'}"
-
-Your task is to politely, warmly, and conversationally acknowledge their specific query or situation, and explain that you need their booking reference code (e.g. BK-1234) to look up the details and assist them.
-Do not sound like a machine. Acknowledge what they are asking about (e.g. tracking their bus, reschedule, cancellation, etc.) naturally and then ask for the code.
-
-CRITICAL REQUIREMENTS:
-1. You MUST generate your response ONLY in the following language: {lang_name}.
-2. Speak like a professional travel support executive. Avoid repeating greetings or introductory phrases (like "Hello", "How can I help you today?") if the message history indicates the conversation is already in progress.
-3. Be concise, polite, and context-aware. Never sound robotic.
-{hindi_rule}
-{voice_rule}
-
-Recent Conversation History:
-{history_str}
-"""
+        history_str = self._build_history_str(history)
+        context = (
+            f"The user said: \"{user_message or 'Hello'}\"\n"
+            "Politely acknowledge their query and ask for their booking reference code (e.g. BK-1234) to look up details.\n"
+            + (f"Recent history:\n{history_str}" if history_str else "")
         )
-
-        human = HumanMessage(content=f"User request: {user_message or 'Help me'}")
-
+        system = self._build_system_message(language, context)
+        human = HumanMessage(content=f"User: {user_message or 'Help me'}")
         response = self.llm.invoke([system, human])
-
         if hasattr(response, "content"):
             return response.content.strip()
-
         return str(response)
 
     def general_chat_stream(self, message: str, language: str = "en", history: list = None):
-        lang_name = self._get_lang_name(language)
-        hindi_rule = self._get_hindi_feminine_rule(language)
-        voice_rule = self._get_voice_speech_rule(language)
-
-        history_str = ""
-        if history:
-            history_str = "\n".join(
-                f"{'Customer' if msg.get('role') == 'user' else 'Assistant'}: {msg.get('message')}"
-                for msg in history[-5:]
-            )
-
-        system = SystemMessage(
-            content=f"""
-You are a warm, highly empathetic, and professional customer support agent for a bus company.
-
-You can:
-- Greet users.
-- Answer casual conversations.
-- Introduce yourself.
-- Answer general knowledge questions.
-- Chat naturally and friendly.
-
-If the user asks about bookings, trips, refunds, cancellations, delays, or complaints, respond naturally like a real agent, tell them you'd love to help, and explain that you'd need their booking code (e.g. BK-1234) to look it up.
-
-CRITICAL REQUIREMENTS:
-1. You MUST respond ONLY in the following language: {lang_name}.
-2. Speak like a professional travel support executive. Avoid repeating greetings or introductory phrases (like "Hello", "How can I help you today?") if the message history indicates the conversation is already in progress.
-3. Be concise, polite, and context-aware. Never sound robotic.
-{hindi_rule}
-{voice_rule}
-
-Recent Conversation History:
-{history_str}
-"""
+        history_str = self._build_history_str(history)
+        context = (
+            "You can greet users, answer general questions, and chat naturally. "
+            "If the user asks about bookings/refunds/cancellations, explain you need their booking code (e.g. BK-1234).\n"
+            + (f"Recent history:\n{history_str}" if history_str else "")
         )
-
+        system = self._build_system_message(language, context)
         human = HumanMessage(content=message)
-
         for chunk in self.llm.stream([system, human]):
             yield chunk
 
@@ -296,133 +175,21 @@ Recent Conversation History:
         rag_context: str | None = None,
         history: list = None,
     ):
-        lang_name = self._get_lang_name(language)
-        hindi_rule = self._get_hindi_feminine_rule(language)
-        voice_rule = self._get_voice_speech_rule(language)
-
-        history_str = ""
-        if history:
-            history_str = "\n".join(
-                f"{'Customer' if msg.get('role') == 'user' else 'Assistant'}: {msg.get('message')}"
-                for msg in history[-5:]
-            )
-
-        rag_instruction = ""
-        if rag_context:
-            rag_instruction = f"""
-            You also have the following official company policy and FAQ context from our knowledge base:
-            {rag_context}
-            
-            Synthesize the status data from the tool with these official company policies. For example, if a cancellation or reschedule is processed or requested, inform them of the refund timelines or rescheduled charges described in the policy.
-            """
-
-        tool_lower = (tool_name or "").lower()
-        intent_focus_directive = ""
-        if "refund" in tool_lower:
-            intent_focus_directive = """
-            CRITICAL INTENT RULE (REFUND):
-            The user is asking ONLY about their REFUND. You MUST state ONLY the refund status or refund timeline (e.g. refund_message).
-            STRICTLY DO NOT mention booking code, departure time, arrival time, seat number, source, destination, or bus name unless specifically asked by the user!
-            """
-        elif "delay" in tool_lower:
-            intent_focus_directive = """
-            CRITICAL INTENT RULE (DELAY):
-            The user is asking ONLY about BUS DELAY. State ONLY whether the bus is delayed, by how many minutes, and the updated ETA.
-            STRICTLY DO NOT mention payment status, refund status, or seat number.
-            """
-        elif "tracking" in tool_lower:
-            intent_focus_directive = """
-            CRITICAL INTENT RULE (TRACKING):
-            The user is asking ONLY about LIVE BUS TRACKING. State ONLY the current bus location or tracking status.
-            STRICTLY DO NOT mention payment status, refund status, or seat number.
-            """
-        elif "booking" in tool_lower or "status" in tool_lower:
-            intent_focus_directive = """
-            CRITICAL INTENT RULE (SPECIFIC QUERY FOCUS):
-            - If the user asks about arrival time / arrival / आगमन / पहुंचने का समय (including phonetic STT variations like 'अराइवर्डा', 'विल्टेम', 'अराइवल'), state ONLY their expected arrival time (e.g. arrival_time / arrival / arrival_date).
-            - If the user asks about departure time / प्रस्थान समय, state ONLY their departure time (e.g. departure_time / departure).
-            - If the user asks about destination / मंजिल / गंतव्य (including phonetic STT variations like 'विप्तिनीशन' or 'रशने'), state ONLY their destination city (e.g. destination / destination_city).
-            - If the user asks about seat number, state ONLY the seat number.
-            - Answer ONLY the specific property requested by the user in 1-2 friendly spoken sentences. DO NOT recite every single field in the JSON tool output.
-            """
-
-        system = SystemMessage(
-            content=f"""
-You are a warm, highly empathetic, and professional customer support agent for a bus company.
-
-The following information came from the '{tool_name}' tool:
-{data}
-{rag_instruction}
-
-User's Input / Request: {user_message or 'Answer user query based on data.'}
-
-{intent_focus_directive}
-
-INSTRUCTIONS:
-1. FOCUS: Answer ONLY what the user specifically asked. The tool data may contain many fields (booking code, seat, departure, arrival, refund, delay, status, etc.) — do NOT recite all of them. Mention only the field(s) directly relevant to the user's specific question. Treat all other fields as background context only.
-2. If the tool is 'refund_status' or the query is about refund, speak ONLY about the refund status and refund timeline. DO NOT mention departure time, arrival time, seat number, or route details.
-   - Example style for refund: "I've initiated your refund. It should be processed shortly. Let me know if you'd like me to check its status later." (Avoid robotic "Refund initiated.")
-3. If the tool is 'booking_cancel' or the query is about cancellation, confirm the cancellation in a warm, polite, and helpful customer executive tone:
-   - Example style for cancellation: "I've successfully cancelled your booking. Is there anything else I can help you with today?" (Avoid robotic "Your booking has been cancelled.")
-4. If the tool is 'bus_delay' or the query is about delay, speak ONLY about delay minutes and updated ETA. DO NOT mention payment or refund status.
-5. If the tool is 'bus_tracking' or the query is about tracking, speak ONLY about current location and live tracking link/status. DO NOT mention payment or refund details.
-6. If the data explicitly says 'requires_confirmation' is True, you MUST ask the user if they want to proceed (e.g. "Would you like me to proceed with the cancellation? Reply YES to confirm."). Do not say the action was already completed.
-7. If the data indicates that no booking was found (or an error occurred), explain politely that no booking was found or they are not authorized to view it.
-8. Do NOT say a new booking was created unless the data explicitly says a new booking was created.
-9. Do NOT invent refund status, payment status, delay ETA, tracking info, or bus status. Use ONLY what is provided in the data. Never fabricate details.
-10. Speak like a seasoned travel support executive. Avoid repeating greetings or introductory phrases (like "Hello", "How can I help you today?") if the message history indicates the conversation is already in progress.
-11. Keep your response concise — 1 to 2 sentences maximum. Never sound robotic. Never read out a list of facts or key-value pairs.
-
-CRITICAL REQUIREMENTS:
-1. You MUST generate your response ONLY in the following language: {lang_name}.
-2. Do not invent information. Only use the supplied data.
-{hindi_rule}
-{voice_rule}
-
-Recent Conversation History:
-{history_str}
-"""
-        )
-
-        human = HumanMessage(content=f"User request: {user_message or ''}\nTool Data: {data}")
-
+        history_str = self._build_history_str(history)
+        context = self._build_tool_context(tool_name, data, user_message, rag_context, history_str)
+        system = self._build_system_message(language, context)
+        human = HumanMessage(content=f"User: {user_message or ''}")
         for chunk in self.llm.stream([system, human]):
             yield chunk
 
     def request_booking_code_stream(self, language: str = "en", user_message: str | None = None, history: list = None):
-        lang_name = self._get_lang_name(language)
-        hindi_rule = self._get_hindi_feminine_rule(language)
-        voice_rule = self._get_voice_speech_rule(language)
-
-        history_str = ""
-        if history:
-            history_str = "\n".join(
-                f"{'Customer' if msg.get('role') == 'user' else 'Assistant'}: {msg.get('message')}"
-                for msg in history[-5:]
-            )
-
-        system = SystemMessage(
-            content=f"""
-You are a warm, friendly, and natural customer support agent for a bus company.
-
-The user has messaged you: "{user_message or 'Hello'}"
-
-Your task is to politely, warmly, and conversationally acknowledge their specific query or situation, and explain that you need their booking reference code (e.g. BK-1234) to look up the details and assist them.
-Do not sound like a machine. Acknowledge what they are asking about (e.g. tracking their bus, reschedule, cancellation, etc.) naturally and then ask for the code.
-
-CRITICAL REQUIREMENTS:
-1. You MUST generate your response ONLY in the following language: {lang_name}.
-2. Speak like a professional travel support executive. Avoid repeating greetings or introductory phrases (like "Hello", "How can I help you today?") if the message history indicates the conversation is already in progress.
-3. Be concise, polite, and context-aware. Never sound robotic.
-{hindi_rule}
-{voice_rule}
-
-Recent Conversation History:
-{history_str}
-"""
+        history_str = self._build_history_str(history)
+        context = (
+            f"The user said: \"{user_message or 'Hello'}\"\n"
+            "Politely acknowledge their query and ask for their booking reference code (e.g. BK-1234) to look up details.\n"
+            + (f"Recent history:\n{history_str}" if history_str else "")
         )
-
-        human = HumanMessage(content=f"User request: {user_message or 'Help me'}")
-
+        system = self._build_system_message(language, context)
+        human = HumanMessage(content=f"User: {user_message or 'Help me'}")
         for chunk in self.llm.stream([system, human]):
             yield chunk
