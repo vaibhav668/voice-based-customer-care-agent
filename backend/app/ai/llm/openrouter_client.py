@@ -38,6 +38,7 @@ class OpenRouterLLM(BaseLLM):
             model=self.model,
             messages=openai_messages,
             temperature=0,
+            max_tokens=1024,
             extra_headers={
                 "HTTP-Referer": "https://github.com/vaibhav668/voice-based-customer-care-agent",
                 "X-Title": "SupportAI Platform",
@@ -55,6 +56,7 @@ class OpenRouterLLM(BaseLLM):
             messages=openai_messages,
             temperature=0,
             stream=True,
+            max_tokens=1024,
             extra_headers={
                 "HTTP-Referer": "https://github.com/vaibhav668/voice-based-customer-care-agent",
                 "X-Title": "SupportAI Platform",

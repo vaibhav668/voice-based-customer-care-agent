@@ -18,6 +18,7 @@ class GroqLLM(BaseLLM):
             model=model,
             temperature=0,
             max_retries=0,
+            max_tokens=1024,
         )
 
     def invoke(
