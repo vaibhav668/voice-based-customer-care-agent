@@ -261,7 +261,7 @@ class IVRCallSession:
         self.last_response = ""
         self.history = []
         self.entities = {}
-
+ 
     def _save_to_db(self):
         """Persists the session details back to PostgreSQL/SQLite."""
         row = self.db.query(IvrSession).filter_by(call_id=self.call_id).first()
