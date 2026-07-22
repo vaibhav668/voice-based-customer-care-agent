@@ -105,6 +105,86 @@ def auto_seed_database():
         user = users_dict.get("vaibhav@gmail.com") or db.query(User).filter(User.role == UserRole.CUSTOMER).first()
         other_user = users_dict.get("other@example.com") or user
 
+        # Ensure Yaseen user (6300076108) and booking BK-630007 (Delhi -> Goa) exist
+        yaseen = db.query(User).filter((User.phone == "6300076108") | (User.email == "yaseen@example.com")).first()
+        if not yaseen:
+            yaseen = User(
+                id=uuid.uuid4(),
+                full_name="Yaseen",
+                email="yaseen@example.com",
+                phone="6300076108",
+                password_hash=hash_password("yaseen123"),
+                role=UserRole.CUSTOMER,
+                is_active=True,
+                is_verified=True,
+                preferred_language="en",
+            )
+            db.add(yaseen)
+            db.commit()
+            db.refresh(yaseen)
+
+        bk_yaseen = db.query(Booking).filter(Booking.booking_code == "BK-630007").first()
+        if not bk_yaseen:
+            route_goa = db.query(Route).filter_by(source_city="Delhi", destination_city="Goa").first()
+            if not route_goa:
+                route_goa = Route(
+                    id=uuid.uuid4(),
+                    source_city="Delhi",
+                    destination_city="Goa",
+                    distance_km=1875,
+                    estimated_duration_minutes=1500,
+                )
+                db.add(route_goa)
+                db.commit()
+                db.refresh(route_goa)
+
+            bus_goa = db.query(Bus).filter_by(bus_number="DL01GOA").first()
+            if not bus_goa:
+                bus_goa = Bus(
+                    id=uuid.uuid4(),
+                    bus_number="DL01GOA",
+                    bus_name="Volvo AC Multi-Axle Sleeper (Delhi to Goa)",
+                    registration_number="DL01GA6300",
+                    bus_type=BusType.AC_SLEEPER,
+                    capacity=36,
+                )
+                db.add(bus_goa)
+                db.commit()
+                db.refresh(bus_goa)
+
+            now_time = datetime.now()
+            dep_goa = now_time.replace(hour=17, minute=0, second=0, microsecond=0) + timedelta(days=2)
+            arr_goa = dep_goa + timedelta(hours=25)
+            trip_goa = Trip(
+                id=uuid.uuid4(),
+                route_id=route_goa.id,
+                bus_id=bus_goa.id,
+                departure_time=dep_goa,
+                arrival_time=arr_goa,
+                status=TripStatus.SCHEDULED,
+                delay_minutes=0,
+                available_seats=35,
+            )
+            db.add(trip_goa)
+            db.commit()
+            db.refresh(trip_goa)
+
+            bk_yaseen = Booking(
+                booking_code="BK-630007",
+                user_id=yaseen.id,
+                trip_id=trip_goa.id,
+                seat_number="A01",
+                booking_status=BookingStatus.CONFIRMED,
+                payment_status=PaymentStatus.PAID,
+            )
+            db.add(bk_yaseen)
+            db.commit()
+            logger.info("Seeded Yaseen booking BK-630007 (Delhi -> Goa)")
+        elif bk_yaseen.user_id != yaseen.id:
+            bk_yaseen.user_id = yaseen.id
+            db.commit()
+            logger.info(f"Re-assigned BK-630007 to Yaseen user_id {yaseen.id}")
+
         # Check if already seeded to avoid duplicates — note: role sync above already ran
         existing = db.query(Booking).filter(Booking.booking_code == "BK-1234").first()
         if existing:
