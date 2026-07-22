@@ -24,7 +24,7 @@ router = APIRouter(
 )
 
 adapter = PlivoAdapter()
-BOOKING_REF_DIGITS = 4
+BOOKING_REF_DIGITS = 6
 
 
 def get_public_audio_url(audio_path: str) -> str:
