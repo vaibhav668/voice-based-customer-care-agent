@@ -188,6 +188,90 @@ def auto_seed_database():
             db.commit()
             logger.info(f"Re-assigned BK-630007 to Yaseen user_id {yaseen.id}")
 
+        # Ensure Kasiraju (7659917669), Pramod (8108557667), and Shiva (9059123144) target bookings ALWAYS exist on DB
+        target_seed_bookings = [
+            {"code": "BK-765991", "phone": "7659917669", "email": "kasiraju@example.com", "name": "Kasiraju", "route": ("Delhi", "Jaipur"), "seat": "A15"},
+            {"code": "BK-810855", "phone": "8108557667", "email": "pramod@example.com", "name": "Pramod", "route": ("Mumbai", "Pune"), "seat": "B12"},
+            {"code": "BK-905912", "phone": "9059123144", "email": "shiva@example.com", "name": "Shiva", "route": ("Bengaluru", "Chennai"), "seat": "C08"},
+        ]
+        now_time = datetime.now()
+        for tsb in target_seed_bookings:
+            u_obj = db.query(User).filter((User.phone == tsb["phone"]) | (User.email == tsb["email"])).first()
+            if not u_obj:
+                u_obj = User(
+                    id=uuid.uuid4(),
+                    full_name=tsb["name"],
+                    email=tsb["email"],
+                    phone=tsb["phone"],
+                    password_hash=hash_password("password123"),
+                    role=UserRole.CUSTOMER,
+                    is_active=True,
+                    is_verified=True,
+                    preferred_language="en",
+                )
+                db.add(u_obj)
+                db.commit()
+                db.refresh(u_obj)
+
+            bk_target = db.query(Booking).filter(Booking.booking_code == tsb["code"]).first()
+            if not bk_target:
+                r_obj = db.query(Route).filter_by(source_city=tsb["route"][0], destination_city=tsb["route"][1]).first()
+                if not r_obj:
+                    r_obj = Route(
+                        id=uuid.uuid4(),
+                        source_city=tsb["route"][0],
+                        destination_city=tsb["route"][1],
+                        distance_km=300,
+                        estimated_duration_minutes=360,
+                    )
+                    db.add(r_obj)
+                    db.commit()
+                    db.refresh(r_obj)
+
+                t_obj = db.query(Trip).filter_by(route_id=r_obj.id).first()
+                if not t_obj:
+                    b_obj = db.query(Bus).first()
+                    if not b_obj:
+                        b_obj = Bus(
+                            id=uuid.uuid4(),
+                            bus_number="DEMO0BUS",
+                            bus_name="Volvo Multi Axle AC Sleeper",
+                            registration_number="DEMOREG0",
+                            bus_type=BusType.AC_SLEEPER,
+                            capacity=36,
+                        )
+                        db.add(b_obj)
+                        db.commit()
+                        db.refresh(b_obj)
+                    t_obj = Trip(
+                        id=uuid.uuid4(),
+                        route_id=r_obj.id,
+                        bus_id=b_obj.id,
+                        departure_time=now_time + timedelta(days=1),
+                        arrival_time=now_time + timedelta(days=1, hours=5),
+                        status=TripStatus.ON_TIME,
+                        delay_minutes=0,
+                        available_seats=35,
+                    )
+                    db.add(t_obj)
+                    db.commit()
+                    db.refresh(t_obj)
+
+                bk_target = Booking(
+                    booking_code=tsb["code"],
+                    user_id=u_obj.id,
+                    trip_id=t_obj.id,
+                    seat_number=tsb["seat"],
+                    booking_status=BookingStatus.CONFIRMED,
+                    payment_status=PaymentStatus.PAID,
+                )
+                db.add(bk_target)
+                db.commit()
+                logger.info(f"Auto-seeded booking {tsb['code']} for {tsb['name']} ({tsb['phone']})")
+            elif bk_target.user_id != u_obj.id:
+                bk_target.user_id = u_obj.id
+                db.commit()
+
         # Check if already seeded to avoid duplicates — note: role sync above already ran
         existing = db.query(Booking).filter(Booking.booking_code == "BK-1234").first()
         if existing:
