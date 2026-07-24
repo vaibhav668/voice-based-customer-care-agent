@@ -275,6 +275,65 @@ def seed_database():
         db.commit()
         print(f"Created {b6_code} for Other User")
 
+    # Seed bookings requested for specific users: Kasiraju (7659917669), Pramod (8108557667), Shiva (9059123144)
+    target_users = [
+        {"name": "Kasiraju", "phone": "7659917669", "email": "kasiraju@example.com", "code": "BK-765991", "seat": "A15", "route_key": "Delhi-Jaipur"},
+        {"name": "Pramod", "phone": "8108557667", "email": "pramod@example.com", "code": "BK-810855", "seat": "B12", "route_key": "Mumbai-Pune"},
+        {"name": "Shiva", "phone": "9059123144", "email": "shiva@example.com", "code": "BK-905912", "seat": "C08", "route_key": "Bengaluru-Chennai"},
+    ]
+
+    for tu in target_users:
+        u = db.query(User).filter_by(phone=tu["phone"]).first()
+        if not u:
+            u = User(
+                id=uuid.uuid4(),
+                full_name=tu["name"],
+                email=tu["email"],
+                phone=tu["phone"],
+                password_hash=hash_password("password123"),
+                role=UserRole.CUSTOMER,
+                is_active=True,
+                is_verified=True,
+                preferred_language="en",
+            )
+            db.add(u)
+            db.commit()
+            db.refresh(u)
+            print(f"Created user: {tu['name']} ({tu['phone']})")
+
+        b = db.query(Booking).filter_by(booking_code=tu["code"]).first()
+        if not b:
+            route = routes_dict[tu["route_key"]]
+            trip = db.query(Trip).filter_by(route_id=route.id).first()
+            if not trip:
+                dep = now.replace(hour=10, minute=0, second=0, microsecond=0) + timedelta(days=1)
+                trip = Trip(
+                    id=uuid.uuid4(),
+                    route_id=route.id,
+                    bus_id=buses_dict[0].id,
+                    departure_time=dep,
+                    arrival_time=dep + timedelta(hours=5),
+                    status=TripStatus.ON_TIME,
+                    delay_minutes=0,
+                    available_seats=30
+                )
+                db.add(trip)
+                db.commit()
+                db.refresh(trip)
+
+            b = Booking(
+                id=uuid.uuid4(),
+                booking_code=tu["code"],
+                user_id=u.id,
+                trip_id=trip.id,
+                seat_number=tu["seat"],
+                booking_status=BookingStatus.CONFIRMED,
+                payment_status=PaymentStatus.PAID
+            )
+            db.add(b)
+            db.commit()
+            print(f"Created booking {tu['code']} for {tu['name']}")
+
     print("Seed complete! Demo users and bookings are ready.")
 
 if __name__ == "__main__":
