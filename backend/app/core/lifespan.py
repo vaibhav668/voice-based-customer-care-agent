@@ -58,6 +58,9 @@ def auto_seed_database():
             {"email": "demo@example.com", "name": "Demo User", "pw": "password123", "phone": "9876543999", "role": UserRole.CUSTOMER},
             {"email": "other@example.com", "name": "Other User", "pw": "password123", "phone": "8178265989", "role": UserRole.CUSTOMER},
             {"email": "admin@example.com", "name": "System Admin", "pw": "admin123", "phone": "9990001112", "role": UserRole.ADMIN},
+            {"email": "kasiraju@example.com", "name": "Kasiraju", "pw": "password123", "phone": "7659917669", "role": UserRole.CUSTOMER},
+            {"email": "pramod@example.com", "name": "Pramod", "pw": "password123", "phone": "8108557667", "role": UserRole.CUSTOMER},
+            {"email": "shiva@example.com", "name": "Shiva", "pw": "password123", "phone": "9059123144", "role": UserRole.CUSTOMER},
         ]
 
         users_dict = {}
@@ -525,6 +528,44 @@ def auto_seed_database():
             )
             db.add(b105)
             db.commit()
+
+        # Target seed bookings for Render auto-seed
+        target_seed_bookings = [
+            {"code": "BK-765991", "email": "kasiraju@example.com", "route_key": "Delhi-Jaipur", "seat": "A15"},
+            {"code": "BK-810855", "email": "pramod@example.com", "route_key": "Mumbai-Pune", "seat": "B12"},
+            {"code": "BK-905912", "email": "shiva@example.com", "route_key": "Bengaluru-Chennai", "seat": "C08"},
+        ]
+        for tsb in target_seed_bookings:
+            if not db.query(Booking).filter_by(booking_code=tsb["code"]).first():
+                target_u = users_dict.get(tsb["email"]) or db.query(User).filter_by(email=tsb["email"]).first()
+                if target_u:
+                    r_obj = routes_dict.get(tsb["route_key"])
+                    if r_obj:
+                        t_obj = db.query(Trip).filter_by(route_id=r_obj.id).first()
+                        if not t_obj:
+                            t_obj = Trip(
+                                id=uuid.uuid4(),
+                                route_id=r_obj.id,
+                                bus_id=buses_dict[0].id,
+                                departure_time=now + timedelta(days=1),
+                                arrival_time=now + timedelta(days=1, hours=5),
+                                status=TripStatus.ON_TIME,
+                                delay_minutes=0,
+                                available_seats=35,
+                            )
+                            db.add(t_obj)
+                            db.commit()
+                        bk_obj = Booking(
+                            booking_code=tsb["code"],
+                            user_id=target_u.id,
+                            trip_id=t_obj.id,
+                            seat_number=tsb["seat"],
+                            booking_status=BookingStatus.CONFIRMED,
+                            payment_status=PaymentStatus.PAID,
+                        )
+                        db.add(bk_obj)
+                        db.commit()
+                        logger.info(f"Auto-seeded booking {tsb['code']} for {tsb['email']}")
 
         # Seed Campaigns
         from app.database.models.campaign import Campaign
