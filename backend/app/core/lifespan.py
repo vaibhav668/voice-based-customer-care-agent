@@ -272,6 +272,75 @@ def auto_seed_database():
                 bk_target.user_id = u_obj.id
                 db.commit()
 
+        # Ensure Flight Booking for Jayam (9392273983) Delhi -> Chennai exists
+        jayam_phone = "9392273983"
+        jayam_user = db.query(User).filter_by(phone=jayam_phone).first()
+        if jayam_user:
+            jayam_code = "BK-939227"
+            bk_jayam = db.query(Booking).filter_by(booking_code=jayam_code).first()
+            if not bk_jayam:
+                r_jc = db.query(Route).filter_by(source_city="Delhi", destination_city="Chennai").first()
+                if not r_jc:
+                    r_jc = Route(
+                        id=uuid.uuid4(),
+                        source_city="Delhi",
+                        destination_city="Chennai",
+                        distance_km=1746.0,
+                        estimated_duration_minutes=160,
+                    )
+                    db.add(r_jc)
+                    db.commit()
+                    db.refresh(r_jc)
+                
+                b_indigo = db.query(Bus).filter_by(bus_number="6E-2134").first()
+                if not b_indigo:
+                    b_indigo = Bus(
+                        id=uuid.uuid4(),
+                        bus_number="6E-2134",
+                        bus_name="IndiGo Flight 6E-2134",
+                        registration_number="VT-IDG",
+                        bus_type=BusType.AC_SEATER,
+                        capacity=180,
+                    )
+                    db.add(b_indigo)
+                    db.commit()
+                    db.refresh(b_indigo)
+                
+                dep_t = datetime.fromisoformat("2026-08-15T10:30:00+00:00")
+                arr_t = dep_t + timedelta(minutes=160)
+                t_jc = db.query(Trip).filter_by(route_id=r_jc.id, bus_id=b_indigo.id, departure_time=dep_t).first()
+                if not t_jc:
+                    t_jc = Trip(
+                        id=uuid.uuid4(),
+                        route_id=r_jc.id,
+                        bus_id=b_indigo.id,
+                        departure_time=dep_t,
+                        arrival_time=arr_t,
+                        status=TripStatus.SCHEDULED,
+                        delay_minutes=0,
+                        available_seats=179,
+                    )
+                    db.add(t_jc)
+                    db.commit()
+                    db.refresh(t_jc)
+
+                bk_jayam = Booking(
+                    id=uuid.uuid4(),
+                    booking_code=jayam_code,
+                    user_id=jayam_user.id,
+                    trip_id=t_jc.id,
+                    seat_number="12A",
+                    booking_status=BookingStatus.CONFIRMED,
+                    payment_status=PaymentStatus.PAID,
+                    booking_date=datetime.now(),
+                )
+                db.add(bk_jayam)
+                db.commit()
+                logger.info(f"Auto-seeded flight booking BK-939227 for Jayam ({jayam_phone})")
+            elif bk_jayam.user_id != jayam_user.id:
+                bk_jayam.user_id = jayam_user.id
+                db.commit()
+
         # Check if already seeded to avoid duplicates — note: role sync above already ran
         existing = db.query(Booking).filter(Booking.booking_code == "BK-1234").first()
         if existing:
