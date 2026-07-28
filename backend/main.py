@@ -85,6 +85,7 @@ from app.api.routes.conversation import router as conversation_router
 from app.api.routes.complaint import router as complaint_router
 from app.api.routes.campaign import router as campaign_router
 from app.api.routes.call_review import router as call_review_router
+from app.company_support.router import router as company_support_router
 
 app.include_router(booking_router)
 app.include_router(user_router)
@@ -94,6 +95,7 @@ app.include_router(conversation_router)
 app.include_router(complaint_router)
 app.include_router(campaign_router)
 app.include_router(call_review_router)
+app.include_router(company_support_router)
 app.include_router(websocket_router)
 app.include_router(ivr_router)
 app.include_router(telephony_router)
