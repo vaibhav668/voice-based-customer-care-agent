@@ -341,6 +341,72 @@ def auto_seed_database():
                 bk_jayam.user_id = jayam_user.id
                 db.commit()
 
+            # Ensure Bus Booking for Jayam (9392273983) Delhi -> Jaipur exists
+            jayam_bus_code = "BK-939228"
+            bk_jayam_bus = db.query(Booking).filter_by(booking_code=jayam_bus_code).first()
+            if not bk_jayam_bus:
+                r_jb = db.query(Route).filter_by(source_city="Delhi", destination_city="Jaipur").first()
+                if not r_jb:
+                    r_jb = Route(
+                        id=uuid.uuid4(),
+                        source_city="Delhi",
+                        destination_city="Jaipur",
+                        distance_km=280.0,
+                        estimated_duration_minutes=315,
+                    )
+                    db.add(r_jb)
+                    db.commit()
+                    db.refresh(r_jb)
+                
+                b_bus = db.query(Bus).filter_by(bus_number="AP39AB1001").first()
+                if not b_bus:
+                    b_bus = Bus(
+                        id=uuid.uuid4(),
+                        bus_number="AP39AB1001",
+                        bus_name="Volvo Multi Axle AC Sleeper",
+                        registration_number="AP39BUS1001",
+                        bus_type=BusType.AC_SLEEPER,
+                        capacity=36,
+                    )
+                    db.add(b_bus)
+                    db.commit()
+                    db.refresh(b_bus)
+                
+                dep_t_bus = datetime.fromisoformat("2026-08-16T22:00:00+00:00")
+                arr_t_bus = dep_t_bus + timedelta(minutes=315)
+                t_jb = db.query(Trip).filter_by(route_id=r_jb.id, bus_id=b_bus.id, departure_time=dep_t_bus).first()
+                if not t_jb:
+                    t_jb = Trip(
+                        id=uuid.uuid4(),
+                        route_id=r_jb.id,
+                        bus_id=b_bus.id,
+                        departure_time=dep_t_bus,
+                        arrival_time=arr_t_bus,
+                        status=TripStatus.SCHEDULED,
+                        delay_minutes=0,
+                        available_seats=35,
+                    )
+                    db.add(t_jb)
+                    db.commit()
+                    db.refresh(t_jb)
+
+                bk_jayam_bus = Booking(
+                    id=uuid.uuid4(),
+                    booking_code=jayam_bus_code,
+                    user_id=jayam_user.id,
+                    trip_id=t_jb.id,
+                    seat_number="15",
+                    booking_status=BookingStatus.CONFIRMED,
+                    payment_status=PaymentStatus.PAID,
+                    booking_date=datetime.now(),
+                )
+                db.add(bk_jayam_bus)
+                db.commit()
+                logger.info(f"Auto-seeded bus booking BK-939228 for Jayam ({jayam_phone})")
+            elif bk_jayam_bus.user_id != jayam_user.id:
+                bk_jayam_bus.user_id = jayam_user.id
+                db.commit()
+
         # Check if already seeded to avoid duplicates — note: role sync above already ran
         existing = db.query(Booking).filter(Booking.booking_code == "BK-1234").first()
         if existing:
