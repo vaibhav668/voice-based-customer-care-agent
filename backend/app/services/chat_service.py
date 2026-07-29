@@ -68,7 +68,10 @@ class ChatService:
             "source", "seat", "bus", "status", "time", "timing", "eta",
             "kab", "kahan", "kaha", "samay", "pahuche", "pahuchegi",
             "aagman", "prashthan", "seat", "seet", "gaadi", "gadi",
-            "पहुँच", "आगमन", "समय", "कब", "बस", "सीट",
+            "पहुँचे", "आगमन", "समय", "कब", "बस", "सीट",
+            "సీట్", "సీటు", "నంబర్", "నంబరు", "బుకింగ్", "టికెట్",
+            "సమయం", "టైం", "ఆగమనం", "ప్రయాణం", "బయలుదేరు", "బోర్డింగ్",
+            "స్టేటస్", "వివరాలు"
         )
         return any(keyword in text for keyword in keywords)
 

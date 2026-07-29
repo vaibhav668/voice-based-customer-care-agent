@@ -41,6 +41,29 @@ class ResponseGenerator:
             """
         return ""
 
+    def _get_telugu_speech_rule(self, language: str) -> str:
+        if (language or "en").lower() == "te":
+            return """
+            CRITICAL TELUGU SPEECH REQUIREMENTS (this is a VOICE call — the response will be read aloud by a TTS engine):
+            1. Write ONLY in Telugu script (తెలుగు). Do NOT mix English words in Roman script / English letters into the response.
+               - WRONG: "మీ seat number 12A అండి" (mixing Roman + Telugu)
+               - CORRECT: "మీ సీటు నెంబరు పన్నెండు ఏ అండి"
+            2. To handle mixed English/Telugu naturally (code-switching):
+               - Transliterate common conversational English words to Telugu script rather than using obscure formal Telugu terms.
+               - For example, use "సీట్" / "సీటు" (for seat), "బుకింగ్" (for booking), "రీఫండ్" (for refund), "లేట్" / "ఆలస్యం" (for late/delay), "టికెట్" (for ticket), "స్టేటస్" (for status).
+               - Avoid overly formal Telugu dictionary translations that sound unnatural to everyday speakers (e.g., do not use "ఆసనము" for seat).
+            3. Speak conversationally and politely — like a friendly, helpful human call center agent. Do NOT sound like you're reading a document.
+               - Use polite honorific forms (using the "-అండి" / "andi" suffix and "మీరు" instead of "నువ్వు" / "nuvvu").
+               - For example: "చెప్పండి" (please tell), "కన్ఫర్మ్ అయిందండి" (it is confirmed), "సహాయం చేయగలనండి" (I can help).
+               - Avoid rude, direct, or informal endings.
+            4. Keep responses short and simple (1-3 sentences). Avoid complex compound sentences.
+            5. Answer ONLY the customer's actual question:
+               - If they ask about seat confirmation, answer ONLY about booking/seat confirmation. Do NOT discuss seat changes.
+               - If they ask about changing their seat, answer ONLY about seat changes. Do NOT discuss booking status.
+            6. Never read out raw database fields or recite multiple irrelevant fields.
+            """
+        return ""
+
     def _get_voice_speech_rule(self, language: str) -> str:
         """Returns a spoken-language clarity rule for TTS output in any language."""
         return f"""
@@ -143,6 +166,7 @@ Avoid overly long replies that overwhelm the customer.
         + self._get_voice_speech_rule(language)
         + "\n"
         + (hindi_rule.strip() + "\n" if hindi_rule.strip() else "")
+        + (self._get_telugu_speech_rule(language).strip() + "\n" if self._get_telugu_speech_rule(language).strip() else "")
         + context_body
         )
         )

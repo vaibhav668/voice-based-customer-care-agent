@@ -16,7 +16,11 @@ class ContextResolver:
         "delay", "refund", "status", "cancel it", "cancel", "driver", "eta", "time", "where", "when",
         # Hindi / Hinglish / Regional terms
         "samay", "kab", "kahan", "kaha", "aagman", "prashthan", "der", "late", "gaadi", "gadi",
-        "pahuchegi", "timing", "seet", "seat", "vapis", "wapasi", "paisa", "paise", "rut", "route"
+        "pahuchegi", "timing", "seet", "seat", "vapis", "wapasi", "paisa", "paise", "rut", "route",
+        # Telugu terms
+        "సీట్", "సీటు", "నెంబర్", "నెంబరు", "ఆలస్యం", "ఆలస్యంగా", "లేట్", "రీఫండ్", "డబ్బులు",
+        "రద్దు", "క్యాన్సిల్", "ఎప్పుడు", "ఎక్కడ", "ఎలా", "బస్సు", "బండి", "బస్", "సమయం",
+        "టైం", "టైమింగ్", "చేరుకుంటుంది", "వస్తుంది", "వెళ్తుంది", "డ్రైవర్", "రూట్", "దారి", "కన్ఫర్మ్"
     ]
 
     def resolve(
