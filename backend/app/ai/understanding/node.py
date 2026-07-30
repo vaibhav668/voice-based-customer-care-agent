@@ -13,7 +13,7 @@ def understand(message: str, history: list = None) -> UnderstandingResult:
     formatted_history = ""
     if history:
         history_msgs = []
-        for msg in history[-5:]:  # look at last 5 messages for context
+        for msg in history[-3:]:  # look at last 3 messages for context
             role = "Customer" if msg.get("role") == "user" else "Assistant"
             history_msgs.append(f"{role}: {msg.get('message')}")
         formatted_history = "\n".join(history_msgs)

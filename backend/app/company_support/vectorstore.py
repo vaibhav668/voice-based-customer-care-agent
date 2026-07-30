@@ -85,9 +85,9 @@ class FallbackCompanyRetriever:
                     )
                 ))
 
-        # Sort by score descending and return top 4 documents
+        # Sort by score descending and return top 3 documents
         scored_docs.sort(key=lambda x: x[0], reverse=True)
-        return [doc for score, doc in scored_docs[:4]]
+        return [doc for score, doc in scored_docs[:3]]
 
 
 # Global vector store or fallback retriever
@@ -112,7 +112,7 @@ def get_company_retriever():
     global company_vectordb, fallback_retriever
     if company_vectordb is not None:
         try:
-            return company_vectordb.as_retriever(search_kwargs={"k": 4})
+            return company_vectordb.as_retriever(search_kwargs={"k": 3})
         except Exception as e:
             logger.error(f"Failed to get Chroma retriever: {e}. Switching to fallback.")
             if fallback_retriever is None:

@@ -49,8 +49,8 @@ def execute_company_support_rag(query: str, history: list[dict] = None) -> dict:
         
         # Append chat history if provided
         if history:
-            # Keep history to last 6 messages to stay lightweight
-            for msg in history[-6:]:
+            # Keep history to last 3 messages to stay lightweight
+            for msg in history[-3:]:
                 role = msg.get("role")
                 content = msg.get("content")
                 if role == "user":

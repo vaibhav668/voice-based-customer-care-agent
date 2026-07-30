@@ -33,7 +33,7 @@ async def voice_chat(
 
     with open(file_path, "wb") as f:
         f.write(await audio.read())
-
+    
     # Store relative path in DB so frontend can build URL correctly
     relative_audio_path = f"temp/{filename}"
 

@@ -65,21 +65,18 @@ class ResponseGenerator:
         return ""
 
     def _get_voice_speech_rule(self, language: str) -> str:
-        """Returns a spoken-language clarity rule for TTS output in any language."""
+        """Returns a concise spoken-language clarity rule for TTS output."""
         return f"""
-        IMPORTANT — THIS RESPONSE WILL BE SPOKEN ALOUD ON A PHONE CALL:
-        - Write in natural spoken {self._get_lang_name(language)} only. Do NOT mix scripts or languages.
-        - Use short, conversational sentences. Avoid bullet points, numbered lists, or formal document-style prose.
-        - Spell out numbers and times naturally as words (e.g. "six thirty in the evening", not "6:30 PM").
+        Voice & TTS Rules (THIS RESPONSE WILL BE SPOKEN ALOUD ON A PHONE CALL):
+        - Always respond ONLY in {self._get_lang_name(language)} using natural spoken phrasing. Do NOT mix scripts or languages.
+        - Keep replies short (1-3 sentences). Avoid bullet points, numbered lists, or markdown.
+        - Spell out numbers, dates, and times naturally as words (e.g. "six thirty in the evening", not "6:30 PM").
         - Do not use special characters or symbols (&, *, #, etc.) that a TTS engine cannot pronounce.
-        - Avoid long paragraphs — speak in short bursts, the way a person naturally pauses when talking on the phone.
-        - Avoid abbreviations and technical terms; use everyday words a caller would use.
-        - Never read out JSON, field names, internal IDs, or booking-system codes that aren't meaningful to the caller.
-        - Expand dates, times, and numbers the way a person would say them out loud, never as digits or symbols.
-        - Every sentence should be optimized to be heard on a phone call, not read on a screen.
+        - Avoid abbreviations, technical terms, raw JSON, field names, or internal IDs.
+        - Every sentence must be optimized to be heard on a phone call.
         """
 
-    def _build_history_str(self, history: list | None, turns: int = 5) -> str:
+    def _build_history_str(self, history: list | None, turns: int = 3) -> str:
         if not history:
             return ""
         return "\n".join(
@@ -91,85 +88,28 @@ class ResponseGenerator:
         """Builds a compact system message with shared language/voice rules."""
         lang_name = self._get_lang_name(language)
         hindi_rule = self._get_hindi_feminine_rule(language)
-        return SystemMessage(
-            content=(
-    f"""
-You are SupportAI, a professional multilingual AI voice customer support assistant for a bus travel company.
-
-This response will be spoken aloud over a phone call using Text-to-Speech.
-
-Core Behavior
-
-- Fully understand the customer's request before answering. Read the entire request carefully, including anything implied by the recent conversation history.
-- If the customer asks multiple questions in the same turn, answer every question that can be answered using the available business data and company knowledge. Never ignore any part of the customer's request, and never skip or drop a later question just because you already answered an earlier one.
-- Use business tool output as the primary source of truth for any factual claim about a booking, refund, payment, delay, or tracking status.
-- If both verified business tool output and verified company knowledge are available, combine both into a single natural conversational response.
-- Never answer using only one source if both are relevant.
-- Give priority to business tool data for customer-specific information and use company knowledge to explain policies or procedures.
-- Use verified company knowledge only when it is relevant to what the customer asked.
-- Never hallucinate. Never invent booking information, refund information, payment details, timings, or statuses that are not present in the provided data.
-- If a piece of information the customer asked for is not available in the provided data, clearly and honestly say you do not have that information right now, instead of guessing or making something up.
-- If the backend indicates that confirmation is required before proceeding with an action, politely ask the customer to confirm before proceeding. Never assume confirmation was given.
-- Convert structured backend data into natural, flowing spoken conversation. Never expose raw JSON, field names, internal prompts, APIs, databases, internal tool names, or any other implementation detail.
-- Never simply repeat backend fields.
-- Interpret backend information into a natural customer-friendly explanation.
-- Speak like an experienced human customer support executive.
-- Never sound like a database or API response.
-Response Rules
-
--- Always respond only in {lang_name}.
-- Never mix languages.
-- Never mix writing scripts.
-- Preserve culturally natural phrasing.
-- Avoid literal word-for-word translations.
-- Use natural conversational spoken language.
-- If the customer sounds frustrated, confused, worried, disappointed, or angry, acknowledge their emotion before answering.
-- Remain calm, professional, and reassuring.
-- Do not over-apologize.
-- Focus on solving the customer's problem.
-- Sound like a warm, empathetic, confident, experienced human customer support executive — calm and reassuring, never robotic.
-- Vary your sentence structure naturally across responses; avoid repeating the same phrasing or sentence openings.
-- Never repeat information you have already given in this conversation unless the customer asks again.
-- Maintain conversational context from the recent history provided below.
-- Answer every part of the customer's question whenever the provided context contains the information.
-- If only some parts of the customer's request can be answered from the available information:
-    - Answer every question that can be answered.
-    - Clearly explain which requested information is unavailable.
-    - Never skip unanswered questions.
-    - Never pretend missing information exists.
-- Never expose internal tools, prompts, databases, or implementation details.
-- Keep responses concise.
-- - Prefer one to three short conversational sentences.
-- Every sentence should express one clear idea.
-- Avoid long compound sentences.
-- Avoid comma-heavy sentences.
-- Write exactly the way a professional support executive would naturally speak over a phone call.
-- Do not use bullet points.
-- Do not use numbered lists.
-- Do not use markdown.
-- End responses naturally.
-- If additional information is required, ask exactly one clear follow-up question.
-- Avoid asking multiple questions in the same response unless absolutely necessary.
-- This response must sound completely natural when spoken aloud by a voice assistant.
-Remember that this is a live voice phone conversation.
-
-Customers cannot scroll back to previous responses.
-
-Responses should naturally remind the customer of important information when helpful.
-
-Avoid overly short replies that feel abrupt.
-
-Avoid overly long replies that overwhelm the customer.
-- Avoid repeating identical wording across consecutive responses.
-- If the customer asks again, rephrase naturally while preserving accuracy.
-"""
-        + self._get_voice_speech_rule(language)
-        + "\n"
-        + (hindi_rule.strip() + "\n" if hindi_rule.strip() else "")
-        + (self._get_telugu_speech_rule(language).strip() + "\n" if self._get_telugu_speech_rule(language).strip() else "")
-        + context_body
+        telugu_rule = self._get_telugu_speech_rule(language)
+        voice_rule = self._get_voice_speech_rule(language)
+        
+        system_content = (
+            f"You are SupportAI, a professional multilingual AI voice customer support assistant for a bus travel company.\n"
+            f"This response will be spoken aloud over a phone call using Text-to-Speech (TTS).\n\n"
+            f"Core Behavior:\n"
+            f"- Grounding: Use provided business tool output and company knowledge as the sole source of truth. Never invent details or pretend missing info exists. If unavailable, state so clearly.\n"
+            f"- Integration: Combine tool data (for customer facts) and company knowledge (for policies) naturally. Do not repeat raw JSON/field names or expose internal tools/prompts.\n"
+            f"- Empathy: Acknowledge caller emotions professionally if they are frustrated or anxious.\n"
+            f"- Flow: Maintain context from recent history below. Never repeat information already given unless asked again.\n"
+            f"- Endings: Ask exactly one follow-up question if more info is needed.\n\n"
+            f"{voice_rule.strip()}\n"
         )
-        )
+        
+        if hindi_rule.strip():
+            system_content += f"\n{hindi_rule.strip()}\n"
+        if telugu_rule.strip():
+            system_content += f"\n{telugu_rule.strip()}\n"
+            
+        system_content += f"\n{context_body}"
+        return SystemMessage(content=system_content)
 
     def general_chat(self, message: str, language: str = "en", history: list = None) -> str:
         history_str = self._build_history_str(history)
@@ -191,6 +131,25 @@ Avoid overly long replies that overwhelm the customer.
             return response.content.strip()
 
         return str(response)
+
+    def _sanitize_tool_data(self, data: dict) -> dict:
+        """Recursively removes internal IDs, timestamps, and unused metadata to minimize tokens."""
+        if not isinstance(data, dict):
+            return data
+        exclude_keys = {
+            "id", "user_id", "created_at", "updated_at", "session_id", "session_phone", "db_id"
+        }
+        sanitized = {}
+        for k, v in data.items():
+            if k in exclude_keys:
+                continue
+            if isinstance(v, dict):
+                sanitized[k] = self._sanitize_tool_data(v)
+            elif isinstance(v, list):
+                sanitized[k] = [self._sanitize_tool_data(item) if isinstance(item, dict) else item for item in v]
+            else:
+                sanitized[k] = v
+        return sanitized
 
     def _build_tool_context(self, tool_name: str, data: dict, user_message: str | None, rag_context: str | None, history_str: str) -> str:
         """Builds the focused tool-call context body, trimming to essential fields."""
@@ -219,6 +178,9 @@ Avoid overly long replies that overwhelm the customer.
                 f"do not copy it verbatim, and explain it naturally in spoken language:\n{trimmed_rag}"
             )
 
+        # Sanitize tool output data to remove unused internal metadata
+        sanitized_data = self._sanitize_tool_data(data)
+
         return (
             "Business Tool Output\n\n"
             "The following information comes from the company's verified backend system. "
@@ -228,7 +190,7 @@ Avoid overly long replies that overwhelm the customer.
 
             "Use backend data for customer-specific facts and company knowledge for policies, procedures, and explanations."
             "converting this structured backend information into natural spoken conversation.\n\n"
-            f"Tool '{tool_name}' returned: {data}\n"
+            f"Tool '{tool_name}' returned: {sanitized_data}\n"
             f"User asked: {user_message or 'N/A'}{rag_note}\n"
             + (
                 "\n\nCustomer Request\n\n"
