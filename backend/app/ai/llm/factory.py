@@ -111,6 +111,21 @@ class RoutingLLM(BaseLLM):
             primary_provider = "openrouter"
             primary_model = settings.openrouter_model
             
+        # Ensure backup provider is never the same as primary provider to prevent circular/redundant fallback.
+        if primary_provider == backup_provider:
+            if primary_provider == "groq":
+                backup_provider = "openrouter"
+                if routing["provider"] == "openrouter":
+                    backup_model = routing["model"]
+                else:
+                    backup_model = settings.openrouter_model
+            else:
+                backup_provider = "groq"
+                if routing["provider"] == "groq":
+                    backup_model = routing["model"]
+                else:
+                    backup_model = settings.groq_model
+
         primary_client = self._get_client_for_provider(primary_provider, primary_model)
         
         # Determine backup client
@@ -122,20 +137,33 @@ class RoutingLLM(BaseLLM):
 
     def invoke(self, messages: list[BaseMessage]) -> str:
         primary, backup = self._get_active_clients(messages)
+        primary_provider = "Groq" if primary.__class__.__name__ == "GroqLLM" else "OpenRouter"
+        backup_provider_name = "OpenRouter" if backup.__class__.__name__ == "OpenRouterLLM" else "Groq" if backup else None
+        
         try:
             return primary.invoke(messages)
         except Exception as e:
-            logger.warning(f"[RoutingLLM] Primary client failed: {e}. Falling back...")
+            if "429" in str(e) or "rate limit" in str(e).lower():
+                logger.warning(f"[RoutingLLM] Primary client ({primary_provider}) failed with 429 rate limit.")
+            else:
+                logger.warning(f"[RoutingLLM] Primary client ({primary_provider}) failed: {e}")
+                
             if backup:
+                logger.warning(f"[RoutingLLM] Switching to fallback provider: {backup_provider_name}")
                 try:
-                    return backup.invoke(messages)
+                    res = backup.invoke(messages)
+                    logger.info(f"[RoutingLLM] Fallback to {backup_provider_name} succeeded. Response status: 200 OK")
+                    return res
                 except Exception as backup_err:
-                    logger.error(f"[RoutingLLM] Backup client also failed: {backup_err}")
+                    logger.error(f"[RoutingLLM] Backup client ({backup_provider_name}) also failed: {backup_err}")
                     raise backup_err
             raise e
 
     def stream(self, messages: list[BaseMessage]):
         primary, backup = self._get_active_clients(messages)
+        primary_provider = "Groq" if primary.__class__.__name__ == "GroqLLM" else "OpenRouter"
+        backup_provider_name = "OpenRouter" if backup.__class__.__name__ == "OpenRouterLLM" else "Groq" if backup else None
+        
         try:
             # Check primary stream
             generator = primary.stream(messages)
@@ -144,14 +172,20 @@ class RoutingLLM(BaseLLM):
             for chunk in generator:
                 yield chunk
         except Exception as e:
-            logger.warning(f"[RoutingLLM] Primary client stream failed: {e}. Falling back...")
+            if "429" in str(e) or "rate limit" in str(e).lower():
+                logger.warning(f"[RoutingLLM] Primary client ({primary_provider}) stream failed with 429 rate limit.")
+            else:
+                logger.warning(f"[RoutingLLM] Primary client ({primary_provider}) stream failed: {e}")
+                
             if backup:
+                logger.warning(f"[RoutingLLM] Switching to fallback provider stream: {backup_provider_name}")
                 try:
                     for chunk in backup.stream(messages):
                         yield chunk
+                    logger.info(f"[RoutingLLM] Fallback to {backup_provider_name} stream succeeded. Response status: 200 OK")
                     return
                 except Exception as backup_err:
-                    logger.error(f"[RoutingLLM] Backup client stream also failed: {backup_err}")
+                    logger.error(f"[RoutingLLM] Backup client ({backup_provider_name}) stream also failed: {backup_err}")
                     raise backup_err
             raise e
 
