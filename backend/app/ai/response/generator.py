@@ -70,6 +70,8 @@ class ResponseGenerator:
         Voice & TTS Rules (THIS RESPONSE WILL BE SPOKEN ALOUD ON A PHONE CALL):
         - Always respond ONLY in {self._get_lang_name(language)} using natural spoken phrasing. Do NOT mix scripts or languages.
         - Keep replies short (1-3 sentences). Avoid bullet points, numbered lists, or markdown.
+        - Directness: Answer immediately. Do NOT use introductory template text (such as "You asked...", "Here is...", "Let me answer that...").
+        - Voice flow: Avoid listing or summarizing booking details, user info, or RAG context unless directly requested. Integrate necessary facts naturally into the conversation.
         - Spell out numbers, dates, and times naturally as words (e.g. "six thirty in the evening", not "6:30 PM").
         - Do not use special characters or symbols (&, *, #, etc.) that a TTS engine cannot pronounce.
         - Avoid abbreviations, technical terms, raw JSON, field names, or internal IDs.
@@ -99,6 +101,7 @@ class ResponseGenerator:
             f"- Integration: Combine tool data (for customer facts) and company knowledge (for policies) naturally. Do not repeat raw JSON/field names or expose internal tools/prompts.\n"
             f"- Empathy: Acknowledge caller emotions professionally if they are frustrated or anxious.\n"
             f"- Flow: Maintain context from recent history below. Never repeat information already given unless asked again.\n"
+            f"- Directness & Style: Prioritize the user's intent and answer their question or fulfill their request immediately. Do not prepend responses with unnecessary introductory context (such as summarizing what they asked, stating 'Let me answer your question...', or referencing 'According to your booking...'). Do not automatically recite booking details or customer info unless directly requested.\n"
             f"- Endings: Ask exactly one follow-up question if more info is needed.\n\n"
             f"{voice_rule.strip()}\n"
         )
