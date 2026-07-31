@@ -970,7 +970,7 @@ function buildRecordingPlayer(detail, idx) {
     if (!detail.recording_url) {
         return `
         <div class="chat-recording-player no-recording">
-            <i class="fa-regular fa-circle-xmark"></i>
+            
           
         </div>`;
     }
