@@ -971,7 +971,7 @@ function buildRecordingPlayer(detail, idx) {
         return `
         <div class="chat-recording-player no-recording">
             <i class="fa-regular fa-circle-xmark"></i>
-            <span>No recording available for this call.</span>
+          
         </div>`;
     }
 
