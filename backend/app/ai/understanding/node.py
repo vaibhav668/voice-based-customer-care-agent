@@ -10,10 +10,14 @@ llm = get_llm()
 
 
 def understand(message: str, history: list = None) -> UnderstandingResult:
+    from app.ai.utils.shared_prompts import normalize_multilingual_query, select_relevant_history
+    normalized_message = normalize_multilingual_query(message)
+
     formatted_history = ""
     if history:
+        relevant = select_relevant_history(history, None, message, 3)
         history_msgs = []
-        for msg in history[-3:]:  # look at last 3 messages for context
+        for msg in relevant:
             role = "Customer" if msg.get("role") == "user" else "Assistant"
             history_msgs.append(f"{role}: {msg.get('message')}")
         formatted_history = "\n".join(history_msgs)
@@ -24,7 +28,7 @@ def understand(message: str, history: list = None) -> UnderstandingResult:
 
     messages = [
         SystemMessage(content=system_content),
-        HumanMessage(content=message),
+        HumanMessage(content=normalized_message),
     ]
 
     response = llm.invoke(messages)

@@ -14,7 +14,7 @@ def classify_intent(message: str) -> Intent:
             content="You are an intent classifier."
         ),
         HumanMessage(
-            content=INTENT_PROMPT.format(message=message)
+            content=f"{INTENT_PROMPT}\n\nUser Message: {message}"
         ),
     ]
 

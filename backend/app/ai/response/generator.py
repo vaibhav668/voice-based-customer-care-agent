@@ -1,6 +1,7 @@
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.ai.llm.factory import get_llm
+from app.ai.utils.shared_prompts import HINDI_FEMININE_RULE, TELUGU_SPEECH_RULE, VOICE_TTS_RULE
 
 
 LANGUAGE_NAMES = {
@@ -28,62 +29,27 @@ class ResponseGenerator:
 
     def _get_hindi_feminine_rule(self, language: str) -> str:
         if (language or "en").lower() == "hi":
-            return """
-            CRITICAL HINDI SPEECH REQUIREMENTS (this is a VOICE call — the response will be read aloud by a TTS engine):
-            1. Write ONLY in Devanagari script (हिंदी). Do NOT mix English words or Roman script into the response.
-               - WRONG: "Aapka arrival time 6:30 PM hai" (mixing Roman + Devanagari)
-               - CORRECT: "आपका आगमन का समय शाम छह बजकर तीस मिनट है"
-            2. Since the assistant voice is FEMALE, ALWAYS use feminine grammatical structures:
-               - Use "करूंगी" not "करूंगा", "सकती हूं" not "सकता हूं", "बताऊंगी" not "बताऊंगा".
-            3. Speak conversationally — like a friendly human call center agent. Do NOT sound like you're reading a document.
-               - Short, warm, clear sentences. No bullet points or formal lists.
-            4. Never use awkward formal Sanskrit-heavy words when simpler Hindi exists. Prefer everyday spoken Hindi.
-            """
+            return HINDI_FEMININE_RULE
         return ""
 
     def _get_telugu_speech_rule(self, language: str) -> str:
         if (language or "en").lower() == "te":
-            return """
-            CRITICAL TELUGU SPEECH REQUIREMENTS (this is a VOICE call — the response will be read aloud by a TTS engine):
-            1. Write ONLY in Telugu script (తెలుగు). Do NOT mix English words in Roman script / English letters into the response.
-               - WRONG: "మీ seat number 12A అండి" (mixing Roman + Telugu)
-               - CORRECT: "మీ సీటు నెంబరు పన్నెండు ఏ అండి"
-            2. To handle mixed English/Telugu naturally (code-switching):
-               - Transliterate common conversational English words to Telugu script rather than using obscure formal Telugu terms.
-               - For example, use "సీట్" / "సీటు" (for seat), "బుకింగ్" (for booking), "రీఫండ్" (for refund), "లేట్" / "ఆలస్యం" (for late/delay), "టికెట్" (for ticket), "స్టేటస్" (for status).
-               - Avoid overly formal Telugu dictionary translations that sound unnatural to everyday speakers (e.g., do not use "ఆసనము" for seat).
-            3. Speak conversationally and politely — like a friendly, helpful human call center agent. Do NOT sound like you're reading a document.
-               - Use polite honorific forms (using the "-అండి" / "andi" suffix and "మీరు" instead of "నువ్వు" / "nuvvu").
-               - For example: "చెప్పండి" (please tell), "కన్ఫర్మ్ అయిందండి" (it is confirmed), "సహాయం చేయగలనండి" (I can help).
-               - Avoid rude, direct, or informal endings.
-            4. Keep responses short and simple (1-3 sentences). Avoid complex compound sentences.
-            5. Answer ONLY the customer's actual question:
-               - If they ask about seat confirmation, answer ONLY about booking/seat confirmation. Do NOT discuss seat changes.
-               - If they ask about changing their seat, answer ONLY about seat changes. Do NOT discuss booking status.
-            6. Never read out raw database fields or recite multiple irrelevant fields.
-            """
+            return TELUGU_SPEECH_RULE
         return ""
 
     def _get_voice_speech_rule(self, language: str) -> str:
         """Returns a concise spoken-language clarity rule for TTS output."""
-        return f"""
-        Voice & TTS Rules (THIS RESPONSE WILL BE SPOKEN ALOUD ON A PHONE CALL):
-        - Always respond ONLY in {self._get_lang_name(language)} using natural spoken phrasing. Do NOT mix scripts or languages.
-        - Keep replies short (1-3 sentences). Avoid bullet points, numbered lists, or markdown.
-        - Directness: Answer immediately. Do NOT use introductory template text (such as "You asked...", "Here is...", "Let me answer that...").
-        - Voice flow: Avoid listing or summarizing booking details, user info, or RAG context unless directly requested. Integrate necessary facts naturally into the conversation.
-        - Spell out numbers, dates, and times naturally as words (e.g. "six thirty in the evening", not "6:30 PM").
-        - Do not use special characters or symbols (&, *, #, etc.) that a TTS engine cannot pronounce.
-        - Avoid abbreviations, technical terms, raw JSON, field names, or internal IDs.
-        - Every sentence must be optimized to be heard on a phone call.
-        """
+        lang_name = self._get_lang_name(language)
+        return VOICE_TTS_RULE.format(lang_name=lang_name)
 
-    def _build_history_str(self, history: list | None, turns: int = 3) -> str:
+    def _build_history_str(self, history: list | None, tool_name: str | None = None, user_message: str | None = None, turns: int = 3) -> str:
         if not history:
             return ""
+        from app.ai.utils.shared_prompts import select_relevant_history
+        relevant = select_relevant_history(history, tool_name, user_message, turns)
         return "\n".join(
             f"{'Customer' if msg.get('role') == 'user' else 'Assistant'}: {msg.get('message')}"
-            for msg in history[-turns:]
+            for msg in relevant
         )
 
     def _build_system_message(self, language: str, context_body: str) -> SystemMessage:
@@ -94,14 +60,15 @@ class ResponseGenerator:
         voice_rule = self._get_voice_speech_rule(language)
         
         system_content = (
-            f"You are SupportAI, a professional multilingual AI voice customer support assistant for a bus travel company.\n"
+            f"You are SupportAI, a premium, professional, and empathetic multilingual AI voice customer support executive for a bus travel company.\n"
             f"This response will be spoken aloud over a phone call using Text-to-Speech (TTS).\n\n"
             f"Core Behavior:\n"
+            f"- Persona: Act like a premium, friendly customer support agent. Validate customer feelings, offer polite greetings/acknowledgement, and maintain warm, professional customer care tone.\n"
             f"- Grounding: Use provided business tool output and company knowledge as the sole source of truth. Never invent details or pretend missing info exists. If unavailable, state so clearly.\n"
-            f"- Integration: Combine tool data (for customer facts) and company knowledge (for policies) naturally. Do not repeat raw JSON/field names or expose internal tools/prompts.\n"
-            f"- Empathy: Acknowledge caller emotions professionally if they are frustrated or anxious.\n"
-            f"- Flow: Maintain context from recent history below. Never repeat information already given unless asked again.\n"
+            f"- Speech Integration: Translate structured backend dictionary fields/statuses (like CONFIRMED, COMPLETED, CANCELLED) into natural conversational sentences. Seamlessly blend backend facts and company policies into a single cohesive response.\n"
+            f"- Comprehensiveness: Address every single question asked by the customer in their query. Do not skip any part of their request.\n"
             f"- Directness & Style: Prioritize the user's intent and answer their question or fulfill their request immediately. Do not prepend responses with unnecessary introductory context (such as summarizing what they asked, stating 'Let me answer your question...', or referencing 'According to your booking...'). Do not automatically recite booking details or customer info unless directly requested.\n"
+            f"- Flow: Maintain context from recent history below. Never repeat information already given unless asked again.\n"
             f"- Endings: Ask exactly one follow-up question if more info is needed.\n\n"
             f"{voice_rule.strip()}\n"
         )
@@ -115,7 +82,7 @@ class ResponseGenerator:
         return SystemMessage(content=system_content)
 
     def general_chat(self, message: str, language: str = "en", history: list = None) -> str:
-        history_str = self._build_history_str(history)
+        history_str = self._build_history_str(history, "chat", message)
         context = (
             "Conversation Mode: General Chat\n\n"
             "Behave like a friendly, approachable customer support executive having a natural phone conversation. "
@@ -155,55 +122,77 @@ class ResponseGenerator:
         return sanitized
 
     def _build_tool_context(self, tool_name: str, data: dict, user_message: str | None, rag_context: str | None, history_str: str) -> str:
-        """Builds the focused tool-call context body, trimming to essential fields."""
+        """Builds the focused tool-call context body, dynamically injecting only relevant parts."""
         tool_lower = (tool_name or "").lower()
+        
+        # 1. Determine injection flags based on query/tool type
+        inject_tool_data = True
+        inject_rag = False
+
+        if tool_lower in ("chat", "general"):
+            inject_tool_data = False
+            inject_rag = False
+        elif tool_lower == "faq":
+            inject_tool_data = False
+            inject_rag = True
+        elif "refund" in tool_lower or "payment" in tool_lower:
+            inject_tool_data = True
+            inject_rag = True
+        elif "booking" in tool_lower or "trip" in tool_lower:
+            inject_tool_data = True
+            inject_rag = False
+        elif "cancel" in tool_lower or "reschedule" in tool_lower:
+            inject_tool_data = True
+            inject_rag = True
+        else:
+            inject_tool_data = True
+            inject_rag = bool(rag_context)
+
+        # 2. Build target response focus instructions
         focus = ""
         if "refund" in tool_lower:
             focus = "State ONLY the refund status/timeline. Do NOT mention departure, arrival, seat, route."
-        elif "delay" in tool_lower:
-            focus = "State ONLY whether bus is delayed and updated ETA. Do NOT mention payment or refund."
-        elif "tracking" in tool_lower:
-            focus = "State ONLY the current bus location/tracking status."
+        elif "delay" in tool_lower or "tracking" in tool_lower:
+            focus = "State ONLY whether bus is delayed, current location, and updated ETA. Do NOT mention payment or refund."
         elif "booking" in tool_lower or "status" in tool_lower:
-            focus = (
-                "Answer ONLY the specific field the user asked about (e.g. arrival time, departure, seat, destination). "
-                "Do NOT recite all fields."
-            )
+            focus = "Answer ONLY the specific field the user asked about (e.g. arrival time, departure, seat, destination). Do NOT recite all fields."
 
-        rag_note = ""
-        if rag_context:
-            # Trim RAG context to first 500 chars to limit token usage
+        context_parts = []
+
+        if inject_tool_data and data:
+            sanitized_data = self._sanitize_tool_data(data)
+            if sanitized_data:
+                tool_section = (
+                    "Business Tool Output\n"
+                    "Information from verified backend system. Treat as authoritative.\n"
+                    f"Tool '{tool_name}' returned: {sanitized_data}"
+                )
+                context_parts.append(tool_section)
+
+        if inject_rag and rag_context:
             trimmed_rag = rag_context[:500].rstrip() + ("..." if len(rag_context) > 500 else "")
-            rag_note = (
-                f"\n\nVerified Company Knowledge\n\n"
-                f"The following information comes from official company documentation. "
-                f"Treat it as authoritative, use it only when relevant to what the customer asked, "
-                f"do not copy it verbatim, and explain it naturally in spoken language:\n{trimmed_rag}"
+            rag_section = (
+                "Verified Company Knowledge (FAQ/Policy)\n"
+                "Information from official company documentation. Explain naturally in spoken language:\n"
+                f"{trimmed_rag}"
             )
+            context_parts.append(rag_section)
 
-        # Sanitize tool output data to remove unused internal metadata
-        sanitized_data = self._sanitize_tool_data(data)
-
-        return (
-            "Business Tool Output\n\n"
-            "The following information comes from the company's verified backend system. "
-            "Treat it as authoritative and never contradict it, never modify it, and never invent missing values. "
-            "Use it together with the verified company knowledge below (if present) to answer the customer, "
-            "If both business tool output and verified company knowledge are relevant, merge them into one natural response instead of treating them separately."
-
-            "Use backend data for customer-specific facts and company knowledge for policies, procedures, and explanations."
-            "converting this structured backend information into natural spoken conversation.\n\n"
-            f"Tool '{tool_name}' returned: {sanitized_data}\n"
-            f"User asked: {user_message or 'N/A'}{rag_note}\n"
-            + (
-                "\n\nCustomer Request\n\n"
-                f"The customer specifically wants information about:\n\n{focus}\n\n"
-                "Only answer the requested topic. Avoid unrelated booking details unless explicitly requested.\n"
-                if focus else ""
+        if focus:
+            focus_section = (
+                "Customer Request Focus\n"
+                f"The customer specifically wants information about: {focus}\n"
+                "Only answer the requested topic. Avoid unrelated booking details unless explicitly requested."
             )
-            + "If 'requires_confirmation' is True in the tool output, politely ask the customer to confirm before proceeding — never assume confirmation.\n"
-            + (f"\nRecent history:\n{history_str}" if history_str else "")
-        )
+            context_parts.append(focus_section)
+
+        if data and isinstance(data, dict) and data.get("requires_confirmation"):
+            context_parts.append("If 'requires_confirmation' is True in the tool output, politely ask the customer to confirm before proceeding.")
+
+        if history_str:
+            context_parts.append(f"Recent conversation history:\n{history_str}")
+
+        return "\n\n".join(context_parts)
 
     def generate(
         self,
@@ -214,7 +203,7 @@ class ResponseGenerator:
         rag_context: str | None = None,
         history: list = None,
     ) -> str:
-        history_str = self._build_history_str(history)
+        history_str = self._build_history_str(history, tool_name, user_message)
         context = self._build_tool_context(tool_name, data, user_message, rag_context, history_str)
         system = self._build_system_message(language, context)
         human = HumanMessage(content=f"User: {user_message or ''}")
@@ -224,7 +213,7 @@ class ResponseGenerator:
         return str(response)
 
     def request_booking_code(self, language: str = "en", user_message: str | None = None, history: list = None) -> str:
-        history_str = self._build_history_str(history)
+        history_str = self._build_history_str(history, "booking", user_message)
         context = (
             f"The user said: \"{user_message or 'Hello'}\"\n\n"
             "Warmly acknowledge what the customer just asked, briefly explain that you need their booking reference "
@@ -243,7 +232,7 @@ class ResponseGenerator:
         return str(response)
 
     def general_chat_stream(self, message: str, language: str = "en", history: list = None):
-        history_str = self._build_history_str(history)
+        history_str = self._build_history_str(history, "chat", message)
         context = (
             "Conversation Mode: General Chat\n\n"
             "Behave like a friendly, approachable customer support executive having a natural phone conversation. "
@@ -266,7 +255,7 @@ class ResponseGenerator:
         rag_context: str | None = None,
         history: list = None,
     ):
-        history_str = self._build_history_str(history)
+        history_str = self._build_history_str(history, tool_name, user_message)
         context = self._build_tool_context(tool_name, data, user_message, rag_context, history_str)
         system = self._build_system_message(language, context)
         human = HumanMessage(content=f"User: {user_message or ''}")
@@ -274,7 +263,7 @@ class ResponseGenerator:
             yield chunk
 
     def request_booking_code_stream(self, language: str = "en", user_message: str | None = None, history: list = None):
-        history_str = self._build_history_str(history)
+        history_str = self._build_history_str(history, "booking", user_message)
         context = (
             f"The user said: \"{user_message or 'Hello'}\"\n\n"
             "Warmly acknowledge what the customer just asked, briefly explain that you need their booking reference "

@@ -4,6 +4,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.ai.context.prompt import CONTEXT_PROMPT
 from app.ai.llm.factory import get_llm
+from app.ai.utils.shared_prompts import HINDI_FEMININE_RULE
 
 llm = get_llm()
 
@@ -54,7 +55,7 @@ class ContextResolver:
         lang_code = getattr(session, "language", "en")
         hindi_rule = ""
         if lang_code.lower() == "hi":
-            hindi_rule = "\n\nCRITICAL HINDI GRAMMAR REQUIREMENT: Since the assistant voice is FEMALE, you MUST consistently use feminine grammatical structures throughout your response (e.g., 'karungi', 'sakti', 'bataungi' instead of 'karunga', 'sakta', 'bataunga'). Never use masculine verb endings for your own actions.\n"
+            hindi_rule = f"\n\n{HINDI_FEMININE_RULE}\n"
 
         prompt = CONTEXT_PROMPT.format(
             context=json.dumps(
