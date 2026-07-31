@@ -50,7 +50,8 @@ class KeywordBasedRetriever:
     def invoke(self, query: str, history: list = None, search_keywords: str = None) -> list[Document]:
         # If search_keywords are pre-extracted by the understanding engine, use them directly
         # to achieve 0ms additional latency. Otherwise fall back to local keyword parsing.
-        search_terms = search_keywords or query
+        from app.ai.utils.shared_prompts import normalize_multilingual_query
+        search_terms = normalize_multilingual_query(search_keywords or query)
 
         # Keep all Unicode word characters (including Devanagari/Hindi, Telugu, Tamil, etc.)
         clean_query = re.sub(r'[^\w\s]', ' ', search_terms.lower())

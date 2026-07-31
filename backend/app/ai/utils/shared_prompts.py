@@ -91,27 +91,72 @@ def normalize_multilingual_query(message: str) -> str:
         
     normalized = message.lower()
     
-    replacements = {
-        # Bookings / Tickets
-        r'\b(tikt|tikit|tict|टिकट|టికెట్)\b': "ticket",
-        r'\b(boking|buking|बुकिंग|బుకింగ్)\b': "booking",
-        r'\b(seet|sheet|सीट|సీట్|సీటు)\b': "seat",
-        r'\b(gadi|gaadi|गाड़ी|గాడి|బస్సు|బస్)\b': "bus",
-        
-        # Cancellations
-        r'\b(cancle|kancel|cancele|कैंसिल|कैनसिल|క్యాన్సిల్|క్యాన్సల్|రద్దు)\b': "cancel",
-        
-        # Refunds
-        r'\b(rifund|refnd|रिफंड|रिपुंड|రీఫండ్|రిఫండ్)\b': "refund",
-        r'\b(paise|paisa|पैसे|पैसा|డబ్బులు|డబ్బు)\b': "money",
-        
-        # Delay / Tracking
-        r'\b(delly|deley|देरी|లేట్|ఆలస్యం)\b': "delay",
-        r'\b(kahan|kaha|कहां|కహాన్|ఎక్కడ)\b': "where",
-        r'\b(kab|कब|కబ్|ఎప్పుడు)\b': "when",
+    # Mappings from foreign/phonetic terms to canonical English terms
+    normalization_rules = {
+        "ticket": [
+            "tikt", "tikit", "tict", "टिकट", "టికెట్"
+        ],
+        "booking": [
+            "boking", "buking", "बुकिंग", "బుకింగ్", "బుకింగు", "బుకింక్", "బూకింగ్"
+        ],
+        "seat": [
+            "seet", "sheet", "सीट", "సీట్", "సీటు", "సీట్లు"
+        ],
+        "bus": [
+            "gadi", "gaadi", "गाड़ी", "గాడి", "బస్సు", "బస్", "బస్సులు"
+        ],
+        "cancellation": [
+            "cancle", "kancel", "cancele", "कैंसिल", "कैनसिल", 
+            "క్యాన్సిలేషన్", "క్యాన్సలేషన్", "కెంచులేషన్", "కెన్సులేషన్", "కన్సిలేషన్"
+        ],
+        "cancel": [
+            "रद्द", "రద్దు", "క్యాన్సిల్", "క్యాన్సల్", "రద్దుచేయడం"
+        ],
+        "refund": [
+            "rifund", "refnd", "रिफंड", "रिपुंड", "रीफंड", "రిఫండ్", "రిపుండ్", "రీఫండు", "రిఫండు", "డబ్బులు తిరిగి", "తిరిగి చెల్లింపు"
+        ],
+        "money": [
+            "paise", "paisa", "पैसे", "पैसा", "డబ్బులు", "డబ్బు"
+        ],
+        "delay": [
+            "delly", "deley", "देरी", "లేట్", "ఆలస్యం", "డిలే"
+        ],
+        "where": [
+            "kahan", "kaha", "कहां", "కహాన్", "ఎక్కడ"
+        ],
+        "when": [
+            "kab", "कब", "కబ్", "ఎప్పుడు"
+        ],
+        "policy": [
+            "పాలసీ", "పొలిసి", "పొలిసీ", "నిబంధనలు", "నిబంధన"
+        ],
+        "luggage": [
+            "लगेज", "लगेजी", "लगेजु", "లగేజ్", "లగేజి", "లగేజు", "సామాను", "సామాన్లు", "సంచులు"
+        ],
+        "payment": [
+            "भुगतान", "पेमेंट", "पैसे", "पे", "कट", "పేమెంట్", "పేమెంటు", "చెల్లింపు", "కట్టడం"
+        ],
+        "tracking": [
+            "ట్రాకింగ్", "ట్రాకింగు", "స్టేటస్", "లొకేషన్", "జాడ"
+        ],
+        "reschedule": [
+            "రీషెడ్యూల్", "మార్పు", "తేదీ మార్పు", "సమయం మార్పు"
+        ],
+        "complaint": [
+            "कंप्लेंट", "కంప్లైంట్", "కంప్లైంటు", "ఫిర్యాదు", "ఫిర్యాదు"
+        ]
     }
     
-    for pattern, replacement in replacements.items():
-        normalized = re.sub(pattern, replacement, normalized)
+    # Sort all variations by length descending to match longest matches first
+    all_rules = []
+    for target, variations in normalization_rules.items():
+        for var in variations:
+            all_rules.append((var, target))
+    all_rules.sort(key=lambda x: len(x[0]), reverse=True)
+    
+    for var, target in all_rules:
+        # Match variations that are not parts of larger ASCII alphanumeric words
+        pattern = rf'(?<![a-zA-Z0-9_]){re.escape(var)}(?![a-zA-Z0-9_])'
+        normalized = re.sub(pattern, target, normalized)
         
     return normalized
