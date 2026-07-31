@@ -1,279 +1,177 @@
 /* ================================================================
-   SupportAI — Auth Pages (Login + Register)
-   Shared stylesheet for index.html and register.html
+   SupportAI — Authentication Pages
+   Blue + White light theme
    ================================================================ */
 
-/* ─── Base Layout ─────────────────────────────────────────────── */
 body {
-    margin: 0;
     min-height: 100vh;
+    background: var(--bg-page);
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 32px 20px;
-    font-family: var(--font-sans);
-    color: var(--text-primary);
-    background: var(--bg-page);
-    overflow-x: hidden;
+    padding: 24px;
     position: relative;
+    overflow: hidden;
 }
 
-/* Subtle grid background */
+/* Subtle background geometry */
 body::before {
     content: '';
     position: fixed;
-    inset: 0;
-    background-image: radial-gradient(circle, rgba(59, 130, 246, 0.04) 1px, transparent 1px);
-    background-size: 28px 28px;
+    top: -20%;
+    right: -10%;
+    width: 600px; height: 600px;
+    background: radial-gradient(circle, rgba(37, 99, 235, 0.06) 0%, transparent 70%);
     pointer-events: none;
     z-index: 0;
 }
-
-/* Ambient glow blobs */
 body::after {
     content: '';
     position: fixed;
-    width: 600px; height: 600px;
-    background: radial-gradient(circle, rgba(59, 130, 246, 0.06) 0%, transparent 70%);
-    top: -200px; left: -200px;
+    bottom: -15%;
+    left: -10%;
+    width: 400px; height: 400px;
+    background: radial-gradient(circle, rgba(37, 99, 235, 0.04) 0%, transparent 70%);
     pointer-events: none;
     z-index: 0;
 }
 
-/* ─── Lang Selector ─────────────────────────────────────────────── */
 #lang-selector-container {
     position: fixed;
-    top: 16px;
+    top: 20px;
     right: 20px;
-    z-index: 1000;
+    z-index: 10;
 }
 
-/* ─── Auth Wrapper ──────────────────────────────────────────────── */
-.auth-container {
-    width: 100%;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    position: relative;
-    z-index: 1;
-}
+/* ─── Auth Card ──────────────────────────────────────────────── */
+.auth-container { position: relative; z-index: 1; width: 100%; max-width: 420px; }
 
-/* ─── Auth Card ─────────────────────────────────────────────────── */
 .auth-card {
-    width: 100%;
-    max-width: 420px;
     background: var(--bg-surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-xl);
-    padding: 40px 36px 32px;
-    box-shadow: var(--shadow-xl), 0 0 60px rgba(59, 130, 246, 0.06);
-    position: relative;
-    animation: ds-fade-in 0.3s ease;
+    padding: 44px 40px 36px;
+    box-shadow: var(--shadow-lg);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    animation: ds-fade-in 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* Top accent line */
-.auth-card::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 20%; right: 20%;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, var(--primary), transparent);
-    border-radius: var(--radius-full);
-}
-
-/* ─── Logo / Brand Mark ─────────────────────────────────────────── */
-.logo-mark,
-.logo {
+/* Logo */
+.logo-mark {
     width: 52px; height: 52px;
+    background: var(--primary);
+    border-radius: var(--radius-lg);
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 24px;
-    background: linear-gradient(135deg, var(--primary), #1d4ed8);
-    border-radius: var(--radius-lg);
-    box-shadow: 0 8px 24px rgba(59, 130, 246, 0.35);
-    margin: 0 auto 20px;
-    border: 1px solid rgba(59, 130, 246, 0.3);
+    margin-bottom: var(--space-3);
+    box-shadow: var(--shadow-primary);
 }
 
-/* ─── Headings ───────────────────────────────────────────────────── */
 .auth-card h1 {
-    font-family: var(--font-display);
-    font-size: 24px;
+    font-size: 22px;
     font-weight: 700;
-    text-align: center;
-    margin: 0 0 6px;
-    letter-spacing: -0.4px;
     color: var(--text-primary);
-}
-
-.auth-card > p,
-.auth-card .auth-sub {
+    letter-spacing: -0.3px;
     text-align: center;
-    color: var(--text-secondary);
-    font-size: 13.5px;
-    margin: 0 0 30px;
-    line-height: 1.5;
 }
 
-/* ─── Remove old ticket-edge decoration ────────────────────────── */
-.ticket-edge { display: none; }
+.auth-sub {
+    font-size: 14px;
+    color: var(--text-muted);
+    margin-bottom: var(--space-5);
+    text-align: center;
+}
 
-/* ─── Forms ─────────────────────────────────────────────────────── */
-form#login-form,
-form#register-form {
+/* ─── Form ───────────────────────────────────────────────────── */
+form {
+    width: 100%;
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: var(--space-3);
 }
 
-/* ─── Input Fields ──────────────────────────────────────────────── */
-.input-group,
-.field {
-    position: relative;
-    display: flex;
-    align-items: center;
-    gap: 8px;
+/* .field is inherited from design-system.css */
+.auth-card .field {
+    border-color: var(--border);
 }
-
-.input-group > i,
-.field > i {
-    position: absolute;
-    left: 14px;
-    color: var(--text-muted);
-    font-size: 13px;
-    pointer-events: none;
-    z-index: 1;
+.auth-card .field i {
+    color: var(--text-dim);
 }
-
-.input-group input,
-.field input,
-.input-group > div input {
-    width: 100%;
-    padding: 12px 14px 12px 40px;
-    background: var(--bg-surface-2);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    color: var(--text-primary);
-    font-family: var(--font-sans);
+.auth-card .field input {
     font-size: 14px;
-    outline: none;
-    transition: var(--transition-base);
 }
 
-.input-group input::placeholder,
-.field input::placeholder { color: var(--text-muted); }
-
-.input-group input:focus,
-.field input:focus {
-    border-color: var(--primary);
-    background: var(--bg-surface-3);
-    box-shadow: 0 0 0 3px var(--primary-subtle);
-}
-
-/* Phone + OTP Send row */
-.input-group > div {
-    position: relative;
-    flex: 1;
-    display: flex;
-    align-items: center;
-}
-.input-group > div i {
-    position: absolute;
-    left: 14px;
-}
-
-/* ─── Send OTP Button ───────────────────────────────────────────── */
-#send-otp-btn {
-    white-space: nowrap;
-    padding: 12px 16px;
-    font-size: 13px;
-    font-weight: 600;
-    font-family: var(--font-sans);
-    background: var(--primary-subtle);
-    border: 1px solid var(--primary-border);
-    color: var(--primary);
-    border-radius: var(--radius-md);
-    cursor: pointer;
-    transition: var(--transition-base);
-    flex-shrink: 0;
-}
-#send-otp-btn:hover {
-    background: var(--primary);
-    color: #fff;
-    border-color: var(--primary);
-}
-
-/* ─── Toggle Password ─────────────────────────────────────────── */
-#toggle-password {
-    position: absolute;
-    right: 14px;
-    color: var(--text-muted);
-    font-size: 13px;
-    cursor: pointer;
-    z-index: 1;
-}
-#toggle-password:hover { color: var(--text-secondary); }
-
-/* ─── Primary Submit Button ─────────────────────────────────────── */
-.login-btn,
-form button[type="submit"],
-form > button:not(#send-otp-btn) {
+/* Primary submit button */
+.auth-card form > button,
+.auth-card form button[type="submit"] {
     width: 100%;
-    padding: 13px;
-    background: var(--primary);
-    border: 1px solid var(--primary);
-    border-radius: var(--radius-md);
-    color: #fff;
-    font-family: var(--font-display);
+    padding: 12px;
     font-size: 14.5px;
-    font-weight: 700;
-    letter-spacing: 0.01em;
+    font-weight: 600;
+    border-radius: var(--radius-md);
+    background: var(--primary);
+    color: #fff;
+    border: none;
     cursor: pointer;
     transition: var(--transition-base);
     box-shadow: var(--shadow-primary);
-    margin-top: 4px;
+    margin-top: var(--space-1);
 }
-.login-btn:hover,
-form button[type="submit"]:hover,
-form > button:not(#send-otp-btn):hover {
+.auth-card form > button:hover {
     background: var(--primary-hover);
     transform: translateY(-1px);
-    box-shadow: 0 6px 24px rgba(59, 130, 246, 0.4);
+    box-shadow: 0 8px 24px rgba(37, 99, 235, 0.3);
 }
-.login-btn:active { transform: translateY(0); }
 
-/* ─── Bottom Links ───────────────────────────────────────────────── */
-.bottom-text,
-.auth-card > p:last-of-type {
-    text-align: center;
-    margin: 22px 0 0;
+/* OTP send button inside field */
+.auth-card .field button {
+    background: var(--primary-subtle);
+    color: var(--primary);
+    border: 1px solid var(--primary-border);
+    font-size: 12.5px;
+    padding: 7px 12px;
+    border-radius: var(--radius-sm);
+    box-shadow: none;
+    font-weight: 600;
+    white-space: nowrap;
+    transition: var(--transition-base);
+}
+.auth-card .field button:hover {
+    background: var(--primary);
+    color: #fff;
+    transform: none;
+    box-shadow: none;
+}
+
+/* ─── Footer Link ─────────────────────────────────────────────── */
+.auth-card > p {
+    margin-top: var(--space-4);
     font-size: 13.5px;
-    color: var(--text-secondary);
+    color: var(--text-muted);
 }
-
-.bottom-text a,
 .auth-card a {
     color: var(--primary);
     font-weight: 600;
-    text-decoration: none;
-    transition: var(--transition-fast);
 }
-.bottom-text a:hover,
-.auth-card a:hover { color: var(--primary-hover); text-decoration: underline; }
+.auth-card a:hover { color: var(--primary-hover); text-decoration: none; }
 
-/* ─── Message / Error ────────────────────────────────────────────── */
+/* ─── Message / Error ─────────────────────────────────────────── */
 #message {
-    margin-top: 14px;
+    width: 100%;
+    min-height: 20px;
     font-size: 13px;
     text-align: center;
+    padding: 4px 0;
     color: var(--danger);
-    min-height: 18px;
-    font-weight: 500;
 }
 
-/* ─── Responsive ─────────────────────────────────────────────────── */
+/* ─── Responsive ─────────────────────────────────────────────── */
 @media (max-width: 480px) {
     .auth-card { padding: 32px 24px 28px; }
-    .auth-card h1 { font-size: 21px; }
+    .auth-card h1 { font-size: 20px; }
 }
