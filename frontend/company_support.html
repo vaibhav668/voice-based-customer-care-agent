@@ -3,75 +3,59 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Official SupportAI Company Assistant Chatbot for policies, SOPs, and customer FAQs.">
+    <meta name="description" content="Official SupportAI Company Assistant — RAG-powered chatbot for company policies, SOPs, and FAQs.">
     <title>SupportAI — Company Assistant</title>
     
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🤖</text></svg>">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/design-system.css">
     
     <style>
-        :root {
-            --ink: #0b1220;
-            --ink-deep: #070c16;
-            --surface: #131f33;
-            --surface-2: #1a2a44;
-            --line: #29395a;
-            --amber: #ffb13d;
-            --amber-soft: #ffd685;
-            --teal: #35d8b6;
-            --danger: #ff7a7a;
-            --text: #eef2fa;
-            --text-dim: #8fa0bf;
-            --radius-lg: 20px;
-            --radius-md: 14px;
-            --radius-sm: 8px;
-            --font-main: 'Inter', sans-serif;
-            --font-title: 'Space Grotesk', sans-serif;
-            --font-mono: 'JetBrains Mono', sans-serif;
-            
-            --grad-accent: linear-gradient(135deg, var(--amber), #ff8a3d);
-            --grad-bubble-user: linear-gradient(135deg, var(--surface-2), var(--line));
-            --grad-glow: radial-gradient(circle at 50% 50%, rgba(255, 177, 61, 0.15), transparent 60%);
-        }
-
+        /* Company Support — scoped layout using design-system.css tokens */
         [data-theme="light"] {
-            --ink: #f0f4f8;
-            --ink-deep: #e2e8f0;
-            --surface: #ffffff;
-            --surface-2: #edf2f7;
-            --line: #cbd5e0;
-            --amber: #dd6b20;
-            --amber-soft: #ed8936;
-            --teal: #319795;
-            --danger: #e53e3e;
-            --text: #1a202c;
-            --text-dim: #4a5568;
-            --grad-bubble-user: linear-gradient(135deg, #e2e8f0, #cbd5e0);
-            --grad-glow: radial-gradient(circle at 50% 50%, rgba(221, 107, 32, 0.08), transparent 60%);
+            --bg-page:      #f0f4f8;
+            --bg-surface:   #ffffff;
+            --bg-surface-2: #edf2f7;
+            --border:       #cbd5e0;
+            --text-primary: #1a202c;
+            --text-secondary:#4a5568;
+            --text-muted:   #718096;
         }
 
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
+        /* Bridge: map old variable names to design system tokens */
+        :root {
+            --ink:         var(--bg-page);
+            --ink-deep:    var(--bg-page);
+            --surface:     var(--bg-surface);
+            --surface-2:   var(--bg-surface-2);
+            --line:        var(--border);
+            --teal:        var(--accent-teal);
+            --amber:       var(--accent-amber);
+            --amber-soft:  #fcd34d;
+            --danger:      var(--danger);
+            --text:        var(--text-primary);
+            --text-dim:    var(--text-muted);
+            --font-main:   var(--font-sans);
+            --font-title:  var(--font-display);
+            --font-mono:   var(--font-mono);
+            --radius-lg:   var(--radius-xl);
+            --radius-md:   var(--radius-lg);
+            --radius-sm:   var(--radius-md);
+            --grad-accent: linear-gradient(135deg, var(--accent-amber), #d97706);
+            --grad-bubble-user: var(--bg-surface-2);
         }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
 
         body {
-            font-family: var(--font-main);
-            background-color: var(--ink-deep);
-            color: var(--text);
+            font-family: var(--font-sans);
+            background: var(--bg-page);
+            color: var(--text-primary);
             min-height: 100vh;
             display: flex;
             justify-content: center;
             align-items: center;
             padding: 20px;
-            background-image: 
-                radial-gradient(circle at 5% 5%, rgba(255, 177, 61, 0.08), transparent 35%),
-                radial-gradient(circle at 95% 95%, rgba(53, 216, 182, 0.08), transparent 35%),
-                linear-gradient(180deg, var(--ink-deep), var(--ink) 100%);
             overflow-x: hidden;
             transition: background 0.3s ease, color 0.3s ease;
         }

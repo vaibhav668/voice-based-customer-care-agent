@@ -1,110 +1,75 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-
     <meta charset="UTF-8">
-
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0">
-
-    <title>Register</title>
-
-    <link
-        rel="stylesheet"
-        href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎟️</text></svg>">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
-
-    <link
-        rel="stylesheet"
-        href="css/auth.css?v=1.0.1">
-
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SupportAI — Create Account</title>
+    <meta name="description" content="Create your SupportAI account to access AI-powered customer support.">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🤖</text></svg>">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <link rel="stylesheet" href="css/design-system.css">
+    <link rel="stylesheet" href="css/auth.css">
 </head>
-
 <body>
 
-<div id="lang-selector-container" style="position: fixed; top: 16px; right: 20px; z-index: 1000;"></div>
+<div id="lang-selector-container"></div>
 
-<div class="auth-card">
+<div class="auth-container">
+    <div class="auth-card">
 
-    <div class="ticket-edge"></div>
+        <div class="logo-mark">🤖</div>
 
-    <div class="logo-mark">🎟️</div>
+        <h1 data-i18n="register_title">Create Account</h1>
+        <p class="auth-sub">Join SupportAI to get started</p>
 
-    <h1 data-i18n="register_title">Create Account</h1>
+        <form id="register-form">
 
-    <form id="register-form">
-
-        <div class="field">
-            <i class="fa-solid fa-user"></i>
-            <input
-                id="full_name"
-                placeholder="Full Name"
-                data-i18n-placeholder="fullname_placeholder"
-                required>
-        </div>
-
-        <div class="field" style="gap: 8px;">
-            <div style="position: relative; flex: 1; display: flex; align-items: center;">
-                <i class="fa-solid fa-phone"></i>
+            <div class="field">
+                <i class="fa-solid fa-user"></i>
                 <input
-                    id="phone"
-                    placeholder="Phone Number"
-                    data-i18n-placeholder="phone_placeholder"
+                    id="full_name"
+                    placeholder="Full Name"
+                    data-i18n-placeholder="fullname_placeholder"
                     required>
             </div>
-            <button
-                id="send-otp-btn"
-                type="button"
-                style="margin-top: 0; width: auto; white-space: nowrap; padding: 12px 16px; font-size: 13.5px;">
-                Send OTP
-            </button>
-        </div>
 
-        <div class="field">
-            <i class="fa-solid fa-key"></i>
-            <input
-                id="otp"
-                placeholder="OTP"
-                data-i18n-placeholder="otp_placeholder"
-                required>
-        </div>
+            <div class="field" style="gap: 8px;">
+                <div style="position: relative; flex: 1; display: flex; align-items: center;">
+                    <i class="fa-solid fa-phone"></i>
+                    <input
+                        id="phone"
+                        placeholder="Phone Number"
+                        data-i18n-placeholder="phone_placeholder"
+                        style="padding-left: 40px; width: 100%;"
+                        required>
+                </div>
+                <button id="send-otp-btn" type="button">Send OTP</button>
+            </div>
 
-        <button data-i18n="register_btn">
+            <div class="field">
+                <i class="fa-solid fa-key"></i>
+                <input
+                    id="otp"
+                    placeholder="Enter OTP"
+                    data-i18n-placeholder="otp_placeholder"
+                    required>
+            </div>
 
-            Register
+            <button type="submit" data-i18n="register_btn">Create Account</button>
 
-        </button>
+        </form>
 
-    </form>
+        <p>
+            <span data-i18n="has_account">Already have an account?</span>
+            <a href="index.html" data-i18n="login_link"> Sign In</a>
+        </p>
 
-    <p>
+        <div id="message"></div>
 
-        <span data-i18n="has_account">Already have an account?</span>
-
-        <a href="index.html" data-i18n="login_link">
-
-            Login
-
-        </a>
-
-    </p>
-
-    <div id="message"></div>
-
+    </div>
 </div>
 
-<script
-type="module"
-src="js/register.js">
-
-</script>
+<script type="module" src="js/register.js"></script>
 
 </body>
-
 </html>
