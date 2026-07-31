@@ -1289,7 +1289,24 @@ function renderFeedbackTab() {
         const resPct = ((res / total) * 100).toFixed(0);
         setEl("fb-avg-rating", `${avg} / 10`); setEl("fb-total-reviews", total);
         setEl("fb-csat-score", `${csat}%`); setEl("fb-resolution-ratio", `${resPct}%`);
-        setEl("fb-sentiment-split", `${csat}% Pos / ${100 - Number(csat)}% Neg`);
+        
+        const splitEl = document.getElementById("fb-sentiment-split");
+        if (splitEl) {
+            const posVal = Number(csat);
+            const negVal = 100 - posVal;
+            splitEl.innerHTML = `
+                <div class="sentiment-split-wrapper">
+                    <div class="sentiment-values">
+                        <span class="sentiment-pos">${posVal}%<small>Pos</small></span>
+                        <span class="sentiment-neg">${negVal}%<small>Neg</small></span>
+                    </div>
+                    <div class="sentiment-track">
+                        <div class="sentiment-bar sentiment-bar-pos" style="width: ${posVal}%"></div>
+                        <div class="sentiment-bar sentiment-bar-neg" style="width: ${negVal}%"></div>
+                    </div>
+                </div>
+            `;
+        }
     }
 
     const distContainer = document.getElementById("rating-distribution-bars");
